@@ -1,0 +1,75 @@
+name: CI/CD Pipeline
+
+# Trigger the workflow on pushes to main and staging, and on pull requests to staging.
+on:
+  push:
+    branches:
+      - main
+      - staging
+  pull_request:
+    branches:
+      - staging
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout the code from GitHub
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16' 
+
+      # Step 3: Install dependencies
+      - name: Install Dependencies
+        run: npm install
+
+      # Step 4: Lint the code (optional but recommended)
+      - name: Run Lint
+        run: npm run lint
+
+      # Step 5: Run Unit Tests with Jest
+      - name: Run Unit Tests
+        run: npm run test
+
+      # Step 6: Build the Next.js App (this also verifies build success)
+      - name: Build Next.js App
+        run: npm run build
+
+      # Step 7: Run End-to-End Tests with Playwright
+      - name: Run E2E Tests
+        run: npm run test:e2e
+
+  deploy:
+    name: Deploy to Vercel
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '16'
+
+      - name: Install Dependencies
+        run: npm install
+
+      # Deploy to Vercel using the Vercel GitHub Action
+      - name: Deploy to Vercel
+        uses: amondnet/vercel-action@v20
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}         # Vercel API token
+          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}           # Your Vercel organization ID
+          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}   # Your Vercel project ID
+          vercel-args: >
+            --prod ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
