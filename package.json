@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
-    "test:e2e": "start-server-and-test 'npm run dev' http://localhost:3000 'playwright test'",
+    "test:e2e": "'npx playwright install' start-server-and-test 'npm run dev' http://localhost:3000 'playwright test'",
     "test:playwright": "playwright test"
   },
   "dependencies": {
