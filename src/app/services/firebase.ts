@@ -14,12 +14,19 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+console.log(firebaseConfig)
+
 const app = initializeApp(firebaseConfig);
 
 // Initialize services
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-export const messaging = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
-  ? getMessaging(app)
-  : null;
+console.log(typeof window);
+export const messaging =
+  process.env.NODE_ENV === 'test'
+    ? null
+    : typeof window !== 'undefined' &&
+      process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+    ? getMessaging(app)
+    : null;
