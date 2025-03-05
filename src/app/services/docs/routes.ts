@@ -69,8 +69,6 @@
  * 7️⃣ `questions` - Stores responses to transit-related surveys.
  *    - `id` (string) - Firestore-generated questionnaire ID.
  *    - `userId` (string) - Reference to user who answered the questions (Reference to users/{id}).
- *    - `Question1` (string) - Answer to sustainable transit journey.
- *    - `Question2` (string) - Most common reason for bus pass use.
- *    - `Question3` (string) - Second most common reason for bus pass use.
- *    - `Question4` (string) - Most common housing option last month.
+ *    - `questions` (array) - Array of questions
+ *    - `answers` (array) - Array of answers (Same length as questions)
  */
