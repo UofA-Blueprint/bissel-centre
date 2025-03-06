@@ -7,10 +7,11 @@
   --foreground: #171717;
 }
 
+/* TODO: Add dark mode support */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #ffffff;
+    --foreground: black;
   }
 }
 
@@ -18,4 +19,63 @@ body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.hcenter {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  flex-direction: column;
+  align-items: center;
+}
+
+.top-bissell-header {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+.logo{
+  font-weight: 600;
+  width: 64px;
+  height: 64px;
+  background-color: black;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color:white;
+  font-size: 12px;
+}
+.bissell-header-text{
+  font-size: 40px;
+}
+.login-card{
+  background-color: #EAEAEA;
+  max-width: 1000px;
+  border-radius: 10px;
+  flex: 2;
+}
+.login-form {
+ padding: 32px 32px;;
+}
+.text-box-entry {
+  width: 100%;
+  padding: 10px;
+  border-radius: 5px;
+  border: none;
+  outline: none;
+  margin-bottom: 10px;
+  color: black;
+
+  min-width: 375px;
+  background-color: #D9D9D9;
+  border-radius: 8px;
+}
+.form-submit-button {
+  border-radius: 16px;
+  background: #A6A6A6;
+  color: black;
+  padding: 16px 24px;
 }
