@@ -9,11 +9,13 @@ function AdminLoginCard() {
     <div style={{flex:2}}>
     <div className={`${inter.className} login-card`}>
       <form action="" className="login-form">
-        <h1 style={{fontSize: 40}}>Admin Login</h1>
+        <h1 style={{fontSize: 24}}>Admin</h1>
         <div style={{display: "flex", flexDirection: "column", gap: 32, marginTop: 32}}>
           <div>
-            <input className="text-box-entry" type="text" id="admin-id" name="admin-id" placeholder="Admin ID" />
-            <input className="text-box-entry" type="password" id="password" name="password" placeholder="Password" />
+            <label htmlFor="admin-id">Identification Number</label> <br />
+            <input className="text-box-entry" type="number" id="admin-id" name="admin-id" placeholder="Identification Number" /> <br />
+            <label htmlFor="admin-id">Password</label> <br />
+            <input className="text-box-entry" type="password" id="password" name="password" placeholder="Password" /> <br />
           </div>
           {/* ask for  forgot password ?*/}
       

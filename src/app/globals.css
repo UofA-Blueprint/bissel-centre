@@ -3,14 +3,14 @@
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
+  --background: #fafafa;
   --foreground: #171717;
 }
 
 /* TODO: Add dark mode support */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #ffffff;
+    --background: #fafafa;
     --foreground: black;
   }
 }
@@ -36,7 +36,7 @@ body {
   align-items: center;
   gap: 10px;
 }
-.logo{
+.logo {
   font-weight: 600;
   width: 64px;
   height: 64px;
@@ -45,37 +45,61 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  color:white;
+  color: white;
   font-size: 12px;
 }
-.bissell-header-text{
+.bissell-header-text {
   font-size: 40px;
 }
-.login-card{
-  background-color: #EAEAEA;
+.login-card {
+  background-color: #fafafa;
   max-width: 1000px;
-  border-radius: 10px;
-  flex: 2;
+  border-radius: 12px;
+  border: 0.1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 2px 4px 14.2px 0px rgba(0, 0, 0, 0.05);
+  /* box-shadow: 2px 4px 14.2px 0px / */
 }
 .login-form {
- padding: 32px 32px;;
+  padding: 32px 32px;
 }
 .text-box-entry {
-  width: 100%;
+  width: 400px;
   padding: 10px;
   border-radius: 5px;
   border: none;
   outline: none;
-  margin-bottom: 10px;
+  margin-bottom: 20px;
   color: black;
 
-  min-width: 375px;
-  background-color: #D9D9D9;
+  min-width: 0px;
+  background-color: #d9d9d9;
   border-radius: 8px;
+
+  border-radius: 16px;
+  border: 0.25px solid rgba(156, 156, 153, 0.25);
+  background: #fff;
+  box-shadow: 31px 18px 10px 0px rgba(0, 0, 0, 0),
+    20px 12px 9px 0px rgba(0, 0, 0, 0), 11px 6px 8px 0px rgba(0, 0, 0, 0.01),
+    5px 3px 6px 0px rgba(0, 0, 0, 0.02), 1px 1px 3px 0px rgba(0, 0, 0, 0.02);
 }
 .form-submit-button {
-  border-radius: 16px;
-  background: #A6A6A6;
-  color: black;
+  color: white;
   padding: 16px 24px;
+  border-radius: 12px;
+  background: #1BC0D6;
+}
+
+label {
+  color: #1D1D1D;
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+}
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    margin: 0; 
 }
