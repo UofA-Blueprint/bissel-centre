@@ -2,24 +2,35 @@
 import React, { useState } from "react";
 import Image from "next/image";
 
-const ITAdminRegistration: React.FC = () => {
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    identificationNumber: "",
-    password: "",
-    confirmPassword: "",
-  });
+type FormField = {
+  id: string;
+  name: keyof typeof initialFormData;
+  label: string;
+  type: string;
+};
 
-  const [errors, setErrors] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    identificationNumber: "",
-    password: "",
-    confirmPassword: "",
-  });
+const initialFormData = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  identificationNumber: "",
+  password: "",
+  confirmPassword: "",
+};
+
+const initialErrors = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  identificationNumber: "",
+  password: "",
+  confirmPassword: "",
+};
+
+const ITAdminRegistration: React.FC = () => {
+  const [formData, setFormData] =
+    useState<typeof initialFormData>(initialFormData);
+  const [errors, setErrors] = useState<typeof initialErrors>(initialErrors);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -61,6 +72,30 @@ const ITAdminRegistration: React.FC = () => {
     }
   };
 
+  const formFields: FormField[] = [
+    { id: "first-name", name: "firstName", label: "First Name", type: "text" },
+    { id: "last-name", name: "lastName", label: "Last Name", type: "text" },
+    { id: "email", name: "email", label: "Email Address", type: "email" },
+    {
+      id: "identification-number",
+      name: "identificationNumber",
+      label: "Identification Number",
+      type: "text",
+    },
+    {
+      id: "password",
+      name: "password",
+      label: "Create Password",
+      type: "password",
+    },
+    {
+      id: "confirmPassword",
+      name: "confirmPassword",
+      label: "Confirm Password",
+      type: "password",
+    },
+  ];
+
   return (
     <div
       className="flex flex-col items-center h-screen w-screen pt-10"
@@ -84,123 +119,34 @@ const ITAdminRegistration: React.FC = () => {
           </a>
         </p>
         <form className="mt-4 text-sm" onSubmit={handleSubmit}>
-          <div className="grid grid-cols-[300px_300px] gap-8">
-            <div className="flex flex-col">
-              <label htmlFor="first-name" className="font-bold pb-2">
-                First Name <span className="text-red-600">*</span>
-              </label>
-              <input
-                type="text"
-                id="first-name"
-                name="firstName"
-                placeholder="Enter your first name"
-                className="p-2 border border-gray-200 shadow-sm rounded-xl"
-                value={formData.firstName}
-                onChange={handleChange}
-              />
-              <div className="h-6">
-                {errors.firstName && (
-                  <span className="text-red-600 text-xs">
-                    {errors.firstName}
-                  </span>
-                )}
+          <div className="grid grid-cols-[300px_300px] gap-x-6">
+            {formFields.map((field) => (
+              <div key={field.id} className="flex flex-col">
+                <label htmlFor={field.id} className="font-bold pb-2">
+                  {field.label} <span className="text-red-600">*</span>
+                </label>
+                <input
+                  type={field.type}
+                  id={field.id}
+                  name={field.name}
+                  placeholder={
+                    field.label !== "Confirm Password"
+                      ? `Enter your ${field.label.toLowerCase()}`
+                      : field.label
+                  }
+                  className="p-2 border border-gray-200 shadow-sm rounded-xl"
+                  value={formData[field.name]}
+                  onChange={handleChange}
+                />
+                <div className="h-5">
+                  {errors[field.name] && (
+                    <span className="text-red-600 text-xs error-text">
+                      {errors[field.name]}
+                    </span>
+                  )}
+                </div>
               </div>
-              <label htmlFor="identification-number" className="font-bold pb-2">
-                Identification Number <span className="text-red-600">*</span>
-              </label>
-              <input
-                type="text"
-                id="identification-number"
-                name="identificationNumber"
-                placeholder="Enter your identification number"
-                className="p-2 border border-gray-200 shadow-sm rounded-xl"
-                value={formData.identificationNumber}
-                onChange={handleChange}
-              />
-              <div className="h-6">
-                {errors.identificationNumber && (
-                  <span className="text-red-600 text-xs">
-                    {errors.identificationNumber}
-                  </span>
-                )}
-              </div>
-              <label htmlFor="password" className="font-bold pb-2">
-                Create Password <span className="text-red-600">*</span>
-              </label>
-              <input
-                type="password"
-                id="password"
-                name="password"
-                placeholder="Create a password"
-                className="p-2 border border-gray-200 shadow-sm rounded-xl"
-                value={formData.password}
-                onChange={handleChange}
-              />
-              <div className="h-6">
-                {errors.password && (
-                  <span className="text-red-600 text-xs">
-                    {errors.password}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex flex-col">
-              <label htmlFor="last-name" className="font-bold pb-2">
-                Last Name <span className="text-red-600">*</span>
-              </label>
-              <input
-                type="text"
-                id="last-name"
-                name="lastName"
-                placeholder="Enter your last name"
-                className="p-2 border border-gray-200 shadow-sm rounded-xl"
-                value={formData.lastName}
-                onChange={handleChange}
-              />
-              <div className="h-6">
-                {errors.lastName && (
-                  <span className="text-red-600 text-xs">
-                    {errors.lastName}
-                  </span>
-                )}
-              </div>
-              <label htmlFor="email" className="font-bold pb-2">
-                Email Address <span className="text-red-600">*</span>
-              </label>
-              <input
-                type="text"
-                id="email"
-                name="email"
-                placeholder="Enter your email address"
-                className="p-2 border border-gray-200 shadow-sm rounded-xl"
-                value={formData.email}
-                onChange={handleChange}
-              />
-              <div className="h-6">
-                {errors.email && (
-                  <span className="text-red-600 text-xs">{errors.email}</span>
-                )}
-              </div>
-              <label htmlFor="confirmPassword" className="font-bold pb-2">
-                Confirm Password <span className="text-red-600">*</span>
-              </label>
-              <input
-                type="password"
-                id="confirmPassword"
-                name="confirmPassword"
-                placeholder="Confirm your password"
-                className="p-2 border border-gray-200 shadow-sm rounded-xl"
-                value={formData.confirmPassword}
-                onChange={handleChange}
-              />
-              <div className="h-6">
-                {errors.confirmPassword && (
-                  <span className="text-red-600 text-xs">
-                    {errors.confirmPassword}
-                  </span>
-                )}
-              </div>
-            </div>
+            ))}
           </div>
 
           <button
