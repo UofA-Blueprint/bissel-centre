@@ -1,5 +1,10 @@
-import React from "react";
+"use client";
+
+import React, { useEffect, useState } from "react"
 import Image from "next/image";
+import { db } from "../services/firebase"; // Import Firestore instance
+import { collection, getDocs } from "firebase/firestore";
+
 
 interface StatCardProps {
     icon: string;
@@ -8,30 +13,83 @@ interface StatCardProps {
 }
 
 const AdminDashboard = () => {
+    const [stats, setStats] = useState([
+        { icon: "/icons/creditCard.svg", number: 0, label: "Available Cards" },
+        { icon: "/icons/check-mark.svg", number: 0, label: "Active Cards" },
+        {
+            icon: "/icons/alert-triangle.svg",
+            number: 0,
+            label: "Expired Cards",
+        },
+        { icon: "/icons/flag.svg", number: 0, label: "Flagged Users" },
+    ]);
+
+  useEffect(() => {
+      const fetchData = async () => {
+          try {
+              // Fetch ARC cards
+              const arcCardsSnapshot = await getDocs(
+                  collection(db, "arc_cards")
+              );
+              let activeCards = 0;
+              let expiredCards = 0;
+              const availableCards = arcCardsSnapshot.size; // Total ARC cards
+
+              arcCardsSnapshot.forEach((doc) => {
+                  const card = doc.data();
+                  if (card.status === "Active") activeCards++;
+                  if (card.status === "Expired") expiredCards++;
+              });
+
+              // Fetch banned users
+              const bannedUsersSnapshot = await getDocs(
+                  collection(db, "banned_users")
+              );
+              const flaggedUsers = bannedUsersSnapshot.size;
+
+              // Update state with new Firestore data
+              setStats([
+                  {
+                      icon: "/icons/creditCard.svg",
+                      number: availableCards,
+                      label: "Available Cards",
+                  },
+                  {
+                      icon: "/icons/check-mark.svg",
+                      number: activeCards,
+                      label: "Active Cards",
+                  },
+                  {
+                      icon: "/icons/alert-triangle.svg",
+                      number: expiredCards,
+                      label: "Expired Cards",
+                  },
+                  {
+                      icon: "/icons/flag.svg",
+                      number: flaggedUsers,
+                      label: "Flagged Users",
+                  },
+              ]);
+          } catch (error) {
+              console.error("Error fetching Firestore data:", error);
+          }
+      };
+
+      fetchData();
+  }, []);
+
     return (
-        <div className="p-6 bg-gray-100 min-h-screen">
+        <div className="p-6 bg-gray-100 min-h-screen px-24">
             {/* Stats Section */}
-            <div className="grid grid-cols-4 gap-4 mb-6">
-                <StatCard
-                    icon="/icons/creditCard.svg"
-                    number={96}
-                    label="Available Cards"
-                />
-                <StatCard
-                    icon="/icons/check-mark.svg"
-                    number={310}
-                    label="Active Cards"
-                />
-                <StatCard
-                    icon="/icons/alert-triangle.svg"
-                    number={157}
-                    label="Expired Cards"
-                />
-                <StatCard
-                    icon="/icons/flag.svg"
-                    number={23}
-                    label="Flagged Users"
-                />
+            <div className="grid grid-cols-4 gap-4 mb-6 px-24">
+                {stats.map((stat, index) => (
+                    <StatCard
+                        key={index}
+                        icon={stat.icon}
+                        number={stat.number}
+                        label={stat.label}
+                    />
+                ))}
             </div>
 
             {/* Search Bar */}
@@ -83,16 +141,16 @@ const AdminDashboard = () => {
 
 const StatCard: React.FC<StatCardProps> = ({ icon, number, label }) => {
     return (
-        <div className="bg-white rounded-lg shadow-md p-4 flex flex-col items-center">
+        <div className="bg-white rounded-lg shadow-md p-6 flex flex-col items-center text-center w-full max-w-xs mx-auto">
             <Image
                 src={icon}
                 alt={label}
-                width={32}
-                height={32}
-                className="mb-2"
+                width={48}
+                height={48}
+                className="mb-2 w-12 h-12"
             />
-            <h2 className="text-xl font-bold">{number}</h2>
-            <p className="text-gray-500 text-sm">{label}</p>
+            <h2 className="text-3xl font-bold">{number}</h2>
+            <p className="text-gray-500 text-md mt-2">{label}</p>
         </div>
     );
 };
