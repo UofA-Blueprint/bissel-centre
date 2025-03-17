@@ -1,6 +1,9 @@
 "use client";
 import React, { useState } from "react";
 import Image from "next/image";
+import { auth, db } from "../services/firebase";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { addDoc, collection } from "firebase/firestore";
 
 type FormField = {
   id: string;
@@ -36,20 +39,53 @@ const ITAdminRegistration: React.FC = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
+  function checkPasswordStrength(input: string) {
+    const password = input.trim();
+
+    if (password.length < 8) {
+      return "Password must be at least 8 characters";
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      return "Password must contain at least one uppercase letter";
+    }
+
+    if (!/[a-z]/.test(password)) {
+      return "Password must contain at least one lowercase letter";
+    }
+
+    if (!/[0-9]/.test(password)) {
+      return "Password must contain at least one number";
+    }
+
+    return "";
+  }
+
   const validateForm = () => {
-    console.log("Validating form");
     const newErrors = {
-      firstName: formData.firstName ? "" : "First name is required",
-      lastName: formData.lastName ? "" : "Last name is required",
-      identificationNumber: formData.identificationNumber
+      firstName: formData.firstName.trim() ? "" : "First name is required",
+      lastName: formData.lastName.trim() ? "" : "Last name is required",
+      identificationNumber: formData.identificationNumber.trim()
         ? ""
         : "Identification number is required",
-      email: formData.email ? "" : "Email is required",
-      password: formData.password ? "" : "Password is required",
-      confirmPassword: formData.confirmPassword
+      email: formData.email.trim() ? "" : "Email is required",
+      confirmPassword: formData.confirmPassword.trim()
         ? ""
         : "Confirm password is required",
+      password: checkPasswordStrength(formData.password),
     };
+
+    if (formData.firstName && !/^[A-Za-z]+$/.test(formData.firstName)) {
+      newErrors.firstName = "First name must contain only letters";
+    }
+
+    if (formData.lastName && !/^[A-Za-z]+$/.test(formData.lastName)) {
+      newErrors.lastName = "Last name must contain only letters";
+    }
+
+    if (formData.email && !formData.email.includes("@")) {
+      newErrors.email = "Invalid email address";
+    }
 
     if (
       formData.password &&
@@ -64,24 +100,42 @@ const ITAdminRegistration: React.FC = () => {
     return Object.values(newErrors).every((error) => error === "");
   };
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (validateForm()) {
-      console.log("Form submitted", formData);
+      console.log("Submitting form", formData);
+      try {
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          formData.email,
+          formData.password
+        );
+
+        await addDoc(collection(db, "it_admins"), {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          identificationNumber: formData.identificationNumber,
+        });
+
+        console.log("User created", userCredential.user);
+      } catch (error) {
+        console.error("Error creating user", error);
+      }
     }
   };
 
   const formFields: FormField[] = [
     { id: "first-name", name: "firstName", label: "First Name", type: "text" },
     { id: "last-name", name: "lastName", label: "Last Name", type: "text" },
-    { id: "email", name: "email", label: "Email Address", type: "email" },
     {
       id: "identification-number",
       name: "identificationNumber",
       label: "Identification Number",
       type: "text",
     },
+    { id: "email", name: "email", label: "Email Address", type: "text" },
     {
       id: "password",
       name: "password",
@@ -130,11 +184,13 @@ const ITAdminRegistration: React.FC = () => {
                   id={field.id}
                   name={field.name}
                   placeholder={
-                    field.label !== "Confirm Password"
+                    !field.label.includes("Password")
                       ? `Enter your ${field.label.toLowerCase()}`
                       : field.label
                   }
-                  className="p-2 border border-gray-200 shadow-sm rounded-xl"
+                  className={`p-2 border shadow-sm rounded-xl ${
+                    errors[field.name] ? "border-red-600" : "border-gray-200"
+                  }`}
                   value={formData[field.name]}
                   onChange={handleChange}
                 />
