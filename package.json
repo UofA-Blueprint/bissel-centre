@@ -13,6 +13,7 @@
     "seed": "ts-node --project tsconfig.seed.json seed.ts"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.0",
     "@next/env": "^15.1.7",
     "dotenv": "^16.4.7",
     "firebase": "^11.3.0",
