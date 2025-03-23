@@ -4,6 +4,7 @@ import Image from "next/image";
 import { auth, db } from "../services/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { addDoc, collection } from "firebase/firestore";
+import { Dialog } from "@headlessui/react";
 
 type FormField = {
   id: string;
@@ -34,6 +35,8 @@ const ITAdminRegistration: React.FC = () => {
   const [formData, setFormData] =
     useState<typeof initialFormData>(initialFormData);
   const [errors, setErrors] = useState<typeof initialErrors>(initialErrors);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMessage, setDialogMessage] = useState("");
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -122,6 +125,12 @@ const ITAdminRegistration: React.FC = () => {
         console.log("User created", userCredential.user);
       } catch (error) {
         console.error("Error creating user", error);
+        if (error instanceof Error) {
+          setDialogMessage(error.message);
+        } else {
+          setDialogMessage("An unknown error occurred.");
+        }
+        setDialogOpen(true);
       }
     }
   };
@@ -214,6 +223,26 @@ const ITAdminRegistration: React.FC = () => {
           </button>
         </form>
       </div>
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        className="fixed z-10 inset-0 overflow-y-auto"
+      >
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="bg-white rounded-lg p-6 mx-auto max-w-sm">
+            <Dialog.Title className="text-lg font-bold">Error</Dialog.Title>
+            <Dialog.Description className="mt-2 text-sm text-gray-500">
+              {dialogMessage}
+            </Dialog.Description>
+            <button
+              className="mt-4 p-2 bg-blue-500 text-white rounded"
+              onClick={() => setDialogOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 };
