@@ -4,7 +4,7 @@ import Image from "next/image";
 import { auth, db } from "../services/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { addDoc, collection } from "firebase/firestore";
-import { Dialog } from "@headlessui/react";
+import { Dialog, DialogTitle, Description } from "@headlessui/react";
 
 type FormField = {
   id: string;
@@ -37,6 +37,7 @@ const ITAdminRegistration: React.FC = () => {
   const [errors, setErrors] = useState<typeof initialErrors>(initialErrors);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogMessage, setDialogMessage] = useState("");
+  const [dialogType, setDialogType] = useState<"success" | "error">("success");
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -105,31 +106,47 @@ const ITAdminRegistration: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    let userCredential;
 
     if (validateForm()) {
-      console.log("Submitting form", formData);
       try {
-        const userCredential = await createUserWithEmailAndPassword(
+        // create user
+        userCredential = await createUserWithEmailAndPassword(
           auth,
           formData.email,
           formData.password
         );
 
-        await addDoc(collection(db, "it_admins"), {
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          email: formData.email,
-          identificationNumber: formData.identificationNumber,
-        });
+        try {
+          // try to create the Firestore document
+          await addDoc(collection(db, "it_admins"), {
+            uid: userCredential.user.uid,
+            firstName: formData.firstName,
+            lastName: formData.lastName,
+            email: formData.email,
+            identificationNumber: formData.identificationNumber,
+            createdAt: new Date().toISOString(),
+          });
 
-        console.log("User created", userCredential.user);
-      } catch (error) {
-        console.error("Error creating user", error);
-        if (error instanceof Error) {
-          setDialogMessage(error.message);
-        } else {
-          setDialogMessage("An unknown error occurred.");
+          // clear form and show success message
+          setFormData(initialFormData);
+          setDialogType("success");
+          setDialogMessage("Registration successful!");
+          setDialogOpen(true);
+        } catch (firestoreError) {
+          // If Firestore fails, delete the auth user
+          console.log("Error creating user profile:", firestoreError);
+          if (userCredential?.user) {
+            await userCredential.user.delete();
+          }
+          throw new Error("Failed to create user profile. Please try again.");
         }
+      } catch (error) {
+        console.error("Error in registration:", error);
+        setDialogType("error");
+        setDialogMessage(
+          error instanceof Error ? error.message : "Registration failed"
+        );
         setDialogOpen(true);
       }
     }
@@ -229,11 +246,14 @@ const ITAdminRegistration: React.FC = () => {
         className="fixed z-10 inset-0 overflow-y-auto"
       >
         <div className="flex items-center justify-center min-h-screen">
-          <div className="bg-white rounded-lg p-6 mx-auto max-w-sm">
-            <Dialog.Title className="text-lg font-bold">Error</Dialog.Title>
-            <Dialog.Description className="mt-2 text-sm text-gray-500">
+          <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+          <div className="bg-white z-10 rounded-lg p-6 mx-auto max-w-sm">
+            <DialogTitle className="text-lg font-bold">
+              {dialogType === "error" ? "Error" : "Info"}
+            </DialogTitle>
+            <Description className="mt-2 text-sm text-gray-500">
               {dialogMessage}
-            </Dialog.Description>
+            </Description>
             <button
               className="mt-4 p-2 bg-blue-500 text-white rounded"
               onClick={() => setDialogOpen(false)}
