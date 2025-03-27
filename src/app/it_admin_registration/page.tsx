@@ -188,7 +188,7 @@ const ITAdminRegistration: React.FC = () => {
         height={75}
       />
       <div
-        className="border border-gray-200 rounded-2xl p-6 mt-12 shadow-md"
+        className="border border-gray-200 rounded-2xl p-6 mt-2 lg:mt-12 shadow-md"
         style={{ backgroundColor: "#FAFAFA" }}
       >
         <h1 className="text-lg pb-1">Register</h1>
@@ -199,7 +199,7 @@ const ITAdminRegistration: React.FC = () => {
           </a>
         </p>
         <form className="mt-4 text-sm" onSubmit={handleSubmit}>
-          <div className="grid grid-cols-[300px_300px] gap-x-6">
+          <div className="grid grid-cols-[300px] lg:grid-cols-[300px_300px] gap-x-6">
             {formFields.map((field) => (
               <div key={field.id} className="flex flex-col">
                 <label htmlFor={field.id} className="font-bold pb-2">
