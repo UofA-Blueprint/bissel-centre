@@ -2,6 +2,7 @@
 import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import AdminLogin from "./adminLogin";
 
 export default function Home() {
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
@@ -83,6 +84,8 @@ export default function Home() {
       >
         {isAdmin ? "Switch to User" : "Switch to Admin"}
       </button>
+    <div>
+      <AdminLogin />
     </div>
   );
 }
