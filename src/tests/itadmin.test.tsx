@@ -16,9 +16,11 @@ describe("Home component", () => {
   beforeEach(() => {
     pushMock.mockClear();
   });
-  test("toggles to admin view when Admin button is clicked", () => {
+  test("toggles to admin view when admin toggle is clicked", () => {
     render(React.createElement(Home));
-    const adminToggle = screen.getByRole("button", { name: "Admin" });
+    const adminToggle = screen.getByRole("button", {
+      name: /Switch to Admin/i,
+    });
     fireEvent.click(adminToggle);
     expect(screen.getByText("Welcome Admin!")).toBeInTheDocument();
   });
@@ -39,8 +41,10 @@ describe("Home component", () => {
 
   test("navigates to /admin/register when Register button is clicked as admin", () => {
     render(React.createElement(Home));
-    // Toggle admin state
-    const adminToggle = screen.getByRole("button", { name: "Admin" });
+    // Toggle admin state using updated button text
+    const adminToggle = screen.getByRole("button", {
+      name: /Switch to Admin/i,
+    });
     fireEvent.click(adminToggle);
     const registerButton = screen.getByRole("button", { name: /Register/i });
     fireEvent.click(registerButton);
@@ -49,8 +53,10 @@ describe("Home component", () => {
 
   test("navigates to /admin/login when Login button is clicked as admin", () => {
     render(React.createElement(Home));
-    // Toggle admin state
-    const adminToggle = screen.getByRole("button", { name: "Admin" });
+    // Toggle admin state using updated button text
+    const adminToggle = screen.getByRole("button", {
+      name: /Switch to Admin/i,
+    });
     fireEvent.click(adminToggle);
     const loginButton = screen.getByRole("button", { name: /Login/i });
     fireEvent.click(loginButton);
