@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { auth, db } from "../services/firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { addDoc, collection } from "firebase/firestore";
+import { addDoc, collection, getDocs, query, where } from "firebase/firestore";
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
 
 type FormField = {
@@ -104,51 +104,120 @@ const ITAdminRegistration: React.FC = () => {
     return Object.values(newErrors).every((error) => error === "");
   };
 
+  const checkExistingEmail = async () => {
+    // Check if email is already in use
+    try {
+      const querySnapshot = await getDocs(
+        query(
+          collection(db, "admin_staff"),
+          where("email", "==", formData.email)
+        )
+      );
+      if (!querySnapshot.empty) {
+        setErrors({
+          firstName: "",
+          lastName: "",
+          email: "Email is already in use",
+          password: "",
+          confirmPassword: "",
+          identificationNumber: "",
+        });
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Error checking email:", error);
+      throw new Error("Failed to check email. Please try again.");
+    }
+  };
+
+  const checkExistingUserIdentificationNumber = async () => {
+    // Check if identification number matches any existing it admin
+    try {
+      const querySnapshot = await getDocs(
+        query(
+          collection(db, "it_admins"),
+          where("identificationNumber", "==", formData.identificationNumber)
+        )
+      );
+      if (!querySnapshot.empty) {
+        return true;
+      } else {
+        setErrors({
+          firstName: "",
+          lastName: "",
+          email: "",
+          password: "",
+          confirmPassword: "",
+          identificationNumber: "Identification number not found",
+        });
+        return false;
+      }
+    } catch (error) {
+      console.error("Error checking identification number:", error);
+      throw new Error(
+        "Failed to check identification number. Please try again."
+      );
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     let userCredential;
 
-    if (validateForm()) {
+    if (!validateForm()) {
+      return;
+    }
+
+    const existingEmail = await checkExistingEmail();
+    if (existingEmail) {
+      return;
+    }
+
+    const existingUser = await checkExistingUserIdentificationNumber();
+    if (!existingUser) {
+      return;
+    }
+
+    try {
+      // create user
+      userCredential = await createUserWithEmailAndPassword(
+        auth,
+        formData.email,
+        formData.password
+      );
+
       try {
-        // create user
-        userCredential = await createUserWithEmailAndPassword(
-          auth,
-          formData.email,
-          formData.password
-        );
+        // try to create the Firestore document
+        await addDoc(collection(db, "admin_staff"), {
+          uid: userCredential.user.uid,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          email: formData.email,
+          adminIdentificationNumber: formData.identificationNumber,
+          createdAt: new Date().toISOString(),
+        });
 
-        try {
-          // try to create the Firestore document
-          await addDoc(collection(db, "it_admins"), {
-            uid: userCredential.user.uid,
-            firstName: formData.firstName,
-            lastName: formData.lastName,
-            email: formData.email,
-            identificationNumber: formData.identificationNumber,
-            createdAt: new Date().toISOString(),
-          });
-
-          // clear form and show success message
-          setFormData(initialFormData);
-          setDialogType("success");
-          setDialogMessage("Registration successful!");
-          setDialogOpen(true);
-        } catch (firestoreError) {
-          // If Firestore fails, delete the auth user
-          console.log("Error creating user profile:", firestoreError);
-          if (userCredential?.user) {
-            await userCredential.user.delete();
-          }
-          throw new Error("Failed to create user profile. Please try again.");
-        }
-      } catch (error) {
-        console.error("Error in registration:", error);
-        setDialogType("error");
-        setDialogMessage(
-          error instanceof Error ? error.message : "Registration failed"
-        );
+        // clear form and show success message
+        setFormData(initialFormData);
+        setDialogType("success");
+        setDialogMessage("Registration successful!");
         setDialogOpen(true);
+      } catch (firestoreError) {
+        // If Firestore fails, delete the auth user
+        console.log("Error creating user profile:", firestoreError);
+        if (userCredential?.user) {
+          await userCredential.user.delete();
+        }
+        throw new Error("Failed to create user profile. Please try again.");
       }
+    } catch (error) {
+      console.error("Error in registration:", error);
+      setDialogType("error");
+      setDialogMessage(
+        error instanceof Error ? error.message : "Registration failed"
+      );
+      setDialogOpen(true);
     }
   };
 
@@ -177,10 +246,7 @@ const ITAdminRegistration: React.FC = () => {
   ];
 
   return (
-    <div
-      className="flex flex-col items-center h-screen w-screen pt-10"
-      style={{ backgroundColor: "#F7F7F4" }}
-    >
+    <div className="flex flex-col items-center w-full pt-10">
       <Image
         src="/BissellLogo_Blue 1.svg"
         alt="Bissell Logo"
