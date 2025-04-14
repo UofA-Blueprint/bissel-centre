@@ -1,9 +1,10 @@
-import ITAdminRegistration from "@/app/it_admin_registration/page";
+import ITAdminRegistration from "@/app/register/page";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 jest.mock("firebase/auth", () => ({
   getAuth: jest.fn(() => ({})),
   createUserWithEmailAndPassword: jest.fn(),
+  signInWithEmailAndPassword: jest.fn(),
 }));
 
 jest.mock("firebase/firestore", () => ({
@@ -13,6 +14,9 @@ jest.mock("firebase/firestore", () => ({
   getDocs: jest.fn(),
   addDoc: jest.fn(),
   getFirestore: jest.fn(() => ({})),
+  Timestamp: {
+    now: jest.fn(() => ({})),
+  },
 }));
 
 jest.mock("firebase/storage", () => ({
@@ -89,18 +93,6 @@ describe("IT Admin Registration Page", () => {
     });
   });
 
-  it("shows error message for invalid email format", async () => {
-    render(<ITAdminRegistration />);
-    fireEvent.change(screen.getByLabelText(/Email Address/i), {
-      target: { value: "invalid-email" },
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Register/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/Invalid email address/i)).toBeInTheDocument();
-    });
-  });
-
   it("handles form submission with valid data", async () => {
     // mock successful firebase response
     (createUserWithEmailAndPassword as jest.Mock).mockResolvedValueOnce({
@@ -108,9 +100,7 @@ describe("IT Admin Registration Page", () => {
         uid: "test-uid",
       },
     });
-    (getDocs as jest.Mock)
-      .mockResolvedValueOnce({ empty: true }) // email not in use
-      .mockResolvedValueOnce({ empty: false }); // identification number exists
+    (getDocs as jest.Mock).mockResolvedValueOnce({ empty: false }); // identification number exists
     (addDoc as jest.Mock).mockResolvedValueOnce({});
 
     render(<ITAdminRegistration />);

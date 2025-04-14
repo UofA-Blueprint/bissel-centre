@@ -2,13 +2,26 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import { auth, db } from "../services/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { addDoc, collection, getDocs, query, where } from "firebase/firestore";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+} from "firebase/auth";
+import {
+  addDoc,
+  collection,
+  getDocs,
+  query,
+  where,
+  Timestamp,
+} from "firebase/firestore";
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
+import { FirebaseError } from "firebase/app";
+
+type FormDataKeys = keyof typeof initialFormData;
 
 type FormField = {
   id: string;
-  name: keyof typeof initialFormData;
+  name: FormDataKeys;
   label: string;
   type: string;
 };
@@ -31,41 +44,37 @@ const initialErrors = {
   confirmPassword: "",
 };
 
+// --- CONSTANTS ---
+const IT_ADMIN_COLLECTION = "it_admins";
+const ADMIN_STAFF_COLLECTION = "admin_staff";
+
 const ITAdminRegistration: React.FC = () => {
   const [formData, setFormData] =
     useState<typeof initialFormData>(initialFormData);
   const [errors, setErrors] = useState<typeof initialErrors>(initialErrors);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogMessage, setDialogMessage] = useState("");
-  const [dialogType, setDialogType] = useState<"success" | "error">("success");
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  function checkPasswordStrength(input: string) {
+  function checkPasswordStrength(input: string): string {
     const password = input.trim();
 
-    if (password.length < 8) {
-      return "Password must be at least 8 characters";
-    }
-
-    if (!/[A-Z]/.test(password)) {
-      return "Password must contain at least one uppercase letter";
-    }
-
-    if (!/[a-z]/.test(password)) {
-      return "Password must contain at least one lowercase letter";
-    }
-
-    if (!/[0-9]/.test(password)) {
-      return "Password must contain at least one number";
+    if (
+      password.length < 8 ||
+      !/[A-Z]/.test(password) ||
+      !/[a-z]/.test(password) ||
+      !/[0-9]/.test(password)
+    ) {
+      return "Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number";
     }
 
     return "";
   }
 
-  const validateForm = () => {
+  const validateForm = (): boolean => {
     const newErrors = {
       firstName: formData.firstName.trim() ? "" : "First name is required",
       lastName: formData.lastName.trim() ? "" : "Last name is required",
@@ -87,10 +96,6 @@ const ITAdminRegistration: React.FC = () => {
       newErrors.lastName = "Last name must contain only letters";
     }
 
-    if (formData.email && !formData.email.includes("@")) {
-      newErrors.email = "Invalid email address";
-    }
-
     if (
       formData.password &&
       formData.confirmPassword &&
@@ -104,44 +109,19 @@ const ITAdminRegistration: React.FC = () => {
     return Object.values(newErrors).every((error) => error === "");
   };
 
-  const checkExistingEmail = async () => {
-    // Check if email is already in use
-    try {
-      const querySnapshot = await getDocs(
-        query(
-          collection(db, "admin_staff"),
-          where("email", "==", formData.email)
-        )
-      );
-      if (!querySnapshot.empty) {
-        setErrors({
-          firstName: "",
-          lastName: "",
-          email: "Email is already in use",
-          password: "",
-          confirmPassword: "",
-          identificationNumber: "",
-        });
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error("Error checking email:", error);
-      throw new Error("Failed to check email. Please try again.");
-    }
-  };
-
-  const checkExistingUserIdentificationNumber = async () => {
+  const checkExistingUserIdentificationNumber = async (): Promise<
+    string | null
+  > => {
     // Check if identification number matches any existing it admin
     try {
       const querySnapshot = await getDocs(
         query(
-          collection(db, "it_admins"),
+          collection(db, IT_ADMIN_COLLECTION),
           where("identificationNumber", "==", formData.identificationNumber)
         )
       );
       if (!querySnapshot.empty) {
-        return true;
+        return querySnapshot.docs[0].data().uid;
       } else {
         setErrors({
           firstName: "",
@@ -151,31 +131,33 @@ const ITAdminRegistration: React.FC = () => {
           confirmPassword: "",
           identificationNumber: "Identification number not found",
         });
-        return false;
+        return null;
       }
     } catch (error) {
       console.error("Error checking identification number:", error);
-      throw new Error(
-        "Failed to check identification number. Please try again."
-      );
+      setErrors((prevErrors) => ({
+        ...prevErrors,
+        identificationNumber:
+          "Failed to verify identification number. Please try again.",
+      }));
+      return null;
     }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     let userCredential;
+    setIsLoading(true);
 
     if (!validateForm()) {
+      setIsLoading(false);
       return;
     }
 
-    const existingEmail = await checkExistingEmail();
-    if (existingEmail) {
-      return;
-    }
-
-    const existingUser = await checkExistingUserIdentificationNumber();
-    if (!existingUser) {
+    const ITUserUID = await checkExistingUserIdentificationNumber();
+    if (ITUserUID === null) {
+      // If the identification number check fails, stop the registration process
+      setIsLoading(false);
       return;
     }
 
@@ -189,35 +171,66 @@ const ITAdminRegistration: React.FC = () => {
 
       try {
         // try to create the Firestore document
-        await addDoc(collection(db, "admin_staff"), {
+        await addDoc(collection(db, ADMIN_STAFF_COLLECTION), {
           uid: userCredential.user.uid,
           firstName: formData.firstName,
           lastName: formData.lastName,
           email: formData.email,
-          adminIdentificationNumber: formData.identificationNumber,
-          createdAt: new Date().toISOString(),
+          adminIdentificationNumber: ITUserUID,
+          createdAt: Timestamp.now(),
         });
 
         // clear form and show success message
         setFormData(initialFormData);
-        setDialogType("success");
-        setDialogMessage("Registration successful!");
+
+        try {
+          await signInWithEmailAndPassword(
+            auth,
+            formData.email,
+            formData.password
+          );
+        } catch (error) {
+          console.error("Error signing in:", error);
+        }
+
         setDialogOpen(true);
       } catch (firestoreError) {
         // If Firestore fails, delete the auth user
-        console.log("Error creating user profile:", firestoreError);
+        console.error("Error creating user profile:", firestoreError);
         if (userCredential?.user) {
-          await userCredential.user.delete();
+          try {
+            await userCredential.user.delete();
+          } catch (deleteError) {
+            console.error("Error deleting user:", deleteError);
+          }
         }
-        throw new Error("Failed to create user profile. Please try again.");
       }
     } catch (error) {
-      console.error("Error in registration:", error);
-      setDialogType("error");
-      setDialogMessage(
-        error instanceof Error ? error.message : "Registration failed"
-      );
-      setDialogOpen(true);
+      console.error("Error creating user:", error);
+      const errorCode = error instanceof FirebaseError && error.code;
+      if (errorCode === "auth/email-already-in-use") {
+        setErrors({
+          firstName: "",
+          lastName: "",
+          email: "Email is already in use",
+          password: "",
+          confirmPassword: "",
+          identificationNumber: "",
+        });
+      } else if (errorCode === "auth/invalid-email") {
+        setErrors({
+          firstName: "",
+          lastName: "",
+          email: "Invalid email address",
+          password: "",
+          confirmPassword: "",
+          identificationNumber: "",
+        });
+      } else {
+        console.error("Error creating user:", error);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -264,7 +277,12 @@ const ITAdminRegistration: React.FC = () => {
             Sign in
           </a>
         </p>
-        <form className="mt-4 text-sm" onSubmit={handleSubmit}>
+        <form
+          className={`mt-4 text-sm ${
+            isLoading ? "opacity-50 pointer-events-none" : ""
+          }`}
+          onSubmit={handleSubmit}
+        >
           <div className="grid grid-cols-[300px] lg:grid-cols-[300px_300px] gap-x-6">
             {formFields.map((field) => (
               <div key={field.id} className="flex flex-col">
@@ -286,7 +304,7 @@ const ITAdminRegistration: React.FC = () => {
                   value={formData[field.name]}
                   onChange={handleChange}
                 />
-                <div className="h-5">
+                <div className="min-h-5">
                   {errors[field.name] && (
                     <span className="text-red-600 text-xs error-text">
                       {errors[field.name]}
@@ -299,6 +317,7 @@ const ITAdminRegistration: React.FC = () => {
 
           <button
             className="p-2 text-white rounded-xl w-full mt-4"
+            disabled={isLoading}
             style={{ backgroundColor: "#1BC0D6" }}
             type="submit"
           >
@@ -314,11 +333,9 @@ const ITAdminRegistration: React.FC = () => {
         <div className="flex items-center justify-center min-h-screen">
           <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
           <div className="bg-white z-10 rounded-lg p-6 mx-auto max-w-sm">
-            <DialogTitle className="text-lg font-bold">
-              {dialogType === "error" ? "Error" : "Info"}
-            </DialogTitle>
+            <DialogTitle className="text-lg font-bold">Success</DialogTitle>
             <Description className="mt-2 text-sm text-gray-500">
-              {dialogMessage}
+              Registration successful!
             </Description>
             <button
               className="mt-4 p-2 bg-blue-500 text-white rounded"
