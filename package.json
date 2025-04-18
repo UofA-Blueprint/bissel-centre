@@ -14,10 +14,12 @@
   },
   "dependencies": {
     "@next/env": "^15.1.7",
+    "@types/nodemailer": "^6.4.17",
     "dotenv": "^16.4.7",
     "firebase": "^11.3.0",
     "firebase-admin": "^13.1.0",
-    "next": "15.1.6",
+    "next": "^15.2.4",
+    "nodemailer": "^6.10.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
