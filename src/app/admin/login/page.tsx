@@ -37,7 +37,6 @@ export default function AdminLoginPage() {
       router.push("/admin/dashboard");
     } catch (err: unknown) {
       setError("Invalid credentials. Please try again.");
-      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -53,12 +52,19 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/admin/forgot-password", {
+      const response = await fetch("/api/forgot-password/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
       const data = await response.json();
+
+      if (data.success) {
+        // Show success message
+        setPassword(""); // Clear password field
+        setError(null);
+        alert("A temporary password has been sent to your email address.");
+      }
 
       if (!data.success) {
         throw new Error(data.message || "Failed to reset password");

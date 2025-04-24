@@ -4,6 +4,7 @@ import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
 import { getMessaging } from "firebase/messaging";
+import "isomorphic-fetch";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -29,6 +30,6 @@ export const messaging =
   process.env.NODE_ENV === "test"
     ? null
     : typeof window !== "undefined" &&
-      process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
-    ? getMessaging(app)
-    : null;
+        process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+      ? getMessaging(app)
+      : null;
