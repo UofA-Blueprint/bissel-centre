@@ -10,6 +10,8 @@ import {
   browserLocalPersistence,
   browserSessionPersistence,
 } from "firebase/auth";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { db } from "@/app/services/firebase";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -33,46 +35,20 @@ export default function AdminLoginPage() {
 
       // Sign in the user
       await signInWithEmailAndPassword(auth, email, password);
+
+      const q = query(
+        collection(db, "it_admin"),
+        where("userID", "==", auth.currentUser?.uid)
+      );
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) {
+        setError("User does not exist in the database.");
+        return;
+      }
       // Redirect to admin dashboard
       router.push("/admin/dashboard");
-    } catch (err: unknown) {
+    } catch {
       setError("Invalid credentials. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleForgotPassword = async () => {
-    if (!email) {
-      setError("Please enter your email before resetting password.");
-      return;
-    }
-
-    setError(null);
-    setLoading(true);
-
-    try {
-      const response = await fetch("/api/forgot-password/", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      const data = await response.json();
-
-      if (data.success) {
-        // Show success message
-        setPassword(""); // Clear password field
-        setError(null);
-        alert("A temporary password has been sent to your email address.");
-      }
-
-      if (!data.success) {
-        throw new Error(data.message || "Failed to reset password");
-      }
-    } catch (err: unknown) {
-      setError(
-        err instanceof Error ? err.message : "An unknown error occurred"
-      );
     } finally {
       setLoading(false);
     }
@@ -140,7 +116,9 @@ export default function AdminLoginPage() {
           <button
             type="button"
             className="text-sm text-blue-600 hover:underline"
-            onClick={handleForgotPassword}
+            onClick={() => {
+              setError("Please contact support for password reset.");
+            }}
           >
             Forgot Password?
           </button>
