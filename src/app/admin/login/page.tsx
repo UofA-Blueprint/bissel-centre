@@ -3,9 +3,11 @@
 import React, { useState } from "react";
 import { Inter } from "next/font/google";
 import LogoHeader from "@/app/components/LogoHeader";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "@/app/services/firebase";
-import { getAuth } from 'firebase-admin/auth';
+import { handleITAdminLogin } from "@/app/admin/actions";
+import firebase from "firebase/compat/app";
+import { signInWithCustomToken } from "firebase/auth";
+import { auth } from "@/app/services/firebase";
+import { useRouter } from "next/navigation";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -14,6 +16,7 @@ function AdminLoginCard() {
   const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -21,13 +24,34 @@ function AdminLoginCard() {
     setLoading(true);
     e.preventDefault();
     try {
-      const q = query(collection(db, "it_admin"), where("hashedIdentificationNumber", "==", adminId));
-      const querySnapshot = await getDocs(q);
-      if (!querySnapshot.empty) {
-        console.log(querySnapshot.docs[0].data());
-      } else {
+      const customToken = await handleITAdminLogin(adminId);
+      if (customToken === null) {
         setErrorMessage("Invalid Credentials");
+        return;
       }
+      
+      signInWithCustomToken(auth, customToken)
+      .then (async () =>  {
+        console.log("Signed in")
+        const idToken = await auth.currentUser?.getIdToken();
+      // this call sets the session cookie
+        return fetch("/admin/api", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken }),
+        });
+      }).then((response) => {
+        console.log(response);
+        if (response.ok) {
+          console.log("Logged in");
+          router.push("/admin/dashboard");
+        } else {
+          console.log("Failed to log in");
+          setErrorMessage("Invalid Credentials");
+        }
+      });
+
+      
     } catch (error) {
       console.log(error);
       setErrorMessage("Invalid Credentials");
