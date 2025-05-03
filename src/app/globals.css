@@ -3,20 +3,20 @@
 @tailwind utilities;
 
 :root {
-  --background: #fafafa;
-  --foreground: #171717;
+  --background: #ffffff;
+
 }
 
 /* TODO: Add dark mode support */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #fafafa;
+    --background: #ededed;
+    --background: #ffffff;
     --foreground: black;
   }
 }
 
 body {
-  color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
