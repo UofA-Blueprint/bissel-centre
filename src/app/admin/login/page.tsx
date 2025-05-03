@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import { Inter } from "next/font/google";
-import LogoHeader from "./components/LogoHeader";
+import LogoHeader from "@/app/components/LogoHeader";
 import { collection, getDocs, query, where } from "firebase/firestore";
-import { db } from "./services/firebase";
+import { db } from "@/app/services/firebase";
+import { getAuth } from 'firebase-admin/auth';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -42,7 +43,7 @@ function AdminLoginCard() {
         <div style={{display: "flex", flexDirection: "column", gap: 32, marginTop: 32}}>
           <div>
             <label htmlFor="admin-id">Identification Number</label> <br />
-            <input className="text-box-entry" type="text" id="admin-id" name="admin-id" placeholder="Identification Number" onChange={(e) => setAdminId(e.target.value)} /> <br />
+            <input className="text-box-entry" type="text" aria-label="admin-id" id="admin-id" name="admin-id" placeholder="Identification Number" onChange={(e) => setAdminId(e.target.value)} /> <br />
             <label htmlFor="admin-id">Password</label> <br />
             <input className="text-box-entry" type="password" id="password" name="password" placeholder="Password" /> <br />
           </div>
@@ -52,13 +53,30 @@ function AdminLoginCard() {
           {errorMessage? <div className="error-message">
             <p>{errorMessage}</p>
           </div> : null}
-          <button type="submit" className="form-submit-button" disabled={loading}>Sign In</button>
+          <button type="submit" className="form-submit-button" disabled={loading} aria-label="sign-in">Sign In</button>
         </div>
       </form>
       </div>
     </div>
   );
 }
+
+// export async function getServerSideProps({ req }) {
+//   const cookies = parse(req.headers.cookie || '');
+//   const session = cookies.session || '';
+
+//   try {
+//     const decodedToken = await getAuth().verifySessionCookie(session, true);
+//     return { props: { user: decodedToken } };
+//   } catch (error) {
+//     return {
+//       redirect: {
+//         destination: '/login',
+//         permanent: false,
+//       },
+//     };
+//   }
+// }
 
 export default function AdminLogin() {
   return (
