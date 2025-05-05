@@ -100,7 +100,10 @@ describe("IT Admin Registration Page", () => {
         uid: "test-uid",
       },
     });
-    (getDocs as jest.Mock).mockResolvedValueOnce({ empty: false }); // identification number exists
+    (getDocs as jest.Mock).mockResolvedValueOnce({
+      empty: false,
+      docs: [{ data: () => ({ uid: "mock-it-admin-uid" }) }],
+    }); // identification number exists
     (addDoc as jest.Mock).mockResolvedValueOnce({});
 
     render(<ITAdminRegistration />);
