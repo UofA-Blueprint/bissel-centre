@@ -81,7 +81,7 @@ const AdminDashboard = () => {
     return (
         <div className="p-6 bg-gray-100 min-h-screen px-24">
             {/* Stats Section */}
-            <div className="grid grid-cols-4 gap-4 mb-6 px-24">
+            <div className="flex flex-wrap gap-4 mb-6 px-6 sm:px-12 lg:px-24 justify-center max-w-7xl mx-auto">
                 {stats.map((stat, index) => (
                     <StatCard
                         key={index}
@@ -93,46 +93,48 @@ const AdminDashboard = () => {
             </div>
 
             {/* Search Bar */}
-            <div className="flex items-center bg-white rounded-lg shadow-md p-4 mb-6">
-                <input
-                    type="text"
-                    placeholder="Search recipients..."
-                    className="flex-1 outline-none text-gray-700 px-2"
-                />
-                <button className="p-2 text-blue-500">
-                    <Image
-                        src="/icons/searchEnter.svg"
-                        alt="Search"
-                        width={20}
-                        height={20}
+            <div className="bg-[#979793] rounded-xl shadow-md max-w-7xl mx-auto mb-6 px-4 py-3">
+                {/* Search input row */}
+                <div className="flex items-center bg-white rounded-lg px-4 py-2 mb-3">
+                    <input
+                        type="text"
+                        placeholder="Search recipients..."
+                        className="flex-1 outline-none text-gray-700 text-base bg-white"
                     />
-                </button>
-            </div>
+                    <button className="p-2 bg-cyan-500 hover:bg-cyan-600 rounded-full">
+                        <Image
+                            src="/icons/searchEnter.svg"
+                            alt="Search"
+                            width={20}
+                            height={20}
+                        />
+                    </button>
+                </div>
 
-            {/* Buttons Section */}
-            <div className="flex justify-between mb-6">
-                <button className="bg-gray-600 text-white px-4 py-2 rounded-md flex items-center">
-                    + New Recipient
-                </button>
-                <button className="flex items-center text-gray-600 px-4 py-2">
-                    <Image
-                        src="/icons/filter.svg"
-                        alt="Filter"
-                        width={20}
-                        height={20}
-                        className="mr-2"
-                    />{" "}
-                    Filters
-                </button>
+                {/* Button row inside gray container */}
+                <div className="flex justify-between items-center text-white text-sm">
+                    <button className="flex items-center gap-1">
+                        <span className="text-xl">＋</span> New Recipient
+                    </button>
+                    <button className="flex items-center gap-2">
+                        <Image
+                            src="/icons/filter.svg"
+                            alt="Filter"
+                            width={16}
+                            height={16}
+                        />
+                        Filters
+                    </button>
+                </div>
             </div>
 
             {/* Placeholder for Illustration */}
-            <div className="flex justify-center items-center bg-white p-10 rounded-lg shadow-md">
+            <div className="flex justify-center items-center p-10 rounded-lg">
                 <Image
                     src="/icons/blankSearchPlaceholder.svg"
                     alt="Illustration"
-                    width={160}
-                    height={160}
+                    width={370}
+                    height={370}
                 />
             </div>
         </div>
@@ -141,16 +143,15 @@ const AdminDashboard = () => {
 
 const StatCard: React.FC<StatCardProps> = ({ icon, number, label }) => {
     return (
-        <div className="bg-white rounded-lg shadow-md p-6 flex flex-col items-center text-center w-full max-w-xs mx-auto">
-            <Image
-                src={icon}
-                alt={label}
-                width={48}
-                height={48}
-                className="mb-2 w-12 h-12"
-            />
-            <h2 className="text-3xl font-bold">{number}</h2>
-            <p className="text-gray-500 text-md mt-2">{label}</p>
+        <div className="bg-white rounded-xl shadow-md px-6 py-5 w-[220px] h-[110px] flex flex-col items-center justify-center text-center">
+            {/* Icon + Number */}
+            <div className="flex items-center gap-2">
+                <Image src={icon} alt={label} width={28} height={28} />
+                <h2 className="text-2xl font-bold">{number}</h2>
+            </div>
+
+            {/* Label */}
+            <p className="text-gray-600 text-base mt-2 font-medium">{label}</p>
         </div>
     );
 };
