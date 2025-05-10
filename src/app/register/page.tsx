@@ -16,6 +16,7 @@ import {
 } from "firebase/firestore";
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
 import { FirebaseError } from "firebase/app";
+import { hashITIDNumber } from "../../../utils/hashITIDNumber";
 
 type FormDataKeys = keyof typeof initialFormData;
 
@@ -114,10 +115,11 @@ const ITAdminRegistration: React.FC = () => {
   > => {
     // Check if identification number matches any existing it admin
     try {
+      const hashedID = hashITIDNumber(formData.identificationNumber);
       const querySnapshot = await getDocs(
         query(
           collection(db, IT_ADMIN_COLLECTION),
-          where("identificationNumber", "==", formData.identificationNumber)
+          where("identificationNumber", "==", hashedID)
         )
       );
       if (!querySnapshot.empty) {
