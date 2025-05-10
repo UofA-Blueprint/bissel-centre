@@ -46,8 +46,8 @@ const initialErrors = {
 };
 
 // --- CONSTANTS ---
-const IT_ADMIN_COLLECTION = "it_admins";
-const ADMIN_STAFF_COLLECTION = "admin_staff";
+const IT_ADMIN_COLLECTION = "it_admin";
+const ADMIN_STAFF_COLLECTION = "administrative_staff";
 
 const ITAdminRegistration: React.FC = () => {
   const [formData, setFormData] =
@@ -119,7 +119,7 @@ const ITAdminRegistration: React.FC = () => {
       const querySnapshot = await getDocs(
         query(
           collection(db, IT_ADMIN_COLLECTION),
-          where("identificationNumber", "==", hashedID)
+          where("hashedIdentificationNumber", "==", hashedID)
         )
       );
       if (!querySnapshot.empty) {
@@ -174,11 +174,10 @@ const ITAdminRegistration: React.FC = () => {
       try {
         // try to create the Firestore document
         await addDoc(collection(db, ADMIN_STAFF_COLLECTION), {
-          uid: userCredential.user.uid,
           firstName: formData.firstName,
-          lastName: formData.lastName,
+          secondName: formData.lastName,
           email: formData.email,
-          adminIdentificationNumber: ITUserUID,
+          createdBy: ITUserUID,
           createdAt: Timestamp.now(),
         });
 
