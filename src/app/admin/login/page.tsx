@@ -21,6 +21,7 @@ export default function AdminLoginPage() {
   const [rememberMe, setRememberMe] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  const [isModal, setIsModal] = useState<boolean>(false);
 
   const handleSignIn = async () => {
     setError(null);
@@ -117,11 +118,27 @@ export default function AdminLoginPage() {
             type="button"
             className="text-sm text-blue-600 hover:underline"
             onClick={() => {
-              setError("Please contact support for password reset.");
+              setIsModal(true);
             }}
           >
             Forgot Password?
           </button>
+          {isModal && (
+            <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 rounded-lg ">
+              <div className="bg-white p-4 rounded shadow-lg">
+                <h2 className="text-lg font-bold mb-2">Reset Password</h2>
+                <p className="mb-4">
+                  Please contact the IT department to reset your password.
+                </p>
+                <button
+                  className="bg-red-600 text-white px-4 py-2 rounded"
+                  onClick={() => setIsModal(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Sign In Button */}
