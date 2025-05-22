@@ -17,6 +17,8 @@ import {
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
 import { FirebaseError } from "firebase/app";
 import { hashITIDNumber } from "../../../utils/hashITIDNumber";
+import EyeClosedIcon from "../components/icons/EyeClosedIcon";
+import EyeOpenIcon from "../components/icons/EyeOpenIcon";
 
 type FormDataKeys = keyof typeof initialFormData;
 
@@ -55,6 +57,8 @@ const ITAdminRegistration: React.FC = () => {
   const [errors, setErrors] = useState<typeof initialErrors>(initialErrors);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -245,6 +249,9 @@ const ITAdminRegistration: React.FC = () => {
       type: "text",
     },
     { id: "email", name: "email", label: "Email Address", type: "text" },
+  ];
+
+  const passwordFields: FormField[] = [
     {
       id: "password",
       name: "password",
@@ -294,17 +301,70 @@ const ITAdminRegistration: React.FC = () => {
                   type={field.type}
                   id={field.id}
                   name={field.name}
-                  placeholder={
-                    !field.label.includes("Password")
-                      ? `Enter your ${field.label.toLowerCase()}`
-                      : field.label
-                  }
+                  placeholder={`Enter your ${field.label.toLowerCase()}`}
                   className={`p-2 border shadow-sm rounded-xl ${
                     errors[field.name] ? "border-red-600" : "border-gray-200"
                   }`}
                   value={formData[field.name]}
                   onChange={handleChange}
                 />
+                <div className="min-h-5">
+                  {errors[field.name] && (
+                    <span className="text-red-600 text-xs error-text">
+                      {errors[field.name]}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+            {passwordFields.map((field) => (
+              <div key={field.id} className="flex flex-col">
+                <label htmlFor={field.id} className="font-bold pb-2">
+                  {field.label} <span className="text-red-600">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type={
+                      (field.name === "password" && showPassword) ||
+                      (field.name === "confirmPassword" && showConfirmPassword)
+                        ? "text"
+                        : "password"
+                    }
+                    id={field.id}
+                    name={field.name}
+                    placeholder={field.label}
+                    className={`p-2 border shadow-sm rounded-xl w-full ${
+                      errors[field.name] ? "border-red-600" : "border-gray-200"
+                    }`}
+                    value={formData[field.name]}
+                    onChange={handleChange}
+                  ></input>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (field.name === "password") {
+                        setShowPassword(!showPassword);
+                      } else if (field.name === "confirmPassword") {
+                        setShowConfirmPassword(!showConfirmPassword);
+                      }
+                    }}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-sm leading-5"
+                    aria-label={
+                      (field.name === "password" && showPassword) ||
+                      (field.name === "confirmPassword" && showConfirmPassword)
+                        ? "Hide password"
+                        : "Show password"
+                    }
+                  >
+                    {(field.name === "password" && showPassword) ||
+                    (field.name === "confirmPassword" &&
+                      showConfirmPassword) ? (
+                      <EyeClosedIcon />
+                    ) : (
+                      <EyeOpenIcon />
+                    )}
+                  </button>
+                </div>
                 <div className="min-h-5">
                   {errors[field.name] && (
                     <span className="text-red-600 text-xs error-text">
