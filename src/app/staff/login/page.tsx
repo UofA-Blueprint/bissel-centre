@@ -108,7 +108,7 @@ export default function StaffLoginPage() {
           <div className="flex justify-between mb-6 flex-col gap-2">
             <h2 className="text-2xl font-bold text-gray-900">Sign In</h2>
             <p className="text-sm text-gray-600">
-              Don't have an account yet?{" "}
+              Don&apos;t have an account yet?{" "}
               <a
                 href="/register"
                 className="font-medium text-[#2CC0DE] hover:underline"
