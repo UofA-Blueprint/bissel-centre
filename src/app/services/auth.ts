@@ -8,10 +8,10 @@ import bcrypt from "bcryptjs";
 export const hashPassword = async (password: string): Promise<string> => {
   // Simple hash for testing - in production, use bcrypt
   const encoder = new TextEncoder();
-  const data = encoder.encode(password + 'salt'); // Add salt for better security
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const data = encoder.encode(password + "salt"); // Add salt for better security
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 };
 
 /**
@@ -20,7 +20,10 @@ export const hashPassword = async (password: string): Promise<string> => {
  * @param hash - Hashed password from database
  * @returns Promise<boolean> - True if password matches
  */
-export const verifyPassword = async (password: string, hash: string): Promise<boolean> => {
+export const verifyPassword = async (
+  password: string,
+  hash: string
+): Promise<boolean> => {
   const hashedInput = await hashPassword(password);
   return hashedInput === hash;
 };
@@ -38,14 +41,13 @@ export interface StaffUser {
   createdAt?: Date | string;
 }
 
-
 /**
  * Check if user is authenticated (has valid session)
  * @returns StaffUser | null
  */
 export const getAuthenticatedStaffUser = (): StaffUser | null => {
   if (typeof window === "undefined") return null;
-  
+
   try {
     const userData = sessionStorage.getItem("staff_user");
     return userData ? JSON.parse(userData) : null;
@@ -61,7 +63,7 @@ export const getAuthenticatedStaffUser = (): StaffUser | null => {
  */
 export const getRememberedEmail = (): string | null => {
   if (typeof window === "undefined") return null;
-  
+
   const remember = localStorage.getItem("staff_remember");
   if (remember === "true") {
     return localStorage.getItem("staff_email");
@@ -74,7 +76,7 @@ export const getRememberedEmail = (): string | null => {
  */
 export const clearAuthData = (): void => {
   if (typeof window === "undefined") return;
-  
+
   sessionStorage.removeItem("staff_user");
   localStorage.removeItem("staff_remember");
   localStorage.removeItem("staff_email");
@@ -86,7 +88,7 @@ export const clearAuthData = (): void => {
  */
 export const setStaffUser = (user: StaffUser): void => {
   if (typeof window === "undefined") return;
-  
+
   sessionStorage.setItem("staff_user", JSON.stringify(user));
 };
 
@@ -97,7 +99,7 @@ export const setStaffUser = (user: StaffUser): void => {
  */
 export const setRememberMe = (email: string, remember: boolean): void => {
   if (typeof window === "undefined") return;
-  
+
   if (remember) {
     localStorage.setItem("staff_remember", "true");
     localStorage.setItem("staff_email", email);

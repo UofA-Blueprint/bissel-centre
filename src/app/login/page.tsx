@@ -50,7 +50,7 @@ export default function StaffLoginPage() {
 
       const staffDoc = staffSnapshot.docs[0];
       const staffData = staffDoc.data();
-      
+
       const isPasswordValid = await verifyPassword(
         password,
         staffData.hashedPassword
@@ -86,28 +86,33 @@ export default function StaffLoginPage() {
   };
 
   const handleForgotPassword = () => {
-    alert("Please contact your IT Administrator for password reset assistance.");
+    alert(
+      "Please contact your IT Administrator for password reset assistance."
+    );
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col py-12 px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-center items-center pt-8 pb-4 mb-20">
+      <div className="flex justify-center items-center pt-8 pb-4 mb-20">
         <Image
-            src="/BissellLogo_Blue 1.svg"
-            alt="Bissell Logo"
-            width={200}
-            height={100}
-            className="max-w-xs"
+          src="/BissellLogo_Blue 1.svg"
+          alt="Bissell Logo"
+          width={200}
+          height={100}
+          className="max-w-xs"
         />
-        </div>
+      </div>
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-6 shadow rounded-lg">
           <div className="flex justify-between mb-6 flex-col gap-2">
             <h2 className="text-2xl font-bold text-gray-900">Sign In</h2>
             <p className="text-sm text-gray-600">
-              Don't have an account yet?{' '}
-              <a href="/register" className="font-medium text-[#2CC0DE] hover:underline">
+              Don't have an account yet?{" "}
+              <a
+                href="/register"
+                className="font-medium text-[#2CC0DE] hover:underline"
+              >
                 Register
               </a>
             </p>
@@ -187,7 +192,7 @@ export default function StaffLoginPage() {
               disabled={loading}
               className="w-full py-2 px-4 rounded-lg bg-[#2CC0DE] text-white font-semibold hover:bg-teal-500 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE]"
             >
-              {loading ? 'Signing In...' : 'Sign In'}
+              {loading ? "Signing In..." : "Sign In"}
             </button>
           </form>
 
