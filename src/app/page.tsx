@@ -42,7 +42,7 @@ export default function Home() {
               if (isAdmin) {
                 router.push("/admin/register");
               } else {
-                router.push("/register");
+                router.push("/staff/register");
               }
             }}
           >
@@ -54,7 +54,7 @@ export default function Home() {
               if (isAdmin) {
                 router.push("/admin/login");
               } else {
-                router.push("/login");
+                router.push("/staff/login");
               }
             }}
           >

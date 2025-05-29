@@ -25,18 +25,18 @@ describe("Home component", () => {
     expect(screen.getByText("Welcome Admin!")).toBeInTheDocument();
   });
 
-  test("navigates to /register when Register button is clicked as non-admin", () => {
+  test("navigates to /staff/register when Register button is clicked as non-admin", () => {
     render(React.createElement(Home));
     const registerButton = screen.getByRole("button", { name: /Register/i });
     fireEvent.click(registerButton);
-    expect(pushMock).toHaveBeenCalledWith("/register");
+    expect(pushMock).toHaveBeenCalledWith("/staff/register");
   });
 
   test("navigates to /login when Login button is clicked as non-admin", () => {
     render(React.createElement(Home));
     const loginButton = screen.getByRole("button", { name: /Login/i });
     fireEvent.click(loginButton);
-    expect(pushMock).toHaveBeenCalledWith("/login");
+    expect(pushMock).toHaveBeenCalledWith("/staff/login");
   });
 
   test("navigates to /admin/register when Register button is clicked as admin", () => {
