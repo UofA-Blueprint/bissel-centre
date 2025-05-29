@@ -110,7 +110,7 @@ export default function StaffLoginPage() {
             <p className="text-sm text-gray-600">
               Don&apos;t have an account yet?{" "}
               <a
-                href="/register"
+                href="/staff/register"
                 className="font-medium text-[#2CC0DE] hover:underline"
               >
                 Register
