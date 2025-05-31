@@ -2,6 +2,7 @@
 
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { cookies } from 'next/headers';
+import { hashITIDNumber } from "../../../utils/hashITIDNumber";
 
 export const handleITAdminLogin = async (IdentificationNumber: string) => {
     // IdentificatioNumbe is same as the UID of the firebase user
@@ -35,11 +36,13 @@ export async function getAdminSession(): Promise<null> {
 export const createAdmin = async () => {
     console.log("Creating admin")
     const admin = await initAdmin()
+
+    const hashed_uid = hashITIDNumber('ABC123'); // Example IT ID number, replace with actual logic
     const user = await admin.auth().createUser({
-        email: 'itadmin@gmail.com',
+        email: 'ABC123@bissel.com', // an identifier
         password: 'secret',
         displayName: 'Steve Jobs',
-        uid: 'ABC123',
+        uid: hashed_uid
       });
 
         
@@ -47,6 +50,18 @@ export const createAdmin = async () => {
     console.log(userData);
 
     console.log("Attempting to make user admin")
-    const res = await admin.auth().setCustomUserClaims('ABC123', { admin: true });
+    const res = await admin.auth().setCustomUserClaims(hashed_uid, { admin: true });
     console.log(res);
+}
+
+export const checkAdmin = async (identificationNumber: string) => {
+    const admin = await initAdmin();
+    try {
+        const user = await admin.auth().getUser(identificationNumber);
+        console.log("User data:", user);
+        return user.customClaims?.admin === true;
+    } catch (error) {
+        console.error("Error checking admin status:", error);
+        return false;
+    }
 }

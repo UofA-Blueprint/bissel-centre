@@ -19,6 +19,7 @@ import { FirebaseError } from "firebase/app";
 import { hashITIDNumber } from "../../../utils/hashITIDNumber";
 import EyeClosedIcon from "../components/icons/EyeClosedIcon";
 import EyeOpenIcon from "../components/icons/EyeOpenIcon";
+import { checkAdmin } from "../admin/actions";
 
 type FormDataKeys = keyof typeof initialFormData;
 
@@ -120,14 +121,17 @@ const ITAdminRegistration: React.FC = () => {
     // Check if identification number matches any existing it admin
     try {
       const hashedID = hashITIDNumber(formData.identificationNumber);
-      const querySnapshot = await getDocs(
-        query(
-          collection(db, IT_ADMIN_COLLECTION),
-          where("hashedIdentificationNumber", "==", hashedID)
-        )
-      );
-      if (!querySnapshot.empty) {
-        return querySnapshot.docs[0].data().uid;
+      console.log("Checking hashed ID:", hashedID);
+      const isAdmin = await checkAdmin(hashedID);
+      // the it_admin collection should never be exposed
+      // const querySnapshot = await getDocs(
+      //   query(
+      //     collection(db, IT_ADMIN_COLLECTION),
+      //     where("hashedIdentificationNumber", "==", hashedID)
+      //   )
+      // );
+      if (isAdmin) {
+        return hashedID; // Return the hashed ID if the user is an IT admin
       } else {
         setErrors({
           firstName: "",

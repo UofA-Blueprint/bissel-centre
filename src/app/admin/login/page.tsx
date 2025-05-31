@@ -8,6 +8,7 @@ import firebase from "firebase/compat/app";
 import { signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/app/services/firebase";
 import { useRouter } from "next/navigation";
+import { hashITIDNumber } from "../../../../utils/hashITIDNumber";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,7 +25,8 @@ function AdminLoginCard() {
     setLoading(true);
     e.preventDefault();
     try {
-      const customToken = await handleITAdminLogin(adminId);
+      const hashed_id = hashITIDNumber(adminId);
+      const customToken = await handleITAdminLogin(hashed_id);
       if (customToken === null) {
         setErrorMessage("Invalid Credentials");
         return;
