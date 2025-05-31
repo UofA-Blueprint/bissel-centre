@@ -64,14 +64,12 @@ function AdminLoginCard() {
   return (
     <div style={{flex:2}}>
     <div className={`${inter.className} login-card`}>
-      <form action="" className="login-form" onSubmit={handleSubmit}>
+      <form action="" className={`login-form ${loading ? "opacity-50 pointer-events-none" : ""}`} onSubmit={handleSubmit}>
         <h1 style={{fontSize: 24}}>Admin</h1>
         <div style={{display: "flex", flexDirection: "column", gap: 32, marginTop: 32}}>
           <div>
             <label htmlFor="admin-id">Identification Number</label> <br />
             <input className="text-box-entry" type="text" aria-label="admin-id" id="admin-id" name="admin-id" placeholder="Identification Number" onChange={(e) => setAdminId(e.target.value)} /> <br />
-            <label htmlFor="admin-id">Password</label> <br />
-            <input className="text-box-entry" type="password" id="password" name="password" placeholder="Password" /> <br />
           </div>
           {/* ask for  forgot password ?*/}
       

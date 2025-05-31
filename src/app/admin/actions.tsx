@@ -65,3 +65,30 @@ export const checkAdmin = async (identificationNumber: string) => {
         return false;
     }
 }
+
+export const listUsers = async () => {
+    const admin = await initAdmin();
+    try {
+        const listUsersResult = await admin.auth().listUsers();
+        return listUsersResult.users.map(user => ({
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            customClaims: user.customClaims
+        }));
+    } catch (error) {
+        console.error("Error listing users:", error);
+        return [];
+    }
+}
+
+export const deleteUser = async (uid: string) => {
+    const admin = await initAdmin();
+    try {
+        await admin.auth().deleteUser(uid);
+        return true;
+    } catch (error) {
+        console.error("Error deleting user:", error);
+        return false;
+    }
+}
