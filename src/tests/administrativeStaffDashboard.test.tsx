@@ -1,6 +1,6 @@
 import React from "react";
 import { render, screen, act } from "@testing-library/react";
-import AdminDashboard from "@/app/components/AdminDashboard";
+import AdminDashboard from "@/app/components/AdministrativeStaffDashboard";
 // Mock Firestore
 jest.mock("firebase/firestore", () => ({
     collection: jest.fn(),
