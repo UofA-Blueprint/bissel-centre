@@ -9,15 +9,15 @@ export const hashITIDNumber = (idNumber) => {
     throw new Error("Invalid ID number provided for hashing.");
   }
 
-  const pepper = process.env.NEXT_PUBLIC_IT_ID_HASH_PEPPER;
+  const pepper = process.env.IT_ID_HASH_PEPPER;
 
   if (!pepper) {
     throw new Error(
-      "Hashing pepper is not configured. Modify the environment variable NEXT_PUBLIC_IT_ID_HASH_PEPPER."
+      "Hashing pepper is not configured. Modify the environment variable IT_ID_HASH_PEPPER."
     );
   }
 
-  const stringToHash = pepper ? `${idNumber}${pepper}` : idNumber;
+  const stringToHash = `${idNumber}${pepper}`;
 
   return crypto.createHash("sha256").update(stringToHash).digest("hex");
 };
