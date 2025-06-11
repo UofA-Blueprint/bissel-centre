@@ -17,8 +17,9 @@ interface User {
     firstName: string;
     secondName: string;
     picture?: string; // URL for the profile picture
-    status?: string; // e.g., "Active"
+    arcCardStatus?: string; // e.g., "Active", "Expired", or undefined
     lastIssued?: string; // e.g., "11/09/24"
+    banned?: boolean;
 }
 
 const AdminDashboard = () => {
@@ -47,10 +48,14 @@ const AdminDashboard = () => {
                 let expiredCards = 0;
                 const availableCards = arcCardsSnapshot.size; // Total ARC cards
 
+                // Build a lookup for arcCardNumber -> issuedAt
+                const arcCardIssuedAtMap: Record<string, unknown> = {};
+
                 arcCardsSnapshot.forEach((doc) => {
                     const card = doc.data();
                     if (card.status === "Active") activeCards++;
                     if (card.status === "Expired") expiredCards++;
+                    arcCardIssuedAtMap[card.arcCardNumber] = card.issuedAt;
                 });
 
                 // Fetch banned users
@@ -87,15 +92,65 @@ const AdminDashboard = () => {
                 const usersSnapshot = await getDocs(collection(db, "users"));
                 const usersData: User[] = usersSnapshot.docs.map((doc) => {
                     const data = doc.data();
+                    let lastIssued = "N/A";
+                    let arcCardStatus: string | undefined = undefined;
+                    if (
+                        data.arcCardNumber &&
+                        arcCardIssuedAtMap[data.arcCardNumber]
+                    ) {
+                        const issuedAt = arcCardIssuedAtMap[data.arcCardNumber];
+                        if (
+                            issuedAt &&
+                            typeof (issuedAt as { toDate?: () => Date })
+                                .toDate === "function"
+                        ) {
+                            // Firestore Timestamp object
+                            const dateObj = (
+                                issuedAt as { toDate: () => Date }
+                            ).toDate();
+                            // Format: mm/dd/yy
+                            const mm = String(dateObj.getMonth() + 1).padStart(
+                                2,
+                                "0"
+                            );
+                            const dd = String(dateObj.getDate()).padStart(
+                                2,
+                                "0"
+                            );
+                            const yy = String(dateObj.getFullYear()).slice(-2);
+                            lastIssued = `${mm}/${dd}/${yy}`;
+                        } else if (issuedAt instanceof Date) {
+                            const mm = String(issuedAt.getMonth() + 1).padStart(
+                                2,
+                                "0"
+                            );
+                            const dd = String(issuedAt.getDate()).padStart(
+                                2,
+                                "0"
+                            );
+                            const yy = String(issuedAt.getFullYear()).slice(-2);
+                            lastIssued = `${mm}/${dd}/${yy}`;
+                        }
+                    }
+                    // Find arc card status
+                    if (data.arcCardNumber) {
+                        const arcCardDoc = arcCardsSnapshot.docs.find(
+                            (arcDoc) =>
+                                arcDoc.data().arcCardNumber ===
+                                data.arcCardNumber
+                        );
+                        arcCardStatus = arcCardDoc
+                            ? arcCardDoc.data().status
+                            : undefined;
+                    }
                     return {
                         id: doc.id,
                         firstName: data.firstName,
                         secondName: data.secondName,
                         picture: data.picture, // Profile picture URL
-                        status: data.banned ? "Banned" : "Active", // Determine status
-                        lastIssued: data.passesIssued?.length
-                            ? data.passesIssued[data.passesIssued.length - 1]
-                            : "N/A", // Last issued pass
+                        arcCardStatus: arcCardStatus, // Status from arc card
+                        lastIssued: lastIssued, // Last issued pass
+                        banned: data.banned,
                     };
                 });
                 setUsers(usersData);
@@ -214,44 +269,76 @@ const StatCard: React.FC<StatCardProps> = ({ icon, number, label }) => {
 };
 
 const UserCard: React.FC<{ user: User }> = ({ user }) => {
+    const isBanned = user.banned;
+    const arcCardStatus = user.arcCardStatus;
     return (
-        <div className="bg-white rounded-lg shadow-md px-4 py-3 w-full flex items-center justify-between">
-            {/* User Info */}
-            <div className="flex items-center gap-4">
-                {/* User Avatar */}
-                <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden flex items-center justify-center">
-                    {user.picture ? (
-                        <Image
-                            src={user.picture}
-                            alt={`${user.firstName} ${user.secondName}`}
-                            width={40}
-                            height={40}
-                            className="rounded-full object-cover"
-                        />
-                    ) : (
-                        <span className="text-lg font-bold text-gray-700">
-                            {user.firstName[0]}
-                        </span>
-                    )}
-                </div>
-
-                {/* User Name */}
-                <div>
-                    <h2 className="text-lg font-semibold text-gray-800">
-                        {user.firstName} {user.secondName}
-                    </h2>
-                    <p className="text-sm text-gray-500">
-                        {user.status || "Unknown"}
-                    </p>
-                </div>
+        <div className="bg-white rounded-lg shadow-md px-6 py-4 w-full flex items-center justify-between">
+            {/* Avatar */}
+            <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden flex items-center justify-center mr-4">
+                {user.picture ? (
+                    <Image
+                        src={user.picture}
+                        alt={`${user.firstName} ${user.secondName}`}
+                        width={40}
+                        height={40}
+                        className="rounded-full object-cover"
+                    />
+                ) : (
+                    <span className="text-lg font-bold text-gray-700">
+                        {user.firstName[0]}
+                    </span>
+                )}
             </div>
-
-            {/* User Details */}
-            <div className="text-right">
-                <p className="text-sm text-gray-500">Last issued:</p>
-                <p className="text-sm text-gray-800 font-medium">
-                    {user.lastIssued || "N/A"}
-                </p>
+            {/* Name and Info Row */}
+            <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center min-w-0">
+                <span className="text-xl font-bold text-gray-900 truncate">
+                    {user.firstName} {user.secondName}
+                </span>
+                <div className="sm:ml-auto flex flex-row sm:flex-row flex-wrap items-center sm:items-center text-right min-w-[180px] gap-2 sm:gap-4 mt-2 sm:mt-0 w-full sm:w-auto">
+                    {/* Status and Banned Flag */}
+                    <span
+                        className={`flex items-center text-base font-medium ${
+                            arcCardStatus === "Expired"
+                                ? "text-red-500"
+                                : arcCardStatus === "Active"
+                                ? "text-gray-500"
+                                : "text-gray-500"
+                        }`}
+                    >
+                        {isBanned && (
+                            <Image
+                                src="/icons/flag.svg"
+                                alt="Flagged"
+                                width={15}
+                                height={15}
+                                className="mr-2"
+                            />
+                        )}
+                        {arcCardStatus === "Expired" ? (
+                            <>
+                                <Image
+                                    src="/icons/alert-triangle.svg"
+                                    alt="Expired"
+                                    width={18}
+                                    height={18}
+                                    className="mr-1"
+                                />
+                                <span>Expired</span>
+                            </>
+                        ) : arcCardStatus === "Active" ? (
+                            <span>Active</span>
+                        ) : (
+                            <span>N/A</span>
+                        )}
+                    </span>
+                    {/* Last Issued Date */}
+                    <span className="text-base text-gray-500 font-normal whitespace-nowrap">
+                        Last issued:{" "}
+                        <span className="text-gray-800 font-medium">
+                            {user.lastIssued || "N/A"}
+                        </span>
+                    </span>
+                </div>
             </div>
         </div>
     );
