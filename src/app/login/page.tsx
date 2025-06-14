@@ -13,6 +13,7 @@ export default function StaffLoginPage() {
   const [rememberMe, setRememberMeState] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadingRecipient, setLoadingRecipient] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -24,14 +25,43 @@ export default function StaffLoginPage() {
     }
   }, []);
 
+  // Function to fetch Sunny's user ID for demonstration purposes
+  const fetchDemoRecipientID = async () => {
+    try {
+      setLoadingRecipient(true);
+      // Query for a user named "Sunny Rain" - based on the seed data
+      const usersRef = collection(db, "users");
+      const q = query(
+        usersRef,
+        where("firstName", "==", "Sunny"),
+        where("secondName", "==", "Rain")
+      );
+
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        // Get the first matching user's ID
+        const sunnyUserID = querySnapshot.docs[0].id;
+        return sunnyUserID;
+      } else {
+        console.error("Demo recipient (Sunny) not found in database");
+        return null;
+      }
+    } catch (error) {
+      console.error("Error fetching demo recipient:", error);
+      return null;
+    } finally {
+      setLoadingRecipient(false);
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
-
     try {
       // Authenticate with Firebase Auth
-      const userCredential = await signInWithEmailAndPassword(
+      await signInWithEmailAndPassword(
         auth,
         email.toLowerCase().trim(),
         password
@@ -75,18 +105,35 @@ export default function StaffLoginPage() {
         })
       );
 
-      router.push("/dashboard");
-    } catch (err: any) {
+      // Fetch Sunny's user ID for demonstration
+      const demoRecipientID = await fetchDemoRecipientID();
+
+      if (demoRecipientID) {
+        // Redirect to Sunny's profile
+        router.push(`/profile/Display-Recipient-Profile?id=${demoRecipientID}`);
+      } else {
+        // Fallback to dashboard if recipient not found
+        router.push("/dashboard");
+      }
+    } catch (err: unknown) {
       console.error("Login error:", err);
       if (
-        err.code === "auth/user-not-found" ||
-        err.code === "auth/wrong-password" ||
-        err.code === "auth/invalid-credential"
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        (err.code === "auth/user-not-found" ||
+          err.code === "auth/wrong-password" ||
+          err.code === "auth/invalid-credential")
       ) {
         setError(
           "Invalid email or password. Please contact IT Admin if you need assistance."
         );
-      } else if (err.code === "auth/too-many-requests") {
+      } else if (
+        err &&
+        typeof err === "object" &&
+        "code" in err &&
+        err.code === "auth/too-many-requests"
+      ) {
         setError("Too many failed login attempts. Please try again later.");
       } else {
         setError("An error occurred during login. Please try again.");
@@ -116,16 +163,19 @@ export default function StaffLoginPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-6 shadow rounded-lg">
+          {" "}
           <div className="flex justify-between mb-6 flex-col gap-2">
-            <h2 className="text-2xl font-bold text-gray-900">Sign In</h2>
+            <h2 className="text-2xl font-bold text-gray-900">Sign In</h2>{" "}
+            <p className="text-sm text-blue-600 mt-1">
+              After login, you will be redirected to Sunny&apos;s recipient
+              profile
+            </p>
           </div>
-
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
               {error}
             </div>
           )}
-
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label
@@ -191,13 +241,12 @@ export default function StaffLoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || loadingRecipient}
               className="w-full py-2 px-4 rounded-lg bg-[#2CC0DE] text-white font-semibold hover:bg-teal-500 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE]"
             >
-              {loading ? "Signing In..." : "Sign In"}
+              {loading || loadingRecipient ? "Signing In..." : "Sign In"}
             </button>
           </form>
-
           <p className="mt-6 text-center text-sm text-gray-600">
             Need an account? Contact your IT Administrator.
           </p>
