@@ -27,6 +27,7 @@ export interface User {
   banned: boolean;
   banReason?: string;
   notes?: string;
+  status?: "Active" | "Inactive"; // Account status (different from banned)
   createdAt: Date | string;
   createdBy: string;
   updatedAt?: Date | string;
@@ -305,6 +306,30 @@ export async function renewArcCard(
     });
   } catch (error) {
     console.error("Error renewing ARC card:", error);
+    throw error;
+  }
+}
+
+// Update user status
+export async function updateUserStatus(
+  userId: string,
+  status: "Active" | "Inactive",
+  modifiedBy: string
+): Promise<void> {
+  try {
+    // Update user's status
+    await updateUser(userId, { status });
+
+    // Add to history
+    await addDoc(collection(db, "history"), {
+      date: Timestamp.now(),
+      userId,
+      modifiedBy,
+      event: "Status Change",
+      notes: `Account status changed to ${status}`,
+    });
+  } catch (error) {
+    console.error("Error updating user status:", error);
     throw error;
   }
 }

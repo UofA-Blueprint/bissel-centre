@@ -197,6 +197,126 @@ export function OverrideModal({
   );
 }
 
+interface AccountStatusModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (status: "Active" | "Inactive") => void;
+  userName: string;
+  currentStatus: "Active" | "Inactive";
+}
+
+export function AccountStatusModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  userName,
+  currentStatus,
+}: AccountStatusModalProps) {
+  const [selectedStatus, setSelectedStatus] = useState<"Active" | "Inactive">(
+    currentStatus
+  );
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onConfirm(selectedStatus);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Account Status</h3>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-600"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <p className="text-gray-600 mb-4">
+              Set the account status for {userName}:
+            </p>
+
+            <div className="space-y-3">
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="status"
+                  value="Active"
+                  checked={selectedStatus === "Active"}
+                  onChange={(e) =>
+                    setSelectedStatus(e.target.value as "Active" | "Inactive")
+                  }
+                  className="text-green-600 focus:ring-green-500"
+                />
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-green-500 rounded-full mr-2"></div>
+                  <span className="text-gray-700 font-medium">Active</span>
+                </div>
+                <span className="text-sm text-gray-500">
+                  - Account is active and can receive services
+                </span>
+              </label>
+
+              <label className="flex items-center space-x-3 cursor-pointer">
+                <input
+                  type="radio"
+                  name="status"
+                  value="Inactive"
+                  checked={selectedStatus === "Inactive"}
+                  onChange={(e) =>
+                    setSelectedStatus(e.target.value as "Active" | "Inactive")
+                  }
+                  className="text-gray-600 focus:ring-gray-500"
+                />
+                <div className="flex items-center">
+                  <div className="w-3 h-3 bg-gray-400 rounded-full mr-2"></div>
+                  <span className="text-gray-700 font-medium">Inactive</span>
+                </div>
+                <span className="text-sm text-gray-500">
+                  - Account is inactive but not banned
+                </span>
+              </label>
+            </div>
+
+            {currentStatus !== selectedStatus && (
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-blue-800 text-sm">
+                  <strong>Note:</strong> Changing the status from{" "}
+                  {currentStatus} to {selectedStatus} will be recorded in the
+                  account history.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-md"
+            >
+              Update Status
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 interface DeleteModalProps {
   isOpen: boolean;
   onClose: () => void;

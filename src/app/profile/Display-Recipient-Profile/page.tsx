@@ -1,12 +1,27 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import { Plus, ArrowRight, UserCircle, Edit } from "lucide-react";
+import {
+  Plus,
+  ArrowRight,
+  UserCircle,
+  Edit,
+  Upload,
+  X,
+  Save,
+} from "lucide-react";
 import Header from "../../components/Header";
 import Sidebar from "../../components/Sidebar";
-import { BanModal, OverrideModal, DeleteModal } from "../../components/Modals";
+import {
+  BanModal,
+  OverrideModal,
+  DeleteModal,
+  AccountStatusModal,
+} from "../../components/Modals";
+import { storage } from "../../services/firebase";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   User,
   ArcCard,
@@ -21,6 +36,8 @@ import {
   issueNewArcCard,
   renewArcCard,
   deleteUser as deleteUserService,
+  updateUser,
+  updateUserStatus,
 } from "../../services/userService";
 
 export default function DisplayRecipientProfile() {
@@ -37,15 +54,39 @@ export default function DisplayRecipientProfile() {
   >("overview");
   const [loading, setLoading] = useState(true);
   const [loadingStep, setLoadingStep] = useState("Initializing...");
-  const [showManagePopover, setShowManagePopover] = useState(false);
-
-  // Modal states
+  const [showManagePopover, setShowManagePopover] = useState(false); // Modal states
   const [showBanModal, setShowBanModal] = useState(false);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showAccountStatusModal, setShowAccountStatusModal] = useState(false);
   const [overrideAction, setOverrideAction] = useState<"issue" | "renew">(
     "issue"
   );
+
+  // Edit mode states
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editedUser, setEditedUser] = useState<Partial<User>>({});
+  const [showImageUpload, setShowImageUpload] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null); // Close image upload menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = () => {
+      if (showImageUpload) {
+        setShowImageUpload(false);
+      }
+      if (showManagePopover) {
+        setShowManagePopover(false);
+      }
+    };
+
+    if (showImageUpload || showManagePopover) {
+      document.addEventListener("click", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("click", handleClickOutside);
+    };
+  }, [showImageUpload, showManagePopover]);
   const loadUserData = useCallback(async () => {
     if (!userId) {
       console.log("No userId provided");
@@ -113,10 +154,7 @@ export default function DisplayRecipientProfile() {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       setLoadingStep(`Error: ${errorMessage}`);
-      // Instead of alert, keep the loading state with error message
-      setTimeout(() => {
-        alert(`Error loading user data: ${errorMessage}`);
-      }, 1000);
+      // Keep the loading state with error message
     } finally {
       setLoading(false);
     }
@@ -189,22 +227,17 @@ export default function DisplayRecipientProfile() {
         const errorMessage =
           error instanceof Error ? error.message : "Unknown error";
         setLoadingStep(`Error: ${errorMessage}`);
-        // Instead of alert, keep the loading state with error message
-        setTimeout(() => {
-          alert(`Error loading user data: ${errorMessage}`);
-        }, 1000);
+        // Keep the loading state with error message
       } finally {
         setLoading(false);
       }
     };
-
     loadData();
   }, [userId]); // Only depends on userId, preventing the dependency loop
 
   // Handle action functions
   const handleIssueCard = async () => {
     if (!user) return;
-
     if (user.banned) {
       setOverrideAction("issue");
       setShowOverrideModal(true);
@@ -220,32 +253,25 @@ export default function DisplayRecipientProfile() {
         "current-admin"
       );
       await loadUserData();
-      alert("ARC card issued successfully!");
     } catch (error) {
       console.error("Error issuing card:", error);
-      alert("Error issuing card");
     }
   };
-
   const handleRenewCard = async () => {
     if (!user || arcCards.length === 0) return;
-
     if (user.banned) {
       setOverrideAction("renew");
       setShowOverrideModal(true);
       return;
     }
-
     try {
       const activeCard = arcCards.find((card) => card.status === "Active");
       if (activeCard) {
         await renewArcCard(user.id, activeCard.id, "current-admin");
         await loadUserData();
-        alert("ARC card renewed successfully!");
       }
     } catch (error) {
       console.error("Error renewing card:", error);
-      alert("Error renewing card");
     }
   };
 
@@ -262,7 +288,6 @@ export default function DisplayRecipientProfile() {
       setShowBanModal(false);
     } catch (error) {
       console.error("Error updating ban status:", error);
-      alert("Error updating ban status");
     }
   };
 
@@ -289,14 +314,8 @@ export default function DisplayRecipientProfile() {
       }
       await loadUserData();
       setShowOverrideModal(false);
-      alert(
-        `ARC card ${
-          overrideAction === "issue" ? "issued" : "renewed"
-        } successfully with override!`
-      );
     } catch (error) {
       console.error("Error with override:", error);
-      alert("Error with override");
     }
   };
 
@@ -309,9 +328,117 @@ export default function DisplayRecipientProfile() {
       router.push("/admin/dashboard");
     } catch (error) {
       console.error("Error deleting user:", error);
-      alert("Error deleting user");
     }
   };
+  // Edit mode handlers
+  const handleEditToggle = () => {
+    if (!user) return;
+
+    if (isEditMode) {
+      // Save changes
+      handleSaveChanges();
+    } else {
+      // Enter edit mode
+      setIsEditMode(true);
+      setEditedUser({
+        firstName: user.firstName,
+        secondName: user.secondName,
+        genderIdentity: user.genderIdentity,
+        address: user.address,
+        postalCode: user.postalCode,
+        email: user.email || "",
+        phoneNumber: user.phoneNumber || "",
+        aliases: user.aliases,
+        notes: user.notes || "",
+      });
+    }
+  };
+
+  const handleSaveChanges = async () => {
+    if (!user) return;
+
+    try {
+      await updateUser(user.id, editedUser);
+      await loadUserData();
+      setIsEditMode(false);
+      setEditedUser({});
+    } catch (error) {
+      console.error("Error updating user:", error);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditMode(false);
+    setEditedUser({});
+  };
+
+  // Profile picture handlers
+  const handleImageUpload = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return; // Validate file type
+    if (!file.type.startsWith("image/")) {
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+
+      // Create a reference to the file location
+      const imageRef = ref(
+        storage,
+        `profile-pictures/${user.id}/${Date.now()}_${file.name}`
+      );
+
+      // Upload the file
+      await uploadBytes(imageRef, file);
+
+      // Get the download URL
+      const downloadURL = await getDownloadURL(imageRef);
+
+      // Update user profile with the new image URL
+      await updateUser(user.id, { picture: downloadURL }); // Reload user data to show the new image
+      await loadUserData();
+    } catch (error) {
+      console.error("Error uploading image:", error);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleRemoveImage = async () => {
+    if (!user) return;
+
+    try {
+      setUploadingImage(true);
+      await updateUser(user.id, { picture: "" });
+      await loadUserData();
+    } catch (error) {
+      console.error("Error removing image:", error);
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+  const handleAccountStatusChange = async (status: "Active" | "Inactive") => {
+    if (!user) return;
+    try {
+      await updateUserStatus(user.id, status, "current-admin");
+      await loadUserData();
+    } catch (error) {
+      console.error("Error updating account status:", error);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -369,25 +496,31 @@ export default function DisplayRecipientProfile() {
               setShowManagePopover(!showManagePopover)
             }
             onEditProfile={() => {
-              // TODO: Navigate to edit profile
-              alert("Edit profile functionality to be implemented");
+              handleEditToggle();
+              setShowManagePopover(false); // Close the popover when edit is clicked
             }}
             onAccountStatus={() => {
-              // TODO: Show account status modal
-              alert("Account status functionality to be implemented");
+              setShowAccountStatusModal(true);
+              setShowManagePopover(false); // Close the popover
             }}
-            onDeleteAccount={() => setShowDeleteModal(true)}
-            onToggleBan={() => setShowBanModal(true)}
+            onDeleteAccount={() => {
+              setShowDeleteModal(true);
+              setShowManagePopover(false); // Close the popover
+            }}
+            onToggleBan={() => {
+              setShowBanModal(true);
+              setShowManagePopover(false); // Close the popover
+            }}
             isBanned={user.banned}
+            userStatus={user.status || "Active"}
           />
 
           {/* Main Content */}
           <div className="flex-1 ml-4">
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              {/* Profile Header */}
+              {/* Profile Header */}{" "}
               <div className="p-6 flex flex-col items-center">
                 <div className="relative mb-4">
-                  {" "}
                   <div className="w-24 h-24 bg-purple-200 rounded-full overflow-hidden flex items-center justify-center">
                     {user.picture ? (
                       <Image
@@ -401,9 +534,54 @@ export default function DisplayRecipientProfile() {
                       <UserCircle size={56} className="text-purple-300" />
                     )}
                   </div>
-                  <button className="absolute top-1 right-1 bg-white p-1 rounded-full border border-gray-200 hover:bg-gray-50">
-                    <Edit size={14} className="text-primary" />
-                  </button>
+
+                  {/* Profile Picture Edit Menu */}
+                  <div className="absolute top-1 right-1">
+                    {" "}
+                    <button
+                      className="bg-white p-1 rounded-full border border-gray-200 hover:bg-gray-50"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowImageUpload(!showImageUpload);
+                      }}
+                    >
+                      <Edit size={14} className="text-primary" />
+                    </button>
+                    {showImageUpload && (
+                      <div
+                        className="absolute top-8 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 w-48"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button
+                          onClick={handleImageUpload}
+                          disabled={uploadingImage}
+                          className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center"
+                        >
+                          <Upload size={16} className="mr-2" />
+                          {uploadingImage ? "Uploading..." : "Upload Picture"}
+                        </button>
+                        {user.picture && (
+                          <button
+                            onClick={handleRemoveImage}
+                            disabled={uploadingImage}
+                            className="w-full px-4 py-2 text-left hover:bg-gray-50 flex items-center text-red-600"
+                          >
+                            <X size={16} className="mr-2" />
+                            Remove Picture
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Hidden file input */}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={handleFileSelect}
+                    accept="image/*"
+                    style={{ display: "none" }}
+                  />
                 </div>
                 <div className="text-center">
                   <div className="flex items-center justify-center space-x-2">
@@ -426,76 +604,217 @@ export default function DisplayRecipientProfile() {
               {activeTab === "overview" && (
                 <div className="p-6">
                   <div className="bg-gray-50 rounded-lg p-6 shadow-sm">
+                    {" "}
                     <div className="flex items-center mb-6">
                       <h3 className="text-lg font-semibold text-gray-800">
                         Personal Details
                       </h3>
                       <div className="flex-grow border-t border-gray-200 ml-4" />
-                    </div>
-
+                      <button
+                        onClick={handleEditToggle}
+                        className={`ml-4 px-4 py-2 rounded-lg text-sm font-medium flex items-center ${
+                          isEditMode ? "bg-primary text-white" : "display-none"
+                        }`}
+                      >
+                        {isEditMode && (
+                          <>
+                            <Save size={16} className="mr-2" />
+                            Save Changes
+                          </>
+                        )}
+                      </button>
+                      {isEditMode && (
+                        <button
+                          onClick={handleCancelEdit}
+                          className="ml-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-500 text-white hover:bg-gray-600"
+                        >
+                          Cancel
+                        </button>
+                      )}
+                    </div>{" "}
                     <div className="grid grid-cols-3 gap-x-8 gap-y-6">
                       <div>
-                        <label className="block text-sm font-medium text-gray-900 mb-1">
+                        {" "}
+                        <label className="block text-sm font-bold text-gray-900 mb-1">
                           First Name
                         </label>
-                        <div className="text-gray-500">{user.firstName}</div>
+                        {isEditMode ? (
+                          <input
+                            type="text"
+                            value={editedUser.firstName || user.firstName}
+                            onChange={(e) =>
+                              setEditedUser({
+                                ...editedUser,
+                                firstName: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                        ) : (
+                          <div className="text-gray-500">{user.firstName}</div>
+                        )}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-900 mb-1">
+                        {" "}
+                        <label className="block text-sm font-bold text-gray-900 mb-1">
                           Last Name
                         </label>
-                        <div className="text-gray-500">{user.secondName}</div>
+                        {isEditMode ? (
+                          <input
+                            type="text"
+                            value={editedUser.secondName || user.secondName}
+                            onChange={(e) =>
+                              setEditedUser({
+                                ...editedUser,
+                                secondName: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                        ) : (
+                          <div className="text-gray-500">{user.secondName}</div>
+                        )}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-900 mb-1">
+                        {" "}
+                        <label className="block text-sm font-bold text-gray-900 mb-1">
                           Alias
                         </label>
-                        <div className="text-gray-500">
-                          {user.aliases.join(", ") || "N/A"}
-                        </div>
+                        {isEditMode ? (
+                          <input
+                            type="text"
+                            value={
+                              editedUser.aliases?.join(", ") ||
+                              user.aliases.join(", ")
+                            }
+                            onChange={(e) => {
+                              const aliases = e.target.value
+                                .split(",")
+                                .map((alias) => alias.trim())
+                                .filter((alias) => alias);
+                              setEditedUser({ ...editedUser, aliases });
+                            }}
+                            placeholder="Enter aliases separated by commas"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                        ) : (
+                          <div className="text-gray-500">
+                            {user.aliases.join(", ") || "N/A"}
+                          </div>
+                        )}
                       </div>
-
                       <div>
-                        <label className="block text-sm font-medium text-gray-900 mb-1">
+                        {" "}
+                        <label className="block text-sm font-bold text-gray-900 mb-1">
                           Gender Identity
                         </label>
-                        <div className="text-gray-500">
-                          {user.genderIdentity}
-                        </div>
-                      </div>
+                        {isEditMode ? (
+                          <select
+                            value={
+                              editedUser.genderIdentity || user.genderIdentity
+                            }
+                            onChange={(e) =>
+                              setEditedUser({
+                                ...editedUser,
+                                genderIdentity: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                          >
+                            <option value="Male">Male</option>
+                            <option value="Female">Female</option>
+                            <option value="Non-binary">Non-binary</option>
+                            <option value="Two-Spirit">Two-Spirit</option>
+                            <option value="Other">Other</option>
+                            <option value="Prefer not to say">
+                              Prefer not to say
+                            </option>
+                          </select>
+                        ) : (
+                          <div className="text-gray-500">
+                            {user.genderIdentity}
+                          </div>
+                        )}
+                      </div>{" "}
                       <div>
-                        <label className="block text-sm font-medium text-gray-900 mb-1">
+                        {" "}
+                        <label className="block text-sm font-bold text-gray-900 mb-1">
                           Date of Birth
                         </label>
                         <div className="text-gray-500">{user.dateOfBirth}</div>
                       </div>
                       <div></div>
-
-                      {user.email && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-900 mb-1">
-                            Email
-                          </label>
-                          <div className="text-gray-500">{user.email}</div>
-                        </div>
-                      )}
-                      {user.phoneNumber && (
-                        <div>
-                          <label className="block text-sm font-medium text-gray-900 mb-1">
-                            Phone Number
-                          </label>
-                          <div className="text-gray-500">
-                            {user.phoneNumber}
-                          </div>
-                        </div>
-                      )}
-                      <div></div>
-
                       <div>
-                        <label className="block text-sm font-medium text-gray-900 mb-1">
+                        {" "}
+                        <label className="block text-sm font-bold text-gray-900 mb-1">
+                          Email
+                        </label>
+                        {isEditMode ? (
+                          <input
+                            type="email"
+                            value={editedUser.email || user.email || ""}
+                            onChange={(e) =>
+                              setEditedUser({
+                                ...editedUser,
+                                email: e.target.value,
+                              })
+                            }
+                            placeholder="Enter email address"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                        ) : (
+                          <div className="text-gray-500">
+                            {user.email || "N/A"}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        {" "}
+                        <label className="block text-sm font-bold text-gray-900 mb-1">
+                          Phone Number
+                        </label>
+                        {isEditMode ? (
+                          <input
+                            type="tel"
+                            value={
+                              editedUser.phoneNumber || user.phoneNumber || ""
+                            }
+                            onChange={(e) =>
+                              setEditedUser({
+                                ...editedUser,
+                                phoneNumber: e.target.value,
+                              })
+                            }
+                            placeholder="Enter phone number"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                        ) : (
+                          <div className="text-gray-500">
+                            {user.phoneNumber || "N/A"}
+                          </div>
+                        )}
+                      </div>
+                      <div></div>
+                      <div>
+                        {" "}
+                        <label className="block text-sm font-bold text-gray-900 mb-1">
                           Address
                         </label>
-                        <div className="text-gray-500">{user.address}</div>
+                        {isEditMode ? (
+                          <input
+                            type="text"
+                            value={editedUser.address || user.address}
+                            onChange={(e) =>
+                              setEditedUser({
+                                ...editedUser,
+                                address: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                        ) : (
+                          <div className="text-gray-500">{user.address}</div>
+                        )}
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-900 mb-1">
@@ -503,20 +822,47 @@ export default function DisplayRecipientProfile() {
                           night?
                           <span className="text-red-500">*</span>
                         </label>
-                        <div className="text-gray-500">{user.postalCode}</div>
+                        {isEditMode ? (
+                          <input
+                            type="text"
+                            value={editedUser.postalCode || user.postalCode}
+                            onChange={(e) =>
+                              setEditedUser({
+                                ...editedUser,
+                                postalCode: e.target.value,
+                              })
+                            }
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                          />
+                        ) : (
+                          <div className="text-gray-500">{user.postalCode}</div>
+                        )}
                       </div>
                     </div>
-                  </div>
-
-                  {user.notes && (
+                  </div>{" "}
+                  {(user.notes || isEditMode) && (
                     <div className="mt-8 bg-gray-50 rounded-lg p-6 shadow-sm">
                       <h3 className="text-lg font-semibold text-gray-800 mb-4">
                         Additional Information
                       </h3>
-                      <p className="text-gray-700">{user.notes}</p>
+                      {isEditMode ? (
+                        <textarea
+                          value={editedUser.notes || user.notes || ""}
+                          onChange={(e) =>
+                            setEditedUser({
+                              ...editedUser,
+                              notes: e.target.value,
+                            })
+                          }
+                          placeholder="Enter additional notes or information..."
+                          rows={4}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                      ) : (
+                        <p className="text-gray-700">{user.notes}</p>
+                      )}
                     </div>
                   )}
-
                   {user.banned && bannedInfo && (
                     <div className="mt-8 bg-red-50 border border-red-200 rounded-lg p-6">
                       <h3 className="text-lg font-semibold text-red-800 mb-4 flex items-center">
@@ -540,8 +886,239 @@ export default function DisplayRecipientProfile() {
                   )}
                 </div>
               )}{" "}
-              {activeTab === "arcCard" && <div></div>}
-              {activeTab === "history" && <div></div>}
+              {activeTab === "arcCard" && (
+                <div className="p-6">
+                  <div className="bg-gray-50 rounded-lg p-6 shadow-sm">
+                    <div className="flex items-center mb-6">
+                      <h3 className="text-lg font-semibold text-gray-800">
+                        ARC Card Information
+                      </h3>
+                      <div className="flex-grow border-t border-gray-200 ml-4" />
+                    </div>
+
+                    {arcCards.length > 0 ? (
+                      <div className="space-y-4">
+                        {arcCards.map((card) => (
+                          <div
+                            key={card.id}
+                            className={`border rounded-lg p-4 ${
+                              card.status === "Active"
+                                ? "border-green-200 bg-green-50"
+                                : "border-gray-200 bg-white"
+                            }`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-3 mb-2">
+                                  <h4 className="font-semibold text-gray-900">
+                                    Card #{card.arcCardNumber}
+                                  </h4>
+                                  <span
+                                    className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                      card.status === "Active"
+                                        ? "bg-green-100 text-green-800"
+                                        : "bg-gray-100 text-gray-800"
+                                    }`}
+                                  >
+                                    {card.status}
+                                  </span>
+                                </div>{" "}
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <span className="font-medium text-gray-700">
+                                      Issued Date:
+                                    </span>
+                                    <span className="text-gray-600 ml-2">
+                                      {new Date(
+                                        card.issuedAt
+                                      ).toLocaleDateString()}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-gray-700">
+                                      Card Duration:
+                                    </span>
+                                    <span className="text-gray-600 ml-2">
+                                      {(() => {
+                                        const issueDate = new Date(
+                                          card.issuedAt
+                                        );
+                                        const now = new Date();
+                                        const diffTime = Math.abs(
+                                          now.getTime() - issueDate.getTime()
+                                        );
+                                        const diffDays = Math.ceil(
+                                          diffTime / (1000 * 60 * 60 * 24)
+                                        );
+                                        const diffMonths = Math.floor(
+                                          diffDays / 30
+                                        );
+                                        const remainingDays = diffDays % 30;
+
+                                        if (diffMonths > 0) {
+                                          return `${diffMonths} month${
+                                            diffMonths !== 1 ? "s" : ""
+                                          } ${
+                                            remainingDays > 0
+                                              ? `${remainingDays} day${
+                                                  remainingDays !== 1 ? "s" : ""
+                                                }`
+                                              : ""
+                                          }`;
+                                        } else {
+                                          return `${diffDays} day${
+                                            diffDays !== 1 ? "s" : ""
+                                          }`;
+                                        }
+                                      })()}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-gray-700">
+                                      Department:
+                                    </span>
+                                    <span className="text-gray-600 ml-2">
+                                      {card.department}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-gray-700">
+                                      Months Remaining:
+                                    </span>
+                                    <span
+                                      className={`ml-2 ${
+                                        card.monthsRemaining <= 1
+                                          ? "text-red-600 font-medium"
+                                          : "text-gray-600"
+                                      }`}
+                                    >
+                                      {card.monthsRemaining} month
+                                      {card.monthsRemaining !== 1 ? "s" : ""}
+                                      {card.monthsRemaining <= 1 &&
+                                        " (Expires Soon)"}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-gray-700">
+                                      Security Code:
+                                    </span>
+                                    <span className="text-gray-600 ml-2">
+                                      {card.securityCode}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-gray-700">
+                                      Credits:
+                                    </span>
+                                    <span className="text-green-600 ml-2 font-medium">
+                                      Unlimited
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <UserCircle
+                          size={48}
+                          className="mx-auto text-gray-400 mb-4"
+                        />
+                        <p className="text-gray-500">
+                          No ARC cards found for this recipient.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              {activeTab === "history" && (
+                <div className="p-6">
+                  <div className="bg-gray-50 rounded-lg p-6 shadow-sm">
+                    <div className="flex items-center mb-6">
+                      <h3 className="text-lg font-semibold text-gray-800">
+                        Profile History
+                      </h3>
+                      <div className="flex-grow border-t border-gray-200 ml-4" />
+                    </div>
+
+                    {history.length > 0 ? (
+                      <div className="space-y-4">
+                        {history.map((entry) => (
+                          <div
+                            key={entry.id}
+                            className="border border-gray-200 rounded-lg p-4 bg-white"
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-3 mb-2">
+                                  <h4 className="font-semibold text-gray-900">
+                                    {entry.event}
+                                  </h4>
+                                </div>
+                                <div className="text-sm text-gray-600 mb-2">
+                                  {entry.notes}
+                                </div>
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                  <div>
+                                    <span className="font-medium text-gray-700">
+                                      Date:
+                                    </span>
+                                    <span className="text-gray-600 ml-2">
+                                      {new Date(
+                                        entry.date
+                                      ).toLocaleDateString()}{" "}
+                                      at{" "}
+                                      {new Date(
+                                        entry.date
+                                      ).toLocaleTimeString()}
+                                    </span>
+                                  </div>
+                                  <div>
+                                    <span className="font-medium text-gray-700">
+                                      Modified By:
+                                    </span>
+                                    <span className="text-gray-600 ml-2">
+                                      {entry.modifiedBy}
+                                    </span>
+                                  </div>
+                                </div>{" "}
+                                {entry.reason && (
+                                  <div className="mt-3 flex items-center justify-between">
+                                    <div className="flex-1">
+                                      <span className="font-medium text-gray-700 text-sm">
+                                        Override Reason:
+                                      </span>
+                                      <div className="text-sm text-gray-600 mt-1 bg-yellow-50 p-2 rounded border border-yellow-200">
+                                        {entry.reason}
+                                      </div>
+                                    </div>{" "}
+                                    <button className="ml-3 px-3 py-1 bg-blue-100 text-blue-700 rounded-md text-xs hover:bg-blue-200 transition-colors">
+                                      View Details
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <UserCircle
+                          size={48}
+                          className="mx-auto text-gray-400 mb-4"
+                        />
+                        <p className="text-gray-500">
+                          No history entries found for this recipient.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -562,6 +1139,14 @@ export default function DisplayRecipientProfile() {
         onConfirm={handleOverrideConfirm}
         action={overrideAction}
         banReason={user.banReason || ""}
+      />
+
+      <AccountStatusModal
+        isOpen={showAccountStatusModal}
+        onClose={() => setShowAccountStatusModal(false)}
+        onConfirm={handleAccountStatusChange}
+        userName={`${user.firstName} ${user.secondName}`}
+        currentStatus={user.status || "Active"}
       />
 
       <DeleteModal

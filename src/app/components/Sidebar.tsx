@@ -19,6 +19,7 @@ interface SidebarProps {
   onDeleteAccount: () => void;
   onToggleBan: () => void;
   isBanned: boolean;
+  userStatus?: "Active" | "Inactive";
 }
 
 export default function Sidebar({
@@ -31,6 +32,7 @@ export default function Sidebar({
   onDeleteAccount,
   onToggleBan,
   isBanned,
+  userStatus = "Active",
 }: SidebarProps) {
   const tabs = [
     { id: "overview", label: "Overview" },
@@ -89,7 +91,7 @@ export default function Sidebar({
                   </span>
                   <ArrowRight size={14} className="text-gray-400" />
                 </button>
-              </li>
+              </li>{" "}
               <li>
                 <button
                   className="w-full text-left px-4 py-3 flex items-center hover:bg-gray-50"
@@ -98,9 +100,27 @@ export default function Sidebar({
                   <div className="w-8 h-8 bg-primary/20 rounded-full flex items-center justify-center mr-3">
                     <UserCircle size={14} className="text-primary" />
                   </div>
-                  <span className="flex-1 text-sm text-gray-800">
-                    Account Status
-                  </span>
+                  <div className="flex-1">
+                    <div className="text-sm text-gray-800">Account Status</div>
+                    <div className="flex items-center mt-1">
+                      <div
+                        className={`w-2 h-2 rounded-full mr-2 ${
+                          userStatus === "Active"
+                            ? "bg-green-500"
+                            : "bg-gray-400"
+                        }`}
+                      ></div>
+                      <span
+                        className={`text-xs ${
+                          userStatus === "Active"
+                            ? "text-green-600"
+                            : "text-gray-500"
+                        }`}
+                      >
+                        {userStatus}
+                      </span>
+                    </div>
+                  </div>
                   <ArrowRight size={14} className="text-gray-400" />
                 </button>
               </li>
