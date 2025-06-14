@@ -817,7 +817,8 @@ export default function DisplayRecipientProfile() {
                         )}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-900 mb-1">
+                        {" "}
+                        <label className="block text-sm font-bold text-gray-900 mb-1">
                           Postal Code: In what area did the recipient stay last
                           night?
                           <span className="text-red-500">*</span>
