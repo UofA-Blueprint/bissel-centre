@@ -889,235 +889,240 @@ export default function DisplayRecipientProfile() {
               )}{" "}
               {activeTab === "arcCard" && (
                 <div className="p-6">
-                  <div className="bg-gray-50 rounded-lg p-6 shadow-sm">
-                    <div className="flex items-center mb-6">
-                      <h3 className="text-lg font-semibold text-gray-800">
-                        ARC Card Information
-                      </h3>
-                      <div className="flex-grow border-t border-gray-200 ml-4" />
+                  {/* ARC Card Image at the top */}
+                  <div className="flex mb-8">
+                    <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
+                      <Image
+                        src="/arcard.png"
+                        alt="ARC Card"
+                        width={320}
+                        height={200}
+                        className="rounded-lg"
+                      />
                     </div>
+                  </div>
 
-                    {arcCards.length > 0 ? (
-                      <div className="space-y-4">
-                        {arcCards.map((card) => (
+                  {arcCards.length > 0 ? (
+                    <div className="bg-gray-50 rounded-lg p-6">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-6">
+                        Card Details
+                      </h3>
+
+                      <div className="grid grid-cols-3 gap-8">
+                        {/* Status */}
+                        <div>
+                          <div className="text-sm text-gray-600 mb-2 font-bold">
+                            Status
+                          </div>
                           <div
-                            key={card.id}
-                            className={`border rounded-lg p-4 ${
-                              card.status === "Active"
-                                ? "border-green-200 bg-green-50"
-                                : "border-gray-200 bg-white"
+                            className={`text-sm font-medium ${
+                              arcCards[0].status === "Active"
+                                ? "text-green-600"
+                                : arcCards[0].status === "Expired"
+                                ? "text-red-600"
+                                : "text-gray-600"
                             }`}
                           >
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <div className="flex items-center space-x-3 mb-2">
-                                  <h4 className="font-semibold text-gray-900">
-                                    Card #{card.arcCardNumber}
-                                  </h4>
-                                  <span
-                                    className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                      card.status === "Active"
-                                        ? "bg-green-100 text-green-800"
-                                        : "bg-gray-100 text-gray-800"
-                                    }`}
-                                  >
-                                    {card.status}
-                                  </span>
-                                </div>{" "}
-                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                  <div>
-                                    <span className="font-medium text-gray-700">
-                                      Issued Date:
-                                    </span>
-                                    <span className="text-gray-600 ml-2">
-                                      {new Date(
-                                        card.issuedAt
-                                      ).toLocaleDateString()}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-gray-700">
-                                      Card Duration:
-                                    </span>
-                                    <span className="text-gray-600 ml-2">
-                                      {(() => {
-                                        const issueDate = new Date(
-                                          card.issuedAt
-                                        );
-                                        const now = new Date();
-                                        const diffTime = Math.abs(
-                                          now.getTime() - issueDate.getTime()
-                                        );
-                                        const diffDays = Math.ceil(
-                                          diffTime / (1000 * 60 * 60 * 24)
-                                        );
-                                        const diffMonths = Math.floor(
-                                          diffDays / 30
-                                        );
-                                        const remainingDays = diffDays % 30;
-
-                                        if (diffMonths > 0) {
-                                          return `${diffMonths} month${
-                                            diffMonths !== 1 ? "s" : ""
-                                          } ${
-                                            remainingDays > 0
-                                              ? `${remainingDays} day${
-                                                  remainingDays !== 1 ? "s" : ""
-                                                }`
-                                              : ""
-                                          }`;
-                                        } else {
-                                          return `${diffDays} day${
-                                            diffDays !== 1 ? "s" : ""
-                                          }`;
-                                        }
-                                      })()}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-gray-700">
-                                      Department:
-                                    </span>
-                                    <span className="text-gray-600 ml-2">
-                                      {card.department}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-gray-700">
-                                      Months Remaining:
-                                    </span>
-                                    <span
-                                      className={`ml-2 ${
-                                        card.monthsRemaining <= 1
-                                          ? "text-red-600 font-medium"
-                                          : "text-gray-600"
-                                      }`}
-                                    >
-                                      {card.monthsRemaining} month
-                                      {card.monthsRemaining !== 1 ? "s" : ""}
-                                      {card.monthsRemaining <= 1 &&
-                                        " (Expires Soon)"}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-gray-700">
-                                      Security Code:
-                                    </span>
-                                    <span className="text-gray-600 ml-2">
-                                      {card.securityCode}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-gray-700">
-                                      Credits:
-                                    </span>
-                                    <span className="text-green-600 ml-2 font-medium">
-                                      Unlimited
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
+                            {arcCards[0].status}
                           </div>
-                        ))}
+                        </div>
+
+                        {/* Remaining Months */}
+                        <div>
+                          <div className="text-sm text-gray-600 mb-2 font-bold">
+                            Remaining Months
+                          </div>
+                          <div
+                            className={`text-sm font-medium ${
+                              arcCards[0].monthsRemaining <= 1
+                                ? "text-red-600"
+                                : "text-gray-900"
+                            }`}
+                          >
+                            {arcCards[0].monthsRemaining}/3
+                          </div>
+                        </div>
+
+                        {/* Last Issued */}
+                        <div>
+                          <div className="text-sm text-gray-600 mb-2 font-bold">
+                            Last issued
+                          </div>
+                          <div className="text-sm text-gray-900">
+                            {new Date(arcCards[0].issuedAt).toLocaleDateString(
+                              "en-US",
+                              {
+                                month: "2-digit",
+                                day: "2-digit",
+                                year: "numeric",
+                              }
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Last 7 Digits */}
+                        <div>
+                          <div className="text-sm text-gray-600 mb-2 font-bold">
+                            Last 7 Digits
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {arcCards[0].arcCardNumber
+                              ? `***${arcCards[0].arcCardNumber.slice(-4)}`
+                              : "Placeholder"}
+                          </div>
+                        </div>
+
+                        {/* Security Code */}
+                        <div>
+                          <div className="text-sm text-gray-600 mb-2 font-bold">
+                            Security Code
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            {arcCards[0].securityCode || "Placeholder"}
+                          </div>
+                        </div>
                       </div>
-                    ) : (
-                      <div className="text-center py-8">
-                        <UserCircle
-                          size={48}
-                          className="mx-auto text-gray-400 mb-4"
-                        />
-                        <p className="text-gray-500">
-                          No ARC cards found for this recipient.
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-12">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        No ARC Card
+                      </h3>
+                      <p className="text-gray-500 mb-4">
+                        This recipient doesn&apos;t have an ARC card yet.
+                      </p>
+                      <button className="bg-primary hover:bg-primary/80 text-white px-4 py-2 rounded-md text-sm">
+                        Issue New Card
+                      </button>
+                    </div>
+                  )}
                 </div>
-              )}
+              )}{" "}
               {activeTab === "history" && (
                 <div className="p-6">
-                  <div className="bg-gray-50 rounded-lg p-6 shadow-sm">
-                    <div className="flex items-center mb-6">
-                      <h3 className="text-lg font-semibold text-gray-800">
-                        Profile History
-                      </h3>
-                      <div className="flex-grow border-t border-gray-200 ml-4" />
-                    </div>
+                  {history.length > 0 ? (
+                    <div className="space-y-3">
+                      {/* Table Header */}
+                      <div className="bg-[#DCEFF3] px-6 py-4 rounded-xl border border-gray-200">
+                        <div className="grid grid-cols-4 gap-4 text-sm font-semibold text-gray-700">
+                          <div>Date Modified</div>
+                          <div>Modified By</div>
+                          <div>Status</div>
+                          <div>Action Taken</div>
+                        </div>
+                      </div>
 
-                    {history.length > 0 ? (
-                      <div className="space-y-4">
-                        {history.map((entry) => (
+                      {/* Table Rows */}
+                      <div className="space-y-2">
+                        {history.map((entry, index) => (
                           <div
                             key={entry.id}
-                            className="border border-gray-200 rounded-lg p-4 bg-white"
+                            className={`px-6 py-5 rounded-xl border border-gray-200 ${
+                              index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                            }`}
                           >
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <div className="flex items-center space-x-3 mb-2">
-                                  <h4 className="font-semibold text-gray-900">
-                                    {entry.event}
-                                  </h4>
-                                </div>
-                                <div className="text-sm text-gray-600 mb-2">
-                                  {entry.notes}
-                                </div>
-                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                  <div>
-                                    <span className="font-medium text-gray-700">
-                                      Date:
-                                    </span>
-                                    <span className="text-gray-600 ml-2">
-                                      {new Date(
-                                        entry.date
-                                      ).toLocaleDateString()}{" "}
-                                      at{" "}
-                                      {new Date(
-                                        entry.date
-                                      ).toLocaleTimeString()}
-                                    </span>
-                                  </div>
-                                  <div>
-                                    <span className="font-medium text-gray-700">
-                                      Modified By:
-                                    </span>
-                                    <span className="text-gray-600 ml-2">
-                                      {entry.modifiedBy}
-                                    </span>
-                                  </div>
-                                </div>{" "}
-                                {entry.reason && (
-                                  <div className="mt-3 flex items-center justify-between">
-                                    <div className="flex-1">
-                                      <span className="font-medium text-gray-700 text-sm">
-                                        Override Reason:
-                                      </span>
-                                      <div className="text-sm text-gray-600 mt-1 bg-yellow-50 p-2 rounded border border-yellow-200">
-                                        {entry.reason}
-                                      </div>
-                                    </div>{" "}
-                                    <button className="ml-3 px-3 py-1 bg-blue-100 text-blue-700 rounded-md text-xs hover:bg-blue-200 transition-colors">
-                                      View Details
-                                    </button>
-                                  </div>
+                            <div className="grid grid-cols-4 gap-4 items-center">
+                              {/* Date Modified */}
+                              <div className="text-sm text-gray-900">
+                                {new Date(entry.date).toLocaleDateString(
+                                  "en-US",
+                                  {
+                                    month: "numeric",
+                                    day: "numeric",
+                                    year: "numeric",
+                                  }
                                 )}
+                              </div>
+
+                              {/* Modified By */}
+                              <div className="text-sm text-gray-900">
+                                {entry.modifiedBy}
+                              </div>
+
+                              {/* Status */}
+                              <div>
+                                {(() => {
+                                  const status = entry.event.toLowerCase();
+                                  if (
+                                    status.includes("active") ||
+                                    status.includes("created") ||
+                                    status.includes("renewed") ||
+                                    status.includes("issued") ||
+                                    status.includes("unflagged")
+                                  ) {
+                                    return (
+                                      <span className="inline-flex px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                                        Active
+                                      </span>
+                                    );
+                                  } else if (status.includes("expired")) {
+                                    return (
+                                      <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                                        Expired
+                                      </span>
+                                    );
+                                  } else if (
+                                    status.includes("flagged") ||
+                                    status.includes("banned")
+                                  ) {
+                                    return (
+                                      <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                                        Flagged
+                                      </span>
+                                    );
+                                  } else if (status.includes("lost")) {
+                                    return (
+                                      <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                                        Lost
+                                      </span>
+                                    );
+                                  } else {
+                                    return (
+                                      <span className="inline-flex px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                                        Active
+                                      </span>
+                                    );
+                                  }
+                                })()}
+                              </div>
+
+                              {/* Action Taken */}
+                              <div className="text-sm text-gray-700">
+                                {entry.event === "ARC Card Issued" &&
+                                entry.notes
+                                  ? `ARC Card issued (${
+                                      entry.notes.match(/\d+/)?.[0] || "ID"
+                                    })`
+                                  : entry.event === "Account Flagged"
+                                  ? "Account flagged"
+                                  : entry.event === "Account Unflagged"
+                                  ? "Account unflagged"
+                                  : entry.event === "ARC Card Renewed"
+                                  ? "ARC Card renewed"
+                                  : entry.event === "Profile Updated"
+                                  ? "Account information updated"
+                                  : entry.event === "Account Created"
+                                  ? "Account created"
+                                  : entry.event === "ARC Card Lost"
+                                  ? "ARC Card lost"
+                                  : entry.notes || entry.event}
                               </div>
                             </div>
                           </div>
                         ))}
                       </div>
-                    ) : (
-                      <div className="text-center py-8">
-                        <UserCircle
-                          size={48}
-                          className="mx-auto text-gray-400 mb-4"
-                        />
-                        <p className="text-gray-500">
-                          No history entries found for this recipient.
-                        </p>
-                      </div>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <div className="text-center py-8">
+                      <UserCircle
+                        size={48}
+                        className="mx-auto text-gray-400 mb-4"
+                      />
+                      <p className="text-gray-500">
+                        No history entries found for this recipient.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
