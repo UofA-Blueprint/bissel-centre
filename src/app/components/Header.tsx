@@ -1,5 +1,6 @@
 import React from "react";
 import { Bell, ArrowLeft } from "lucide-react";
+import Image from "next/image";
 
 interface HeaderProps {
   title: string;
@@ -22,11 +23,14 @@ export default function Header({
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <div className="flex items-center">
-              <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                <span className="text-white font-bold text-sm">B</span>
-              </div>
               <span className="text-primary font-semibold text-lg ml-1">
-                Bissell
+                <Image
+                  src="/logo.png"
+                  alt="ARC Card"
+                  width={100}
+                  height={100}
+                  className="rounded-lg"
+                />
               </span>
             </div>
 
