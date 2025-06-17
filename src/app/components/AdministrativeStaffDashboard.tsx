@@ -240,15 +240,17 @@ const AdminDashboard = () => {
                 ))}
             </div>
 
-            {/* Placeholder for Illustration */}
-            <div className="flex justify-center items-center p-10 rounded-lg">
-                <Image
-                    src="/icons/blankSearchPlaceholder.svg"
-                    alt="Illustration"
-                    width={370}
-                    height={370}
-                />
-            </div>
+            {/* Placeholder for Illustration - only show if no user cards */}
+            {searchResults.length === 0 && (
+                <div className="flex justify-center items-center p-10 rounded-lg">
+                    <Image
+                        src="/icons/blankSearchPlaceholder.svg"
+                        alt="Illustration"
+                        width={370}
+                        height={370}
+                    />
+                </div>
+            )}
         </div>
     );
 };
@@ -285,7 +287,7 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
                     />
                 ) : (
                     <span className="text-lg font-bold text-gray-700">
-                        {user.firstName[0]}
+                        {user.firstName}
                     </span>
                 )}
             </div>
