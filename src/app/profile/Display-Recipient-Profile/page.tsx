@@ -68,6 +68,7 @@ export default function DisplayRecipientProfile() {
   const [editedUser, setEditedUser] = useState<Partial<User>>({});
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
   const fileInputRef = useRef<HTMLInputElement>(null); // Close image upload menu when clicking outside
   useEffect(() => {
     const handleClickOutside = () => {
@@ -355,21 +356,48 @@ export default function DisplayRecipientProfile() {
   };
 
   const handleSaveChanges = async () => {
-    if (!user) return;
+    if (!user) return; // Validate required fields
+    const errors: Record<string, string> = {};
+    if (!editedUser.firstName?.trim()) {
+      errors.firstName = "First name is required";
+    }
+    if (!editedUser.secondName?.trim()) {
+      errors.secondName = "Last name is required";
+    }
+    if (!editedUser.genderIdentity?.trim()) {
+      errors.genderIdentity = "Gender identity is required";
+    }
+    if (!editedUser.address?.trim()) {
+      errors.address = "Address is required";
+    }
+    if (!editedUser.postalCode?.trim()) {
+      errors.postalCode = "Postal code is required";
+    }
+    if (!editedUser.email?.trim()) {
+      errors.email = "Email is required";
+    }
+    if (!editedUser.phoneNumber?.trim()) {
+      errors.phoneNumber = "Phone number is required";
+    }
 
+    if (Object.keys(errors).length > 0) {
+      setEditErrors(errors);
+      return;
+    }
     try {
       await updateUser(user.id, editedUser);
       await loadUserData();
       setIsEditMode(false);
       setEditedUser({});
+      setEditErrors({});
     } catch (error) {
       console.error("Error updating user:", error);
     }
   };
-
   const handleCancelEdit = () => {
     setIsEditMode(false);
     setEditedUser({});
+    setEditErrors({});
   };
 
   // Profile picture handlers
@@ -653,6 +681,11 @@ export default function DisplayRecipientProfile() {
                         ) : (
                           <div className="text-gray-500">{user.firstName}</div>
                         )}
+                        {editErrors.firstName && (
+                          <p className="text-red-500 text-sm mt-1">
+                            {editErrors.firstName}
+                          </p>
+                        )}
                       </div>
                       <div>
                         {" "}
@@ -673,6 +706,11 @@ export default function DisplayRecipientProfile() {
                           />
                         ) : (
                           <div className="text-gray-500">{user.secondName}</div>
+                        )}
+                        {editErrors.secondName && (
+                          <p className="text-red-500 text-sm mt-1">
+                            {editErrors.secondName}
+                          </p>
                         )}
                       </div>
                       <div>
@@ -735,6 +773,11 @@ export default function DisplayRecipientProfile() {
                             {user.genderIdentity}
                           </div>
                         )}
+                        {editErrors.genderIdentity && (
+                          <p className="text-red-500 text-sm mt-1">
+                            {editErrors.genderIdentity}
+                          </p>
+                        )}
                       </div>{" "}
                       <div>
                         {" "}
@@ -767,6 +810,11 @@ export default function DisplayRecipientProfile() {
                             {user.email || "N/A"}
                           </div>
                         )}
+                        {editErrors.email && (
+                          <p className="text-red-500 text-sm mt-1">
+                            {editErrors.email}
+                          </p>
+                        )}
                       </div>
                       <div>
                         {" "}
@@ -792,6 +840,11 @@ export default function DisplayRecipientProfile() {
                           <div className="text-gray-500">
                             {user.phoneNumber || "N/A"}
                           </div>
+                        )}
+                        {editErrors.phoneNumber && (
+                          <p className="text-red-500 text-sm mt-1">
+                            {editErrors.phoneNumber}
+                          </p>
                         )}
                       </div>
                       <div></div>
@@ -837,6 +890,11 @@ export default function DisplayRecipientProfile() {
                           />
                         ) : (
                           <div className="text-gray-500">{user.postalCode}</div>
+                        )}
+                        {editErrors.postalCode && (
+                          <p className="text-red-500 text-sm mt-1">
+                            {editErrors.postalCode}
+                          </p>
                         )}
                       </div>
                     </div>
