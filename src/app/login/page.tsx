@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { collection, query, where, getDocs } from "firebase/firestore";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "../services/firebase";
+import { authService } from "../services/authService";
+import { navigationService } from "../services/navigationService";
 import Image from "next/image";
 
 export default function StaffLoginPage() {
@@ -13,130 +12,46 @@ export default function StaffLoginPage() {
   const [rememberMe, setRememberMeState] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [loadingRecipient, setLoadingRecipient] = useState(false);
   const router = useRouter();
-
   useEffect(() => {
     // Check if email is remembered in localStorage
-    const rememberedEmail = localStorage.getItem("rememberedEmail");
+    const rememberedEmail = authService.getRememberedEmail();
     if (rememberedEmail) {
       setEmail(rememberedEmail);
       setRememberMeState(true);
     }
   }, []);
 
-  // Function to fetch Sunny's user ID for demonstration purposes
-  const fetchDemoRecipientID = async () => {
-    try {
-      setLoadingRecipient(true);
-      // Query for a user named "Sunny Rain" - based on the seed data
-      const usersRef = collection(db, "users");
-      const q = query(
-        usersRef,
-        where("firstName", "==", "Sunny"),
-        where("secondName", "==", "Rain")
-      );
-
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        // Get the first matching user's ID
-        const sunnyUserID = querySnapshot.docs[0].id;
-        return sunnyUserID;
-      } else {
-        console.error("Demo recipient (Sunny) not found in database");
-        return null;
-      }
-    } catch (error) {
-      console.error("Error fetching demo recipient:", error);
-      return null;
-    } finally {
-      setLoadingRecipient(false);
-    }
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError("");
+
     try {
-      // Authenticate with Firebase Auth
-      await signInWithEmailAndPassword(
-        auth,
-        email.toLowerCase().trim(),
-        password
-      );
+      // Authenticate using the auth service
+      await authService.signIn(email, password);
 
-      // Verify the user exists in administrative_staff collection
-      const staffQuery = query(
-        collection(db, "administrative_staff"),
-        where("email", "==", email.toLowerCase().trim())
-      );
-      const staffSnapshot = await getDocs(staffQuery);
-
-      if (staffSnapshot.empty) {
-        // If user is authenticated but not in staff collection, sign them out
-        await auth.signOut();
-        setError("Access denied. This login is for administrative staff only.");
-        setLoading(false);
-        return;
-      }
-
-      const staffDoc = staffSnapshot.docs[0];
-      const staffData = staffDoc.data();
-
-      // Handle remember me
+      // Handle remember me functionality
       if (rememberMe) {
-        localStorage.setItem("rememberedEmail", email);
+        authService.setRememberedEmail(email);
       } else {
-        localStorage.removeItem("rememberedEmail");
+        authService.clearRememberedEmail();
       }
 
-      // Store staff user data in localStorage
-      localStorage.setItem(
-        "staffUser",
-        JSON.stringify({
-          id: staffDoc.id,
-          email: staffData.email,
-          firstName: staffData.firstName,
-          secondName: staffData.secondName,
-          createdBy: staffData.createdBy,
-          role: staffData.role || "staff",
-        })
+      // Get appropriate post-login destination
+      const destination = await navigationService.getPostLoginDestination();
+      console.log(
+        `Redirecting to: ${destination.path} (${destination.reason})`
       );
 
-      // Fetch Sunny's user ID for demonstration
-      const demoRecipientID = await fetchDemoRecipientID();
-
-      if (demoRecipientID) {
-        // Redirect to Sunny's profile
-        router.push(`/profile/Display-Recipient-Profile?id=${demoRecipientID}`);
-      } else {
-        // Fallback to dashboard if recipient not found
-        router.push("/dashboard");
-      }
+      // Navigate to the determined destination
+      router.push(destination.path);
     } catch (err: unknown) {
       console.error("Login error:", err);
-      if (
-        err &&
-        typeof err === "object" &&
-        "code" in err &&
-        (err.code === "auth/user-not-found" ||
-          err.code === "auth/wrong-password" ||
-          err.code === "auth/invalid-credential")
-      ) {
-        setError(
-          "Invalid email or password. Please contact IT Admin if you need assistance."
-        );
-      } else if (
-        err &&
-        typeof err === "object" &&
-        "code" in err &&
-        err.code === "auth/too-many-requests"
-      ) {
-        setError("Too many failed login attempts. Please try again later.");
+      if (err instanceof Error) {
+        setError(err.message);
       } else {
-        setError("An error occurred during login. Please try again.");
+        setError("An unexpected error occurred during login.");
       }
     } finally {
       setLoading(false);
@@ -165,9 +80,10 @@ export default function StaffLoginPage() {
         <div className="bg-white py-8 px-6 shadow rounded-lg">
           {" "}
           <div className="flex justify-between mb-6 flex-col gap-2">
+            {" "}
             <h2 className="text-2xl font-bold text-gray-900">Sign In</h2>{" "}
             <p className="text-sm text-blue-600 mt-1">
-              After login, you will be redirected to Sunny&apos;s recipient
+              After login, you will be redirected to the most recent recipient
               profile
             </p>
           </div>
@@ -196,7 +112,6 @@ export default function StaffLoginPage() {
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE] focus:border-transparent"
               />
             </div>
-
             <div>
               <label
                 htmlFor="password"
@@ -216,7 +131,6 @@ export default function StaffLoginPage() {
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE] focus:border-transparent"
               />
             </div>
-
             <div className="flex items-center justify-between">
               <label className="inline-flex items-center text-sm text-gray-700">
                 <input
@@ -237,14 +151,13 @@ export default function StaffLoginPage() {
               >
                 Forgot Password?
               </button>
-            </div>
-
+            </div>{" "}
             <button
               type="submit"
-              disabled={loading || loadingRecipient}
+              disabled={loading}
               className="w-full py-2 px-4 rounded-lg bg-[#2CC0DE] text-white font-semibold hover:bg-teal-500 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE]"
             >
-              {loading || loadingRecipient ? "Signing In..." : "Sign In"}
+              {loading ? "Signing In..." : "Sign In"}
             </button>
           </form>
           <p className="mt-6 text-center text-sm text-gray-600">
