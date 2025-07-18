@@ -7,8 +7,10 @@ import { hashITIDNumber } from "../../../utils/hashITIDNumber";
 export const handleITAdminLogin = async (IdentificationNumber: string) => {
     // IdentificatioNumbe is same as the UID of the firebase user
     const admin = await initAdmin()
+    
     try {
-        const user = await admin.auth().getUser(IdentificationNumber);
+        const hashed_uid = hashITIDNumber(IdentificationNumber); // Example IT ID number, replace with actual logic
+        const user = await admin.auth().getUser(hashed_uid);
         const token = await admin.auth().createCustomToken(user.uid);
         return token;
     } catch (error) {

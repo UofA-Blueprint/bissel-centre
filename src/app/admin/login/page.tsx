@@ -14,7 +14,6 @@ const inter = Inter({ subsets: ["latin"] });
 
 function AdminLoginCard() {
   const [adminId, setAdminId] = useState("");
-  const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
   const router = useRouter();
@@ -25,8 +24,7 @@ function AdminLoginCard() {
     setLoading(true);
     e.preventDefault();
     try {
-      const hashed_id = hashITIDNumber(adminId);
-      const customToken = await handleITAdminLogin(hashed_id);
+      const customToken = await handleITAdminLogin(adminId);
       if (customToken === null) {
         setErrorMessage("Invalid Credentials");
         return;
@@ -57,8 +55,8 @@ function AdminLoginCard() {
     } catch (error) {
       console.log(error);
       setErrorMessage("Invalid Credentials");
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -69,7 +67,7 @@ function AdminLoginCard() {
         <div style={{display: "flex", flexDirection: "column", gap: 32, marginTop: 32}}>
           <div>
             <label htmlFor="admin-id">Identification Number</label> <br />
-            <input className="text-box-entry" type="text" aria-label="admin-id" id="admin-id" name="admin-id" placeholder="Identification Number" onChange={(e) => setAdminId(e.target.value)} /> <br />
+            <input className="text-box-entry" required={true} type="text" aria-label="admin-id" id="admin-id" name="admin-id" placeholder="Identification Number" onChange={(e) => setAdminId(e.target.value)} /> <br />
           </div>
           {/* ask for  forgot password ?*/}
       
