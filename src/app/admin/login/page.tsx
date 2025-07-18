@@ -7,13 +7,11 @@ import { handleITAdminLogin } from "@/app/admin/actions";
 import { signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/app/services/firebase";
 import { useRouter } from "next/navigation";
-import { hashITIDNumber } from "../../../../utils/hashITIDNumber";
 
 const inter = Inter({ subsets: ["latin"] });
 
 function AdminLoginCard() {
   const [adminId, setAdminId] = useState("");
-  const [password, setPassword] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
 
   const router = useRouter();
@@ -24,8 +22,7 @@ function AdminLoginCard() {
     setLoading(true);
     e.preventDefault();
     try {
-      const hashed_id = hashITIDNumber(adminId);
-      const customToken = await handleITAdminLogin(hashed_id, password);
+      const customToken = await handleITAdminLogin(adminId);
       if (customToken === null) {
         setErrorMessage("Invalid Credentials");
         return;
@@ -79,6 +76,7 @@ function AdminLoginCard() {
               <label htmlFor="admin-id">Identification Number</label> <br />
               <input
                 className="text-box-entry"
+                required={true}
                 type="text"
                 aria-label="admin-id"
                 id="admin-id"
@@ -89,23 +87,6 @@ function AdminLoginCard() {
               />{" "}
               <br />
             </div>
-            <div>
-              <label htmlFor="password">Password</label> <br />
-              <input
-                className="text-box-entry"
-                type="password"
-                aria-label="password"
-                id="password"
-                name="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />{" "}
-              <br />
-            </div>
-            <button type="button" style={{ float: "right" }}>
-              Forgot Password?
-            </button>
             {errorMessage ? (
               <div className="error-message">
                 <p>{errorMessage}</p>

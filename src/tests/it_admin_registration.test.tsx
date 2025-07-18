@@ -1,4 +1,4 @@
-import ITAdminRegistration from "@/app/register/page";
+import ITAdminRegistration from "@/app/admin/register/page";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 jest.mock("firebase/auth", () => ({
