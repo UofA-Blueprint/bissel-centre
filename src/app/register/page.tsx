@@ -6,20 +6,11 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
 } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  getDocs,
-  query,
-  where,
-  Timestamp,
-} from "firebase/firestore";
+import { addDoc, collection, Timestamp } from "firebase/firestore";
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
 import { FirebaseError } from "firebase/app";
-import { hashITIDNumber } from "../../../utils/hashITIDNumber";
 import EyeClosedIcon from "../components/icons/EyeClosedIcon";
 import EyeOpenIcon from "../components/icons/EyeOpenIcon";
-import { checkAdmin } from "../admin/actions";
 
 type FormDataKeys = keyof typeof initialFormData;
 
@@ -49,7 +40,6 @@ const initialErrors = {
 };
 
 // --- CONSTANTS ---
-const IT_ADMIN_COLLECTION = "it_admin";
 const ADMIN_STAFF_COLLECTION = "administrative_staff";
 
 const ITAdminRegistration: React.FC = () => {
@@ -118,20 +108,22 @@ const ITAdminRegistration: React.FC = () => {
   const checkExistingUserIdentificationNumber = async (): Promise<
     string | null
   > => {
-    // Check if identification number matches any existing it admin
     try {
-      const hashedID = hashITIDNumber(formData.identificationNumber);
-      console.log("Checking hashed ID:", hashedID);
-      const isAdmin = await checkAdmin(hashedID);
-      // the it_admin collection should never be exposed
-      // const querySnapshot = await getDocs(
-      //   query(
-      //     collection(db, IT_ADMIN_COLLECTION),
-      //     where("hashedIdentificationNumber", "==", hashedID)
-      //   )
-      // );
-      if (isAdmin) {
-        return hashedID; // Return the hashed ID if the user is an IT admin
+      const response = await fetch("/api/verify-admin", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          identificationNumber: formData.identificationNumber,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        console.log("Checking hashed ID:", data.hashedID);
+        return data.hashedID;
       } else {
         setErrors({
           firstName: "",
@@ -139,7 +131,7 @@ const ITAdminRegistration: React.FC = () => {
           email: "",
           password: "",
           confirmPassword: "",
-          identificationNumber: "Identification number not found",
+          identificationNumber: data.error || "Identification number not found",
         });
         return null;
       }
