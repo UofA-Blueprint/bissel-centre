@@ -1,4 +1,4 @@
-import ITAdminRegistration from "@/app/admin/register/page";
+import AdminRegistration from "@/app/register/page";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
 jest.mock("firebase/auth", () => ({
@@ -32,7 +32,7 @@ describe("IT Admin Registration Page", () => {
   });
 
   it("renders without crashing", () => {
-    render(<ITAdminRegistration />);
+    render(<AdminRegistration />);
     const heading = screen.getByRole("heading", {
       level: 1,
       name: /Register/i,
@@ -41,7 +41,7 @@ describe("IT Admin Registration Page", () => {
   });
 
   it("displays all form fields", () => {
-    render(<ITAdminRegistration />);
+    render(<AdminRegistration />);
     expect(screen.getByLabelText(/First Name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Last Name/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Identification Number/i)).toBeInTheDocument();
@@ -51,13 +51,13 @@ describe("IT Admin Registration Page", () => {
   });
 
   it("displays the submit button", () => {
-    render(<ITAdminRegistration />);
+    render(<AdminRegistration />);
     const button = screen.getByRole("button", { name: /Register/i });
     expect(button).toBeInTheDocument();
   });
 
   it("shows error messages for empty fields", async () => {
-    render(<ITAdminRegistration />);
+    render(<AdminRegistration />);
     fireEvent.click(screen.getByRole("button", { name: /Register/i }));
 
     await waitFor(() => {
@@ -77,7 +77,7 @@ describe("IT Admin Registration Page", () => {
   });
 
   it("shows error message for mismatched passwords", async () => {
-    render(<ITAdminRegistration />);
+    render(<AdminRegistration />);
     fireEvent.change(screen.getByLabelText(/Create Password/i), {
       target: { value: "StrongPass123!" },
     });
@@ -106,7 +106,7 @@ describe("IT Admin Registration Page", () => {
     }); // identification number exists
     (addDoc as jest.Mock).mockResolvedValueOnce({});
 
-    render(<ITAdminRegistration />);
+    render(<AdminRegistration />);
 
     // Fill in the form fields
     fireEvent.change(screen.getByLabelText(/First Name/i), {
