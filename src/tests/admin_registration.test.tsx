@@ -19,12 +19,14 @@ jest.mock("firebase/firestore", () => ({
   },
 }));
 
+global.fetch = jest.fn();
+
 jest.mock("firebase/storage", () => ({
   getStorage: jest.fn(() => ({})),
 }));
 
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { getDocs, addDoc } from "firebase/firestore";
+import { addDoc } from "firebase/firestore";
 
 describe("IT Admin Registration Page", () => {
   beforeEach(() => {
@@ -94,16 +96,22 @@ describe("IT Admin Registration Page", () => {
   });
 
   it("handles form submission with valid data", async () => {
-    // mock successful firebase response
+    // Mock the API call to verify-admin
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        success: true,
+        hashedID: "mock-hashed-id",
+      }),
+    });
+
+    // Mock successful firebase response
     (createUserWithEmailAndPassword as jest.Mock).mockResolvedValueOnce({
       user: {
         uid: "test-uid",
+        delete: jest.fn(), // Mock the delete method in case of error
       },
     });
-    (getDocs as jest.Mock).mockResolvedValueOnce({
-      empty: false,
-      docs: [{ data: () => ({ uid: "mock-it-admin-uid" }) }],
-    }); // identification number exists
     (addDoc as jest.Mock).mockResolvedValueOnce({});
 
     render(<AdminRegistration />);
@@ -130,8 +138,64 @@ describe("IT Admin Registration Page", () => {
 
     // Submit the form
     fireEvent.click(screen.getByRole("button", { name: /Register/i }));
+
     await waitFor(() => {
       expect(screen.getByText(/Registration successful/i)).toBeInTheDocument();
     });
+
+    // Verify the API was called with correct data
+    expect(global.fetch).toHaveBeenCalledWith("/api/verify-admin", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        identificationNumber: "12345",
+      }),
+    });
+  });
+
+  it("handles invalid identification number", async () => {
+    // Mock the API call to return an error
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({
+        error: "Identification number not found",
+      }),
+    });
+
+    render(<AdminRegistration />);
+
+    // Fill in the form fields
+    fireEvent.change(screen.getByLabelText(/First Name/i), {
+      target: { value: "John" },
+    });
+    fireEvent.change(screen.getByLabelText(/Last Name/i), {
+      target: { value: "Doe" },
+    });
+    fireEvent.change(screen.getByLabelText(/Identification Number/i), {
+      target: { value: "invalid-id" },
+    });
+    fireEvent.change(screen.getByLabelText(/Email Address/i), {
+      target: { value: "john.doe@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/Create Password/i), {
+      target: { value: "StrongPass123!" },
+    });
+    fireEvent.change(screen.getByLabelText(/Confirm Password/i), {
+      target: { value: "StrongPass123!" },
+    });
+
+    // Submit the form
+    fireEvent.click(screen.getByRole("button", { name: /Register/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/Identification number not found/i)
+      ).toBeInTheDocument();
+    });
+
+    // Verify createUserWithEmailAndPassword was NOT called
+    expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
   });
 });
