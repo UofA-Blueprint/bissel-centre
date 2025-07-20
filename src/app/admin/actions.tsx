@@ -57,7 +57,6 @@ export const createAdmin = async () => {
 };
 
 export const checkAdmin = async (identificationNumber: string) => {
-  console.log("Checking admin status for:", identificationNumber);
   const admin = await initAdmin();
   console.log("Admin initialized:", admin);
   try {
