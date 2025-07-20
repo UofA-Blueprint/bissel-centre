@@ -42,7 +42,7 @@ const initialErrors = {
 // --- CONSTANTS ---
 const ADMIN_STAFF_COLLECTION = "administrative_staff";
 
-const ITAdminRegistration: React.FC = () => {
+const AdminRegistration: React.FC = () => {
   const [formData, setFormData] =
     useState<typeof initialFormData>(initialFormData);
   const [errors, setErrors] = useState<typeof initialErrors>(initialErrors);
@@ -407,4 +407,4 @@ const ITAdminRegistration: React.FC = () => {
   );
 };
 
-export default ITAdminRegistration;
+export default AdminRegistration;
