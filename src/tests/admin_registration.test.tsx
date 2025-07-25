@@ -1,22 +1,16 @@
 import AdminRegistration from "@/app/register/page";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { signInWithEmailAndPassword } from "firebase/auth";
 
 jest.mock("firebase/auth", () => ({
   getAuth: jest.fn(() => ({})),
-  createUserWithEmailAndPassword: jest.fn(),
-  signInWithEmailAndPassword: jest.fn(),
-}));
-
-jest.mock("firebase/firestore", () => ({
-  collection: jest.fn(),
-  query: jest.fn(),
-  where: jest.fn(),
-  getDocs: jest.fn(),
-  addDoc: jest.fn(),
-  getFirestore: jest.fn(() => ({})),
-  Timestamp: {
-    now: jest.fn(() => ({})),
-  },
+  signInWithEmailAndPassword: jest.fn(() =>
+    Promise.resolve({
+      user: {
+        getIdToken: jest.fn(() => Promise.resolve("mock-id-token")),
+      },
+    })
+  ),
 }));
 
 global.fetch = jest.fn();
@@ -25,21 +19,16 @@ jest.mock("firebase/storage", () => ({
   getStorage: jest.fn(() => ({})),
 }));
 
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { addDoc } from "firebase/firestore";
-
-describe("IT Admin Registration Page", () => {
+describe("AdminRegistration Component", () => {
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   it("renders without crashing", () => {
     render(<AdminRegistration />);
-    const heading = screen.getByRole("heading", {
-      level: 1,
-      name: /Register/i,
-    });
-    expect(heading).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Register/i })
+    ).toBeInTheDocument();
   });
 
   it("displays all form fields", () => {
@@ -95,28 +84,17 @@ describe("IT Admin Registration Page", () => {
     });
   });
 
-  it("handles form submission with valid data", async () => {
-    // Mock the API call to verify-admin
+  it("handles successful registration and login flow", async () => {
+    // Arrange: Mock the two API calls
     (global.fetch as jest.Mock).mockResolvedValueOnce({
+      // 1. Mock for /api/register-staff
       ok: true,
-      json: async () => ({
-        success: true,
-        hashedID: "mock-hashed-id",
-      }),
+      json: async () => ({ success: true, uid: "test-uid" }),
     });
-
-    // Mock successful firebase response
-    (createUserWithEmailAndPassword as jest.Mock).mockResolvedValueOnce({
-      user: {
-        uid: "test-uid",
-        delete: jest.fn(), // Mock the delete method in case of error
-      },
-    });
-    (addDoc as jest.Mock).mockResolvedValueOnce({});
 
     render(<AdminRegistration />);
 
-    // Fill in the form fields
+    // Act: Fill and submit the form
     fireEvent.change(screen.getByLabelText(/First Name/i), {
       target: { value: "John" },
     });
@@ -135,40 +113,46 @@ describe("IT Admin Registration Page", () => {
     fireEvent.change(screen.getByLabelText(/Confirm Password/i), {
       target: { value: "StrongPass123!" },
     });
-
-    // Submit the form
     fireEvent.click(screen.getByRole("button", { name: /Register/i }));
 
+    // Assert
     await waitFor(() => {
       expect(screen.getByText(/Registration successful/i)).toBeInTheDocument();
     });
 
-    // Verify the API was called with correct data
-    expect(global.fetch).toHaveBeenCalledWith("/api/verify-admin", {
+    // 1. Verify /api/register-staff was called correctly
+    expect(global.fetch).toHaveBeenCalledWith("/api/register-staff", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        firstName: "John",
+        lastName: "Doe",
+        email: "john.doe@example.com",
+        password: "StrongPass123!",
         identificationNumber: "12345",
       }),
     });
+
+    // 2. Verify signInWithEmailAndPassword was called to get the token
+    expect(signInWithEmailAndPassword).toHaveBeenCalledWith(
+      expect.anything(),
+      "john.doe@example.com",
+      "StrongPass123!"
+    );
   });
 
-  it("handles invalid identification number", async () => {
-    // Mock the API call to return an error
+  it("handles API failure for invalid identification number", async () => {
+    // Arrange
     (global.fetch as jest.Mock).mockResolvedValueOnce({
       ok: false,
-      json: async () => ({
-        error: "Identification number not found",
-      }),
+      status: 403,
+      json: async () => ({ error: "Invalid identification number" }),
     });
 
     render(<AdminRegistration />);
 
-    // Fill in the form fields
     fireEvent.change(screen.getByLabelText(/First Name/i), {
-      target: { value: "John" },
+      target: { value: "Jane" },
     });
     fireEvent.change(screen.getByLabelText(/Last Name/i), {
       target: { value: "Doe" },
@@ -177,7 +161,7 @@ describe("IT Admin Registration Page", () => {
       target: { value: "invalid-id" },
     });
     fireEvent.change(screen.getByLabelText(/Email Address/i), {
-      target: { value: "john.doe@example.com" },
+      target: { value: "jane.doe@example.com" },
     });
     fireEvent.change(screen.getByLabelText(/Create Password/i), {
       target: { value: "StrongPass123!" },
@@ -186,16 +170,54 @@ describe("IT Admin Registration Page", () => {
       target: { value: "StrongPass123!" },
     });
 
-    // Submit the form
+    // Act: Fill and submit form
     fireEvent.click(screen.getByRole("button", { name: /Register/i }));
 
+    // Assert
     await waitFor(() => {
       expect(
-        screen.getByText(/Identification number not found/i)
+        screen.getByText(/Invalid identification number/i)
       ).toBeInTheDocument();
     });
+    expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
+  });
 
-    // Verify createUserWithEmailAndPassword was NOT called
-    expect(createUserWithEmailAndPassword).not.toHaveBeenCalled();
+  it("handles API failure for email already in use", async () => {
+    // Arrange
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({ error: "Email is already in use" }),
+    });
+
+    render(<AdminRegistration />);
+
+    // Act: Fill and submit form
+    fireEvent.change(screen.getByLabelText(/Email Address/i), {
+      target: { value: "existing@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText(/First Name/i), {
+      target: { value: "Jane" },
+    });
+    fireEvent.change(screen.getByLabelText(/Last Name/i), {
+      target: { value: "Doe" },
+    });
+    fireEvent.change(screen.getByLabelText(/Identification Number/i), {
+      target: { value: "invalid-id" },
+    });
+    fireEvent.change(screen.getByLabelText(/Create Password/i), {
+      target: { value: "StrongPass123!" },
+    });
+    fireEvent.change(screen.getByLabelText(/Confirm Password/i), {
+      target: { value: "StrongPass123!" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Register/i }));
+
+    // Assert
+    await waitFor(() => {
+      expect(screen.getByText(/Email is already in use/i)).toBeInTheDocument();
+    });
+    expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
   });
 });
