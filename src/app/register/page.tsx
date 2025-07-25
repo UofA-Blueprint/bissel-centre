@@ -1,14 +1,9 @@
 "use client";
 import React, { useState } from "react";
 import Image from "next/image";
-import { auth, db } from "../services/firebase";
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-} from "firebase/auth";
-import { addDoc, collection, Timestamp } from "firebase/firestore";
+import { auth } from "../services/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
-import { FirebaseError } from "firebase/app";
 import EyeClosedIcon from "../components/icons/EyeClosedIcon";
 import EyeOpenIcon from "../components/icons/EyeOpenIcon";
 
@@ -20,6 +15,8 @@ type FormField = {
   label: string;
   type: string;
 };
+
+const CONSOLE_DEBUG: boolean = true;
 
 const initialFormData = {
   firstName: "",
@@ -38,9 +35,6 @@ const initialErrors = {
   password: "",
   confirmPassword: "",
 };
-
-// --- CONSTANTS ---
-const ADMIN_STAFF_COLLECTION = "administrative_staff";
 
 const AdminRegistration: React.FC = () => {
   const [formData, setFormData] =
@@ -105,50 +99,8 @@ const AdminRegistration: React.FC = () => {
     return Object.values(newErrors).every((error) => error === "");
   };
 
-  const checkExistingUserIdentificationNumber = async (): Promise<
-    string | null
-  > => {
-    try {
-      const response = await fetch("/api/verify-admin", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          identificationNumber: formData.identificationNumber,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        console.log("Checking hashed ID:", data.hashedID);
-        return data.hashedID;
-      } else {
-        setErrors({
-          firstName: "",
-          lastName: "",
-          email: "",
-          password: "",
-          confirmPassword: "",
-          identificationNumber: data.error || "Identification number not found",
-        });
-        return null;
-      }
-    } catch (error) {
-      console.error("Error checking identification number:", error);
-      setErrors((prevErrors) => ({
-        ...prevErrors,
-        identificationNumber:
-          "Failed to verify identification number. Please try again.",
-      }));
-      return null;
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    let userCredential;
     setIsLoading(true);
 
     if (!validateForm()) {
@@ -156,80 +108,48 @@ const AdminRegistration: React.FC = () => {
       return;
     }
 
-    const ITUserUID = await checkExistingUserIdentificationNumber();
-    if (ITUserUID === null) {
-      // If the identification number check fails, stop the registration process
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      // create user
-      userCredential = await createUserWithEmailAndPassword(
-        auth,
-        formData.email,
-        formData.password
-      );
-
-      try {
-        // try to create the Firestore document
-        await addDoc(collection(db, ADMIN_STAFF_COLLECTION), {
+      const response = await fetch("/api/register-staff", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           firstName: formData.firstName,
-          secondName: formData.lastName,
+          lastName: formData.lastName,
           email: formData.email,
-          createdBy: ITUserUID,
-          createdAt: Timestamp.now(),
-        });
+          password: formData.password,
+          identificationNumber: formData.identificationNumber,
+        }),
+      });
 
-        // clear form and show success message
-        setFormData(initialFormData);
+      const data = await response.json();
 
-        try {
-          await signInWithEmailAndPassword(
-            auth,
-            formData.email,
-            formData.password
-          );
-        } catch (error) {
-          console.error("Error signing in:", error);
+      if (!response.ok) {
+        // Handle errors from the API (e.g., email in use, invalid ID)
+        const apiError = data.error || "An unknown error occurred.";
+        if (response.status === 409) {
+          // Email exists
+          setErrors((prev) => ({ ...prev, email: apiError }));
+        } else if (response.status === 403) {
+          // Invalid ID
+          setErrors((prev) => ({ ...prev, identificationNumber: apiError }));
+        } else {
+          // Generic error for other cases
+          setErrors((prev) => ({ ...prev, confirmPassword: apiError }));
         }
-
-        setDialogOpen(true);
-      } catch (firestoreError) {
-        // If Firestore fails, delete the auth user
-        console.error("Error creating user profile:", firestoreError);
-        if (userCredential?.user) {
-          try {
-            await userCredential.user.delete();
-          } catch (deleteError) {
-            console.error("Error deleting user:", deleteError);
-          }
-        }
+        return;
       }
+
+      // Registration successful, now sign in the user
+      await signInWithEmailAndPassword(auth, formData.email, formData.password);
+
+      setFormData(initialFormData);
+      setDialogOpen(true);
     } catch (error) {
-      console.error("Error creating user:", error);
-      const errorCode = error instanceof FirebaseError && error.code;
-      if (errorCode === "auth/email-already-in-use") {
-        setErrors({
-          firstName: "",
-          lastName: "",
-          email: "Email is already in use",
-          password: "",
-          confirmPassword: "",
-          identificationNumber: "",
-        });
-      } else if (errorCode === "auth/invalid-email") {
-        setErrors({
-          firstName: "",
-          lastName: "",
-          email: "Invalid email address",
-          password: "",
-          confirmPassword: "",
-          identificationNumber: "",
-        });
-      } else {
-        console.error("Error creating user:", error);
-      }
+      console.error("Error during registration submission:", error);
+      setErrors((prevErrors) => ({
+        ...prevErrors,
+        confirmPassword: "Failed to register. Please try again.",
+      }));
     } finally {
       setIsLoading(false);
     }
