@@ -1,0 +1,73 @@
+.login-card {
+  background-color: #fafafa;
+  /* max-width: 500px; */
+  /* min-width: 100%; */
+  width: min( 100vw, 500px);
+  border-radius: 12px;
+  border: 0.1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 2px 4px 14.2px 0px rgba(0, 0, 0, 0.05);
+  /* box-shadow: 2px 4px 14.2px 0px / */
+}
+.login-form {
+  padding: 32px 32px;
+}
+.text-box-entry {
+  /* width: 400px; */
+  width: 100%;
+  padding: 10px;
+  border-radius: 5px;
+  border: none;
+  outline: none;
+  margin-bottom: 20px;
+  color: black;
+
+  min-width: 0px;
+  background-color: #d9d9d9;
+  border-radius: 8px;
+
+  border-radius: 16px;
+  border: 0.25px solid rgba(156, 156, 153, 0.25);
+  background: #fff;
+  box-shadow: 31px 18px 10px 0px rgba(0, 0, 0, 0),
+    20px 12px 9px 0px rgba(0, 0, 0, 0), 11px 6px 8px 0px rgba(0, 0, 0, 0.01),
+    5px 3px 6px 0px rgba(0, 0, 0, 0.02), 1px 1px 3px 0px rgba(0, 0, 0, 0.02);
+}
+.form-submit-button {
+  color: white;
+  padding: 16px 24px;
+  border-radius: 12px;
+  background: #1bc0d6;
+}
+
+.modal-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.modal {
+  background-color: #fff;
+  padding: 30px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.modal-content {
+  max-width: 500px;
+  width: 100%;
+}
+.modal-close {
+  cursor: pointer;
+  font-size: 1.1em;
+  background-color: rgb(200, 12, 32);
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  color: white;
+  font-weight: 600;
+}

@@ -7,12 +7,14 @@ import { handleITAdminLogin } from "@/app/admin/actions";
 import { signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/app/services/firebase";
 import { useRouter } from "next/navigation";
+import "./style.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
 function AdminLoginCard() {
   const [adminId, setAdminId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -25,6 +27,7 @@ function AdminLoginCard() {
       const customToken = await handleITAdminLogin(adminId);
       if (customToken === null) {
         setErrorMessage("Invalid Credentials");
+        setLoading(false);
         return;
       }
 
@@ -40,7 +43,7 @@ function AdminLoginCard() {
 
       if (response.ok) {
         console.log("Logged in");
-        router.push("/profile/Display-Recipient-Profile");
+        router.push("/admin/dashboard");
       } else {
         console.log("Failed to log in");
         setErrorMessage("Invalid Credentials");
@@ -53,8 +56,37 @@ function AdminLoginCard() {
     }
   };
 
+  const InfoModal = () => {
+    return (
+      <div
+        className="modal-container"
+        style={{ display: showForgotPassword ? "flex" : "none" }}
+      >
+        <div className="modal">
+          <div className="modal-content">
+            <h1>Forgot Credentials?</h1>
+            <p>
+              Unfortunately, we cannot provide credentials for IT Admins. If you
+              are an IT Admin and have lost your credentials, please contact the
+              Bissel Centre IT department for assistance.
+              <br />
+              As of now, no such automation exists to reset or retrieve admin
+              credentials.
+            </p>
+          </div>
+          <button
+            className="modal-close"
+            onClick={() => setShowForgotPassword(false)}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  };
   return (
     <div style={{ flex: 2 }}>
+      <InfoModal />
       <div className={`${inter.className} login-card`}>
         <form
           action=""
@@ -87,6 +119,13 @@ function AdminLoginCard() {
               />{" "}
               <br />
             </div>
+            <button
+              type="button"
+              style={{ float: "right" }}
+              onClick={() => setShowForgotPassword(true)}
+            >
+              Forgot credentials?
+            </button>
             {errorMessage ? (
               <div className="error-message">
                 <p>{errorMessage}</p>
