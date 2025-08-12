@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { authService } from "../services/authService";
-import { navigationService } from "../services/navigationService";
 import Image from "next/image";
 
 export default function StaffLoginPage() {
@@ -39,13 +38,7 @@ export default function StaffLoginPage() {
       }
 
       // Get appropriate post-login destination
-      const destination = await navigationService.getPostLoginDestination();
-      console.log(
-        `Redirecting to: ${destination.path} (${destination.reason})`
-      );
-
-      // Navigate to the determined destination
-      router.push(destination.path);
+      router.push("/dashboard");
     } catch (err: unknown) {
       console.error("Login error:", err);
       if (err instanceof Error) {
