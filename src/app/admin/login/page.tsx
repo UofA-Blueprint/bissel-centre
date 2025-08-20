@@ -1,156 +1,163 @@
 "use client";
 
-import React, { useState } from "react";
-import { Inter } from "next/font/google";
-import LogoHeader from "@/app/components/LogoHeader";
-import { handleITAdminLogin } from "@/app/admin/actions";
-import { signInWithCustomToken } from "firebase/auth";
-import { auth } from "@/app/services/firebase";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import "./style.css";
+import { authService } from "../services/authService";
+import Image from "next/image";
 
-const inter = Inter({ subsets: ["latin"] });
-
-function AdminLoginCard() {
-  const [adminId, setAdminId] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-
-  const router = useRouter();
+export default function StaffLoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMeState] = useState(false);
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const router = useRouter();
+  useEffect(() => {
+    // Check if email is remembered in localStorage
+    const rememberedEmail = authService.getRememberedEmail();
+    if (rememberedEmail) {
+      setEmail(rememberedEmail);
+      setRememberMeState(true);
+    }
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    setErrorMessage("");
-    setLoading(true);
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoading(true);
+    setError("");
+
     try {
-      const customToken = await handleITAdminLogin(adminId);
-      if (customToken === null) {
-        setErrorMessage("Invalid Credentials");
-        setLoading(false);
-        return;
-      }
+      // Authenticate using the auth service
+      await authService.signIn(email, password);
 
-      await signInWithCustomToken(auth, customToken);
-      console.log("Signed in");
-      const idToken = await auth.currentUser?.getIdToken();
-
-      const response = await fetch("/admin/api", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idToken }),
-      });
-
-      if (response.ok) {
-        console.log("Logged in");
-        router.push("/admin/dashboard");
+      // Handle remember me functionality
+      if (rememberMe) {
+        authService.setRememberedEmail(email);
       } else {
-        console.log("Failed to log in");
-        setErrorMessage("Invalid Credentials");
+        authService.clearRememberedEmail();
       }
-    } catch (error) {
-      console.log(error);
-      setErrorMessage("Invalid Credentials");
+
+      // Get appropriate post-login destination
+      router.push("/dashboard");
+    } catch (err: unknown) {
+      console.error("Login error:", err);
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unexpected error occurred during login.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const InfoModal = () => {
-    return (
-      <div
-        className="modal-container"
-        style={{ display: showForgotPassword ? "flex" : "none" }}
-      >
-        <div className="modal">
-          <div className="modal-content">
-            <h1>Forgot Credentials?</h1>
-            <p>
-              Unfortunately, we cannot provide credentials for IT Admins. If you
-              are an IT Admin and have lost your credentials, please contact the
-              Bissel Centre IT department for assistance.
-              <br />
-              As of now, no such automation exists to reset or retrieve admin
-              credentials.
-            </p>
-          </div>
-          <button
-            className="modal-close"
-            onClick={() => setShowForgotPassword(false)}
-          >
-            Close
-          </button>
-        </div>
-      </div>
+  const handleForgotPassword = () => {
+    alert(
+      "Please contact your IT Administrator for password reset assistance."
     );
   };
+
   return (
-    <div style={{ flex: 2 }}>
-      <InfoModal />
-      <div className={`${inter.className} login-card`}>
-        <form
-          action=""
-          className={`login-form ${
-            loading ? "opacity-50 pointer-events-none" : ""
-          }`}
-          onSubmit={handleSubmit}
-        >
-          <h1 style={{ fontSize: 24 }}>Admin</h1>
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 32,
-              marginTop: 32,
-            }}
-          >
-            <div>
-              <label htmlFor="admin-id">Identification Number</label> <br />
-              <input
-                className="text-box-entry"
-                required={true}
-                type="text"
-                aria-label="admin-id"
-                id="admin-id"
-                name="admin-id"
-                placeholder="Identification Number"
-                value={adminId}
-                onChange={(e) => setAdminId(e.target.value)}
-              />{" "}
-              <br />
+    <div className="min-h-screen bg-gray-50 flex flex-col py-12 px-4 sm:px-6 lg:px-8">
+      <div className="flex justify-center items-center pt-8 pb-4 mb-20">
+        <Image
+          src="/BissellLogo_Blue 1.svg"
+          alt="Bissell Logo"
+          width={200}
+          height={100}
+          className="max-w-xs"
+        />
+      </div>
+
+      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
+        <div className="bg-white py-8 px-6 shadow rounded-lg">
+          {" "}
+          <div className="flex justify-between mb-6 flex-col gap-2">
+            {" "}
+            <h2 className="text-2xl font-bold text-gray-900">Sign In</h2>{" "}
+            <p className="text-sm text-blue-600 mt-1">
+              After login, you will be redirected to the most recent recipient
+              profile
+            </p>
+          </div>
+          {error && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              {error}
             </div>
-            <button
-              type="button"
-              style={{ float: "right" }}
-              onClick={() => setShowForgotPassword(true)}
-            >
-              Forgot credentials?
-            </button>
-            {errorMessage ? (
-              <div className="error-message">
-                <p>{errorMessage}</p>
-              </div>
-            ) : null}
+          )}
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Email Address
+              </label>
+              <input
+                id="email"
+                type="email"
+                autoComplete="email"
+                required
+                disabled={loading}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Enter your admin email"
+                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE] focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700"
+              >
+                Password
+              </label>
+              <input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                disabled={loading}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE] focus:border-transparent"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="inline-flex items-center text-sm text-gray-700">
+                <input
+                  id="rememberMe"
+                  type="checkbox"
+                  checked={rememberMe}
+                  disabled={loading}
+                  onChange={(e) => setRememberMeState(e.target.checked)}
+                  className="h-4 w-4 text-[#2CC0DE] focus:ring-[#2CC0DE] border-gray-300 rounded"
+                />
+                <span className="ml-2">Remember me</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={loading}
+                className="text-sm font-medium text-[#2CC0DE] hover:underline"
+              >
+                Forgot Password?
+              </button>
+            </div>{" "}
             <button
               type="submit"
-              className="form-submit-button"
               disabled={loading}
-              aria-label="sign-in"
+              className="w-full py-2 px-4 rounded-lg bg-[#2CC0DE] text-white font-semibold hover:bg-teal-500 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE]"
             >
-              Sign In
+              {loading ? "Signing In..." : "Sign In"}
             </button>
-          </div>
-        </form>
+          </form>
+          <p className="mt-6 text-center text-sm text-gray-600">
+            Need an account? Contact your IT Administrator.
+          </p>
+        </div>
       </div>
-    </div>
-  );
-}
-
-export default function AdminLogin() {
-  return (
-    <div className="hcenter center-window">
-      <LogoHeader />
-      <AdminLoginCard />
     </div>
   );
 }
