@@ -66,6 +66,32 @@ export interface BannedUser {
   notes: string;
 }
 
+// Fetch user by email (case-insensitive compare by lowercasing input)
+export async function getUserByEmail(email: string): Promise<User | null> {
+  try {
+    const normalizedEmail = email.toLowerCase().trim();
+    const q = query(
+      collection(db, "users"),
+      where("email", "==", normalizedEmail)
+    );
+    const querySnapshot = await getDocs(q);
+    if (!querySnapshot.empty) {
+      const docSnap = querySnapshot.docs[0];
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        createdAt: data.createdAt?.toDate?.() || data.createdAt,
+        updatedAt: data.updatedAt?.toDate?.() || data.updatedAt,
+      } as User;
+    }
+    return null;
+  } catch (error) {
+    console.error("Error fetching user by email:", error);
+    throw error;
+  }
+}
+
 // Fetch user by ID
 export async function getUserById(userId: string): Promise<User | null> {
   try {
@@ -335,10 +361,7 @@ export async function updateUserStatus(
 }
 
 // Delete user
-export async function deleteUser(
-  userId: string,
-  deletedBy: string
-): Promise<void> {
+export async function deleteUser(userId: string): Promise<void> {
   try {
     // Delete user document
     await deleteDoc(doc(db, "users", userId));

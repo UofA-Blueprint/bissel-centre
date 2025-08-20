@@ -5,7 +5,7 @@ import {
   onAuthStateChanged,
   User as FirebaseUser,
 } from "firebase/auth";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 
 // Types for authenticated users
 export interface StaffUser {
@@ -22,6 +22,16 @@ export interface AuthState {
   user: StaffUser | null;
   loading: boolean;
   error: string | null;
+}
+
+// Firestore document shape for administrative_staff
+interface StaffDocData {
+  email: string;
+  firstName: string;
+  secondName?: string;
+  lastName?: string;
+  createdBy: string;
+  role?: string;
 }
 
 // Authentication service class
@@ -76,26 +86,21 @@ export class AuthService {
   private async getStaffUserData(
     firebaseUser: FirebaseUser
   ): Promise<StaffUser> {
-    // Query the administrative_staff collection for this user
-    const staffQuery = query(
-      collection(db, "administrative_staff"),
-      where("email", "==", firebaseUser.email?.toLowerCase().trim())
-    );
+    // Fetch the administrative_staff document by UID instead of email
+    const staffDocRef = doc(db, "administrative_staff", firebaseUser.uid);
+    const staffDoc = await getDoc(staffDocRef);
 
-    const staffSnapshot = await getDocs(staffQuery);
-
-    if (staffSnapshot.empty) {
+    if (!staffDoc.exists()) {
       throw new Error("User not found in administrative staff");
     }
 
-    const staffDoc = staffSnapshot.docs[0];
-    const staffData = staffDoc.data();
+    const staffData = staffDoc.data() as StaffDocData;
 
     return {
       id: staffDoc.id,
       email: staffData.email,
       firstName: staffData.firstName,
-      secondName: staffData.secondName,
+      secondName: staffData.secondName ?? staffData.lastName ?? "",
       createdBy: staffData.createdBy,
       role: staffData.role || "staff",
       isAuthenticated: true,

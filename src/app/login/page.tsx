@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { authService } from "../services/authService";
+import { getUserByEmail } from "../services/userService";
 import Image from "next/image";
 
 export default function StaffLoginPage() {
@@ -12,6 +13,8 @@ export default function StaffLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const userId = searchParams.get("id");
   useEffect(() => {
     // Check if email is remembered in localStorage
     const rememberedEmail = authService.getRememberedEmail();
@@ -37,8 +40,21 @@ export default function StaffLoginPage() {
         authService.clearRememberedEmail();
       }
 
-      // Get appropriate post-login destination
-      router.push("/dashboard");
+      // Get appropriate post-login destination by matching a user in users collection
+      const matchedUser = await getUserByEmail(email);
+      if (matchedUser) {
+        router.push(
+          `/profile/Display-Recipient-Profile?id=${encodeURIComponent(
+            matchedUser.id
+          )}`
+        );
+      } else if (userId) {
+        router.push(
+          `/profile/Display-Recipient-Profile?id=${encodeURIComponent(userId)}`
+        );
+      } else {
+        router.push(`/profile/Display-Recipient-Profile`);
+      }
     } catch (err: unknown) {
       console.error("Login error:", err);
       if (err instanceof Error) {
