@@ -1014,102 +1014,108 @@ export default function DisplayRecipientProfile() {
 
                       {/* Table Rows */}
                       <div className="space-y-2">
-                        {history.map((entry, index) => (
-                          <div
-                            key={entry.id}
-                            className={`px-6 py-5 rounded-xl border border-gray-200 ${
-                              index % 2 === 0 ? "bg-white" : "bg-gray-50"
-                            }`}
-                          >
-                            <div className="grid grid-cols-4 gap-4 items-center">
-                              {/* Date Modified */}
-                              <div className="text-sm text-gray-900">
-                                {new Date(entry.date).toLocaleDateString(
-                                  "en-US",
-                                  {
-                                    month: "numeric",
-                                    day: "numeric",
-                                    year: "numeric",
-                                  }
-                                )}
-                              </div>
+                        {history
+                          .sort(
+                            (a, b) =>
+                              new Date(b.date).getTime() -
+                              new Date(a.date).getTime()
+                          )
+                          .map((entry, index) => (
+                            <div
+                              key={entry.id}
+                              className={`px-6 py-5 rounded-xl border border-gray-200 ${
+                                index % 2 === 0 ? "bg-white" : "bg-gray-50"
+                              }`}
+                            >
+                              <div className="grid grid-cols-4 gap-4 items-center">
+                                {/* Date Modified */}
+                                <div className="text-sm text-gray-900">
+                                  {new Date(entry.date).toLocaleDateString(
+                                    "en-US",
+                                    {
+                                      month: "numeric",
+                                      day: "numeric",
+                                      year: "numeric",
+                                    }
+                                  )}
+                                </div>
 
-                              {/* Modified By */}
-                              <div className="text-sm text-gray-900">
-                                {entry.modifiedBy}
-                              </div>
+                                {/* Modified By */}
+                                <div className="text-sm text-gray-900">
+                                  {entry.modifiedBy}
+                                </div>
 
-                              {/* Status */}
-                              <div>
-                                {(() => {
-                                  const status = entry.event.toLowerCase();
-                                  if (
-                                    status.includes("active") ||
-                                    status.includes("created") ||
-                                    status.includes("renewed") ||
-                                    status.includes("issued") ||
-                                    status.includes("unflagged")
-                                  ) {
-                                    return (
-                                      <span className="inline-flex px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
-                                        Active
-                                      </span>
-                                    );
-                                  } else if (status.includes("expired")) {
-                                    return (
-                                      <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
-                                        Expired
-                                      </span>
-                                    );
-                                  } else if (
-                                    status.includes("flagged") ||
-                                    status.includes("banned")
-                                  ) {
-                                    return (
-                                      <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
-                                        Flagged
-                                      </span>
-                                    );
-                                  } else if (status.includes("lost")) {
-                                    return (
-                                      <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
-                                        Lost
-                                      </span>
-                                    );
-                                  } else {
-                                    return (
-                                      <span className="inline-flex px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
-                                        Active
-                                      </span>
-                                    );
-                                  }
-                                })()}
-                              </div>
+                                {/* Status */}
+                                <div>
+                                  {(() => {
+                                    const status = entry.event.toLowerCase();
+                                    if (
+                                      status.includes("active") ||
+                                      status.includes("created") ||
+                                      status.includes("renewed") ||
+                                      status.includes("issued") ||
+                                      status.includes("unflagged")
+                                    ) {
+                                      return (
+                                        <span className="inline-flex px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                                          Active
+                                        </span>
+                                      );
+                                    } else if (status.includes("expired")) {
+                                      return (
+                                        <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                                          Expired
+                                        </span>
+                                      );
+                                    } else if (
+                                      status.includes("flagged") ||
+                                      status.includes("banned")
+                                    ) {
+                                      return (
+                                        <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                                          Flagged
+                                        </span>
+                                      );
+                                    } else if (status.includes("lost")) {
+                                      return (
+                                        <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+                                          Lost
+                                        </span>
+                                      );
+                                    } else {
+                                      return (
+                                        <span className="inline-flex px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+                                          Active
+                                        </span>
+                                      );
+                                    }
+                                  })()}
+                                </div>
 
-                              {/* Action Taken */}
-                              <div className="text-sm text-gray-700">
-                                {entry.event === "ARC Card Issued" &&
-                                entry.notes
-                                  ? `ARC Card issued (${
-                                      entry.notes.match(/\d+/)?.[0] || "ID"
-                                    })`
-                                  : entry.event === "Account Flagged"
-                                  ? "Account flagged"
-                                  : entry.event === "Account Unflagged"
-                                  ? "Account unflagged"
-                                  : entry.event === "ARC Card Renewed"
-                                  ? "ARC Card renewed"
-                                  : entry.event === "Profile Updated"
-                                  ? "Account information updated"
-                                  : entry.event === "Account Created"
-                                  ? "Account created"
-                                  : entry.event === "ARC Card Lost"
-                                  ? "ARC Card lost"
-                                  : entry.notes || entry.event}
+                                {/* Action Taken */}
+                                <div className="text-sm text-gray-700">
+                                  {entry.event === "ARC Card Issued" &&
+                                  entry.notes
+                                    ? `ARC Card issued (${
+                                        entry.notes.match(/\d+/)?.[0] || "ID"
+                                      })`
+                                    : entry.event === "Account Flagged"
+                                    ? "Account flagged"
+                                    : entry.event === "Account Unflagged"
+                                    ? "Account unflagged"
+                                    : entry.event === "ARC Card Renewed"
+                                    ? "ARC Card renewed"
+                                    : entry.event === "Profile Updated"
+                                    ? "Account information updated"
+                                    : entry.event === "Account Created"
+                                    ? "Account created"
+                                    : entry.event === "ARC Card Lost"
+                                    ? "ARC Card lost"
+                                    : entry.notes || entry.event}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
                       </div>
                     </div>
                   ) : (
