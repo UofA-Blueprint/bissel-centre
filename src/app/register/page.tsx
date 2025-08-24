@@ -139,9 +139,6 @@ const AdminRegistration: React.FC = () => {
         return;
       }
 
-      // Registration successful, now sign in the user
-      await signInWithEmailAndPassword(auth, formData.email, formData.password);
-
       setFormData(initialFormData);
       setDialogOpen(true);
     } catch (error) {

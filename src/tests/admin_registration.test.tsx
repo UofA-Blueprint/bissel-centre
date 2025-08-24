@@ -1,16 +1,8 @@
 import AdminRegistration from "@/app/register/page";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { signInWithEmailAndPassword } from "firebase/auth";
 
 jest.mock("firebase/auth", () => ({
   getAuth: jest.fn(() => ({})),
-  signInWithEmailAndPassword: jest.fn(() =>
-    Promise.resolve({
-      user: {
-        getIdToken: jest.fn(() => Promise.resolve("mock-id-token")),
-      },
-    })
-  ),
 }));
 
 global.fetch = jest.fn();
@@ -132,13 +124,6 @@ describe("AdminRegistration Component", () => {
         identificationNumber: "12345",
       }),
     });
-
-    // 2. Verify signInWithEmailAndPassword was called to get the token
-    expect(signInWithEmailAndPassword).toHaveBeenCalledWith(
-      expect.anything(),
-      "john.doe@example.com",
-      "StrongPass123!"
-    );
   });
 
   it("handles API failure for invalid identification number", async () => {
@@ -179,7 +164,6 @@ describe("AdminRegistration Component", () => {
         screen.getByText(/Invalid identification number/i)
       ).toBeInTheDocument();
     });
-    expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
   });
 
   it("handles API failure for email already in use", async () => {
@@ -218,6 +202,5 @@ describe("AdminRegistration Component", () => {
     await waitFor(() => {
       expect(screen.getByText(/Email is already in use/i)).toBeInTheDocument();
     });
-    expect(signInWithEmailAndPassword).not.toHaveBeenCalled();
   });
 });
