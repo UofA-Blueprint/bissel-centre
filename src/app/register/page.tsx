@@ -1,8 +1,6 @@
 "use client";
 import React, { useState } from "react";
 import Image from "next/image";
-import { auth } from "../services/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
 import EyeClosedIcon from "../components/icons/EyeClosedIcon";
 import EyeOpenIcon from "../components/icons/EyeOpenIcon";
@@ -14,9 +12,8 @@ type FormField = {
   name: FormDataKeys;
   label: string;
   type: string;
+  hint?: string;
 };
-
-const CONSOLE_DEBUG: boolean = true;
 
 const initialFormData = {
   firstName: "",
@@ -160,6 +157,7 @@ const AdminRegistration: React.FC = () => {
       name: "identificationNumber",
       label: "Identification Number",
       type: "text",
+      hint: "Enter your identification number"
     },
     { id: "email", name: "email", label: "Email Address", type: "text" },
   ];
@@ -214,7 +212,7 @@ const AdminRegistration: React.FC = () => {
                   type={field.type}
                   id={field.id}
                   name={field.name}
-                  placeholder={`Enter your ${field.label.toLowerCase()}`}
+                  placeholder={field.hint? field.hint: `Enter the user's ${field.label.toLowerCase()}`}
                   className={`p-2 border shadow-sm rounded-xl ${
                     errors[field.name] ? "border-red-600" : "border-gray-200"
                   }`}
