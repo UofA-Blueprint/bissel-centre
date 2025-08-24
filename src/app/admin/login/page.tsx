@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { authService } from "../services/authService";
+import { auth } from "../../services/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import Image from "next/image";
 
 export default function StaffLoginPage() {
@@ -14,7 +15,7 @@ export default function StaffLoginPage() {
   const router = useRouter();
   useEffect(() => {
     // Check if email is remembered in localStorage
-    const rememberedEmail = authService.getRememberedEmail();
+    const rememberedEmail = localStorage.getItem("rememberedEmail");
     if (rememberedEmail) {
       setEmail(rememberedEmail);
       setRememberMeState(true);
@@ -27,14 +28,34 @@ export default function StaffLoginPage() {
     setError("");
 
     try {
-      // Authenticate using the auth service
-      await authService.signIn(email, password);
+      // Authenticate with Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      // Get the ID token
+      const idToken = await userCredential.user.getIdToken();
+
+      // Create session cookie via API
+      const response = await fetch("/api/session-login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create session");
+      }
 
       // Handle remember me functionality
       if (rememberMe) {
-        authService.setRememberedEmail(email);
+        localStorage.setItem("rememberedEmail", email);
       } else {
-        authService.clearRememberedEmail();
+        localStorage.removeItem("rememberedEmail");
       }
 
       // Get appropriate post-login destination

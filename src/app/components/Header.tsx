@@ -1,3 +1,5 @@
+"use client";
+
 import React from "react";
 import { Bell, ArrowLeft } from "lucide-react";
 import Image from "next/image";

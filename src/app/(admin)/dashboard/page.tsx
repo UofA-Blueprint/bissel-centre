@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { deleteUser, getAdminSession, listUsers } from "../actions";
+import { deleteUser, getAdminSession, listUsers } from "../../admin/actions";
 
 interface User {
   uid: string;
@@ -28,14 +28,13 @@ export default function AdminDashboardPage() {
       try {
         // Fetch session data
         const sessionResponse = await getAdminSession();
-        console.log("Session response:", sessionResponse);  
+        console.log("Session response:", sessionResponse);
         if (!sessionResponse) {
           router.push("/admin/login");
           return;
         }
         const sessionData = sessionResponse;
-        
-        
+
         setSession(sessionData);
 
         // Fetch users data
@@ -63,7 +62,6 @@ export default function AdminDashboardPage() {
     try {
       const response = await deleteUser(uid);
 
-      
       // Remove user from local state
       setUsers(users.filter((user) => user.uid !== uid));
     } catch (err) {

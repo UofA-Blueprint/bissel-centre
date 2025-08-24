@@ -12,15 +12,15 @@ import {
   X,
   Save,
 } from "lucide-react";
-import Header from "../../components/Header";
-import Sidebar from "../../components/Sidebar";
+import Header from "../../../components/Header";
+import Sidebar from "../../../components/Sidebar";
 import {
   BanModal,
   OverrideModal,
   DeleteModal,
   AccountStatusModal,
-} from "../../components/Modals";
-import { storage } from "../../services/firebase";
+} from "../../../components/Modals";
+import { storage } from "../../../services/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   User,
@@ -38,7 +38,7 @@ import {
   deleteUser as deleteUserService,
   updateUser,
   updateUserStatus,
-} from "../../services/userService";
+} from "../../../services/userService";
 
 export default function DisplayRecipientProfile() {
   const router = useRouter();
@@ -323,7 +323,7 @@ export default function DisplayRecipientProfile() {
     if (!user) return;
 
     try {
-      await deleteUserService(user.id, "current-admin");
+      await deleteUserService(user.id);
       setShowDeleteModal(false);
       router.push("/admin/dashboard");
     } catch (error) {
