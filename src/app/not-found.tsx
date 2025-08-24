@@ -23,6 +23,7 @@ export default function NotFound() {
             width={150}
             height={75}
             className="max-w-xs"
+            priority
           />
         </div>
 

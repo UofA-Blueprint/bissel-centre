@@ -1,8 +1,15 @@
 "use client";
 
-import React from "react";
-import { Bell, ArrowLeft } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Bell, ArrowLeft, User, LogOut, ChevronDown } from "lucide-react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+
+interface User {
+  name?: string;
+  email: string;
+  photoURL?: string;
+}
 
 interface HeaderProps {
   title: string;
@@ -17,6 +24,72 @@ export default function Header({
   onBackClick,
   actions,
 }: HeaderProps) {
+  const [user, setUser] = useState<User | null>(null);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  useEffect(() => {
+    async function fetchUser() {
+      try {
+        const response = await fetch("/api/user-session");
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+        } else {
+          // If we're in a protected route, redirect to login
+          router.push("/admin/login");
+        }
+      } catch (error) {
+        console.error("Failed to fetch user:", error);
+        // If we're in a protected route, redirect to login
+        router.push("/admin/login");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchUser();
+  }, [router]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      const target = event.target as Element;
+      if (showProfileDropdown && !target.closest(".profile-dropdown")) {
+        setShowProfileDropdown(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showProfileDropdown]);
+
+  const handleLogout = async () => {
+    try {
+      const response = await fetch("/api/logout", {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        router.push("/");
+      }
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  const getUserInitials = (name: string) => {
+    return name
+      .split(" ")
+      .map((word) => word.charAt(0))
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
+  };
+
   return (
     <>
       {/* Top Header */}
@@ -32,6 +105,7 @@ export default function Header({
                   width={100}
                   height={100}
                   className="rounded-lg"
+                  priority
                 />
               </span>
             </div>
@@ -66,11 +140,79 @@ export default function Header({
               <button className="text-gray-500 hover:text-gray-700">
                 <Bell size={20} />
               </button>
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-gray-800 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">D</span>
-                </div>
-                <span className="text-sm text-gray-800">Admin User</span>
+
+              {/* User Profile */}
+              <div className="relative">
+                {loading ? (
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse"></div>
+                    <span className="text-sm text-gray-400">Loading...</span>
+                  </div>
+                ) : user ? (
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() =>
+                        setShowProfileDropdown(!showProfileDropdown)
+                      }
+                      className="flex items-center space-x-2 hover:bg-gray-100 rounded-lg px-2 py-1 transition-colors"
+                    >
+                      {/* Profile Picture or Initials */}
+                      {user.photoURL ? (
+                        <Image
+                          src={user.photoURL}
+                          alt="Profile"
+                          width={32}
+                          height={32}
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 bg-gradient-to-br from-primary to-cyan-500 rounded-full flex items-center justify-center">
+                          <span className="text-white text-xs font-medium">
+                            {getUserInitials(user.name || user.email || "U")}
+                          </span>
+                        </div>
+                      )}
+
+                      <span className="text-sm text-gray-800 font-medium">
+                        {user.name || user.email || "User"}
+                      </span>
+
+                      <ChevronDown
+                        size={16}
+                        className={`text-gray-500 transition-transform ${
+                          showProfileDropdown ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 bg-gray-200 rounded-full animate-pulse"></div>
+                    <span className="text-sm text-gray-400">
+                      Loading user...
+                    </span>
+                  </div>
+                )}
+
+                {/* Profile Dropdown */}
+                {showProfileDropdown && user && (
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 profile-dropdown">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <p className="text-sm font-medium text-gray-900">
+                        {user.name || user.email}
+                      </p>
+                      <p className="text-xs text-gray-500">{user.email}</p>
+                    </div>
+
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors"
+                    >
+                      <LogOut size={16} className="mr-2" />
+                      Logout
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { authService } from "../services/authService";
+import { auth } from "../services/firebase";
+import { signInWithEmailAndPassword } from "firebase/auth";
 import { getUserByEmail } from "../services/userService";
 import Image from "next/image";
 
@@ -17,7 +18,7 @@ export default function StaffLoginPage() {
   const userId = searchParams.get("id");
   useEffect(() => {
     // Check if email is remembered in localStorage
-    const rememberedEmail = authService.getRememberedEmail();
+    const rememberedEmail = localStorage.getItem("rememberedEmail");
     if (rememberedEmail) {
       setEmail(rememberedEmail);
       setRememberMeState(true);
@@ -30,14 +31,34 @@ export default function StaffLoginPage() {
     setError("");
 
     try {
-      // Authenticate using the auth service
-      await authService.signIn(email, password);
+      // Authenticate with Firebase Auth
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+
+      // Get the ID token
+      const idToken = await userCredential.user.getIdToken();
+
+      // Create session cookie via API
+      const response = await fetch("/api/session-login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create session");
+      }
 
       // Handle remember me functionality
       if (rememberMe) {
-        authService.setRememberedEmail(email);
+        localStorage.setItem("rememberedEmail", email);
       } else {
-        authService.clearRememberedEmail();
+        localStorage.removeItem("rememberedEmail");
       }
 
       // Get appropriate post-login destination by matching a user in users collection
@@ -57,10 +78,24 @@ export default function StaffLoginPage() {
       }
     } catch (err: unknown) {
       console.error("Login error:", err);
+
+      // Provide user-friendly error messages
       if (err instanceof Error) {
-        setError(err.message);
+        if (
+          err.message.includes("auth/user-not-found") ||
+          err.message.includes("auth/wrong-password") ||
+          err.message.includes("auth/invalid-credential")
+        ) {
+          setError("Invalid email or password. Please try again.");
+        } else if (err.message.includes("auth/too-many-requests")) {
+          setError("Too many failed attempts. Please try again later.");
+        } else if (err.message.includes("Failed to create session")) {
+          setError("Login failed. Please try again.");
+        } else {
+          setError("Invalid email or password. Please try again.");
+        }
       } else {
-        setError("An unexpected error occurred during login.");
+        setError("Invalid email or password. Please try again.");
       }
     } finally {
       setLoading(false);

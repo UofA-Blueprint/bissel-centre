@@ -62,10 +62,24 @@ export default function StaffLoginPage() {
       router.push("/dashboard");
     } catch (err: unknown) {
       console.error("Login error:", err);
+
+      // Provide user-friendly error messages
       if (err instanceof Error) {
-        setError(err.message);
+        if (
+          err.message.includes("auth/user-not-found") ||
+          err.message.includes("auth/wrong-password") ||
+          err.message.includes("auth/invalid-credential")
+        ) {
+          setError("Invalid email or password. Please try again.");
+        } else if (err.message.includes("auth/too-many-requests")) {
+          setError("Too many failed attempts. Please try again later.");
+        } else if (err.message.includes("Failed to create session")) {
+          setError("Login failed. Please try again.");
+        } else {
+          setError("Invalid email or password. Please try again.");
+        }
       } else {
-        setError("An unexpected error occurred during login.");
+        setError("Invalid email or password. Please try again.");
       }
     } finally {
       setLoading(false);

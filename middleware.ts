@@ -54,10 +54,8 @@ export async function middleware(request: NextRequest) {
 
       // Check if user has admin privileges for admin routes
       if (isAdminRoute && !decodedClaims.admin) {
-        // User is authenticated but not admin, redirect to profile
-        return NextResponse.redirect(
-          new URL("/profile/Display-Recipient-Profile", request.url)
-        );
+        // User is authenticated but not admin, redirect to admin login
+        return NextResponse.redirect(new URL("/admin/login", request.url));
       }
 
       // Valid session, allow access
