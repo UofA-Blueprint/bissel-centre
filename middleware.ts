@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initAdmin } from "@/app/services/firebaseAdmin";
 
 // Define protected routes that require authentication
 const PROTECTED_ROUTES = ["/dashboard", "/setup", "/profile"];
@@ -44,30 +43,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(loginUrl, request.url));
   }
 
-  // If session cookie exists, verify it
+  // If session cookie exists for protected routes, allow access
+  // Verification and claims checking will be handled by server layouts
   if (sessionCookie && isProtectedRoute) {
-    try {
-      const admin = await initAdmin();
-      const decodedClaims = await admin
-        .auth()
-        .verifySessionCookie(sessionCookie, true);
-
-      // Check if user has admin privileges for admin routes
-      if (isAdminRoute && !decodedClaims.admin) {
-        // User is authenticated but not admin, redirect to admin login
-        return NextResponse.redirect(new URL("/admin/login", request.url));
-      }
-
-      // Valid session, allow access
-      return NextResponse.next();
-    } catch {
-      // Invalid session, clear cookie and redirect to login
-      const response = NextResponse.redirect(
-        new URL(isAdminRoute ? "/admin/login" : "/login", request.url)
-      );
-      response.cookies.delete("session");
-      return response;
-    }
+    return NextResponse.next();
   }
 
   // For protected routes without session, redirect to login
