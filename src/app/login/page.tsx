@@ -1,10 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { auth } from "../services/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { getUserByEmail } from "../services/userService";
 import Image from "next/image";
 
 export default function StaffLoginPage() {
@@ -14,8 +13,6 @@ export default function StaffLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const userId = searchParams.get("id");
   useEffect(() => {
     // Check if email is remembered in localStorage
     const rememberedEmail = localStorage.getItem("rememberedEmail");
@@ -61,21 +58,8 @@ export default function StaffLoginPage() {
         localStorage.removeItem("rememberedEmail");
       }
 
-      // Get appropriate post-login destination by matching a user in users collection
-      const matchedUser = await getUserByEmail(email);
-      if (matchedUser) {
-        router.push(
-          `/profile/Display-Recipient-Profile?id=${encodeURIComponent(
-            matchedUser.id
-          )}`
-        );
-      } else if (userId) {
-        router.push(
-          `/profile/Display-Recipient-Profile?id=${encodeURIComponent(userId)}`
-        );
-      } else {
-        router.push(`/profile/Display-Recipient-Profile`);
-      }
+      // Redirect to home dashboard after successful login
+      router.push("/home");
     } catch (err: unknown) {
       console.error("Login error:", err);
 
