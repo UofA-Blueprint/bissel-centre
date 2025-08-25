@@ -110,10 +110,6 @@ export default function StaffLoginPage() {
           <div className="flex justify-between mb-6 flex-col gap-2">
             {" "}
             <h2 className="text-2xl font-bold text-gray-900">Sign In</h2>{" "}
-            <p className="text-sm text-blue-600 mt-1">
-              After login, you will be redirected to the most recent recipient
-              profile
-            </p>
           </div>
           {error && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
