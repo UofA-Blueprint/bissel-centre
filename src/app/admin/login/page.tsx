@@ -48,7 +48,7 @@ function AdminLoginCard() {
           console.log(response);
           if (response.ok) {
             console.log("Logged in");
-            router.push("/admin/dashboard");
+            router.push("/admin-only/dashboard");
           } else {
             console.log("Failed to log in");
             setErrorMessage("Invalid Credentials");
