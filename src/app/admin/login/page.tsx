@@ -1,198 +1,180 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState } from "react";
+import { Inter } from "next/font/google";
+import LogoHeader from "@/app/components/LogoHeader";
+import { handleITAdminLogin } from "@/app/admin/actions";
+import firebase from "firebase/compat/app";
+import { signInWithCustomToken } from "firebase/auth";
+import { auth } from "@/app/services/firebase";
 import { useRouter } from "next/navigation";
-import { auth } from "../../services/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import Image from "next/image";
+import { hashITIDNumber } from "../../../../utils/hashITIDNumber";
+import "./style.css";
 
-export default function StaffLoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [rememberMe, setRememberMeState] = useState(false);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+const inter = Inter({ subsets: ["latin"] });
+
+function AdminLoginCard() {
+  const [adminId, setAdminId] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+
   const router = useRouter();
-  useEffect(() => {
-    // Check if email is remembered in localStorage
-    const rememberedEmail = localStorage.getItem("rememberedEmail");
-    if (rememberedEmail) {
-      setEmail(rememberedEmail);
-      setRememberMeState(true);
-    }
-  }, []);
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    setErrorMessage("");
     setLoading(true);
-    setError("");
-
+    e.preventDefault();
     try {
-      // Authenticate with Firebase Auth
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-
-      // Get the ID token
-      const idToken = await userCredential.user.getIdToken();
-
-      // Create session cookie via API
-      const response = await fetch("/api/session-login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ idToken }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to create session");
+      const customToken = await handleITAdminLogin(adminId);
+      if (customToken === null) {
+        setErrorMessage("Invalid Credentials");
+        setLoading(false);
+        return;
       }
 
-      // Handle remember me functionality
-      if (rememberMe) {
-        localStorage.setItem("rememberedEmail", email);
-      } else {
-        localStorage.removeItem("rememberedEmail");
-      }
-
-      // Get appropriate post-login destination
-      router.push("/dashboard");
-    } catch (err: unknown) {
-      console.error("Login error:", err);
-
-      // Provide user-friendly error messages
-      if (err instanceof Error) {
-        if (
-          err.message.includes("auth/user-not-found") ||
-          err.message.includes("auth/wrong-password") ||
-          err.message.includes("auth/invalid-credential")
-        ) {
-          setError("Invalid email or password. Please try again.");
-        } else if (err.message.includes("auth/too-many-requests")) {
-          setError("Too many failed attempts. Please try again later.");
-        } else if (err.message.includes("Failed to create session")) {
-          setError("Login failed. Please try again.");
-        } else {
-          setError("Invalid email or password. Please try again.");
-        }
-      } else {
-        setError("Invalid email or password. Please try again.");
-      }
-    } finally {
+      signInWithCustomToken(auth, customToken)
+        .then(async () => {
+          console.log("Signed in");
+          const idToken = await auth.currentUser?.getIdToken();
+          // this call sets the session cookie
+          return fetch("/admin/api", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken }),
+          });
+        })
+        .then((response) => {
+          console.log(response);
+          if (response.ok) {
+            console.log("Logged in");
+            router.push("/admin/dashboard");
+          } else {
+            console.log("Failed to log in");
+            setErrorMessage("Invalid Credentials");
+            setLoading(false);
+          }
+        });
+    } catch (error) {
+      console.log(error);
+      setErrorMessage("Invalid Credentials");
       setLoading(false);
     }
   };
 
-  const handleForgotPassword = () => {
-    alert(
-      "Please contact your IT Administrator for password reset assistance."
-    );
-  };
-
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col py-12 px-4 sm:px-6 lg:px-8">
-      <div className="flex justify-center items-center pt-8 pb-4 mb-20">
-        <Image
-          src="/BissellLogo_Blue 1.svg"
-          alt="Bissell Logo"
-          width={200}
-          height={100}
-          className="max-w-xs"
-        />
-      </div>
-
-      <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
-        <div className="bg-white py-8 px-6 shadow rounded-lg">
-          {" "}
-          <div className="flex justify-between mb-6 flex-col gap-2">
-            {" "}
-            <h2 className="text-2xl font-bold text-gray-900">Sign In</h2>{" "}
-            <p className="text-sm text-blue-600 mt-1">
-              After login, you will be redirected to the most recent recipient
-              profile
+  const InfoModal = () => {
+    return (
+      <div
+        className="modal-container"
+        style={{ display: showForgotPassword ? "flex" : "none" }}
+      >
+        <div className="modal">
+          <div className="modal-content">
+            <h1>Forgot Credentials?</h1>
+            <p>
+              Unfortunately, we cannot provide credentials for IT Admins. If you
+              are an IT Admin and have lost your credentials, please contact the
+              Bissel Centre IT department for assistance.
+              <br />
+              As of now, no such automation exists to reset or retrieve admin
+              credentials.
             </p>
           </div>
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              {error}
-            </div>
-          )}
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Email Address
-              </label>
-              <input
-                id="email"
-                type="email"
-                autoComplete="email"
-                required
-                disabled={loading}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your admin email"
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE] focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-gray-700"
-              >
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                disabled={loading}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE] focus:border-transparent"
-              />
-            </div>
-            <div className="flex items-center justify-between">
-              <label className="inline-flex items-center text-sm text-gray-700">
-                <input
-                  id="rememberMe"
-                  type="checkbox"
-                  checked={rememberMe}
-                  disabled={loading}
-                  onChange={(e) => setRememberMeState(e.target.checked)}
-                  className="h-4 w-4 text-[#2CC0DE] focus:ring-[#2CC0DE] border-gray-300 rounded"
-                />
-                <span className="ml-2">Remember me</span>
-              </label>
-              <button
-                type="button"
-                onClick={handleForgotPassword}
-                disabled={loading}
-                className="text-sm font-medium text-[#2CC0DE] hover:underline"
-              >
-                Forgot Password?
-              </button>
-            </div>{" "}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-2 px-4 rounded-lg bg-[#2CC0DE] text-white font-semibold hover:bg-teal-500 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE]"
-            >
-              {loading ? "Signing In..." : "Sign In"}
-            </button>
-          </form>
-          <p className="mt-6 text-center text-sm text-gray-600">
-            Need an account? Contact your IT Administrator.
-          </p>
+          <button
+            className="modal-close"
+            onClick={() => setShowForgotPassword(false)}
+          >
+            Close
+          </button>
         </div>
       </div>
+    );
+  };
+  return (
+    <div style={{ flex: 2 }}>
+      <InfoModal />
+      <div className={`${inter.className} login-card`}>
+        <form
+          action=""
+          className={`login-form ${
+            loading ? "opacity-50 pointer-events-none" : ""
+          }`}
+          onSubmit={handleSubmit}
+        >
+          <h1 style={{ fontSize: 24 }}>Admin</h1>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 32,
+              marginTop: 32,
+            }}
+          >
+            <div>
+              <label htmlFor="admin-id">Identification Number</label> <br />
+              <input
+                className="text-box-entry"
+                required={true}
+                type="text"
+                aria-label="admin-id"
+                id="admin-id"
+                name="admin-id"
+                placeholder="Identification Number"
+                onChange={(e) => setAdminId(e.target.value)}
+              />{" "}
+              <br />
+            </div>
+            {/* ask for  forgot password ?*/}
+
+            <button
+              type="button"
+              style={{ float: "right" }}
+              onClick={() => setShowForgotPassword(true)}
+            >
+              Forgot credentials?
+            </button>
+            {errorMessage ? (
+              <div className="error-message">
+                <p>{errorMessage}</p>
+              </div>
+            ) : null}
+            <button
+              type="submit"
+              className="form-submit-button"
+              disabled={loading}
+              aria-label="sign-in"
+            >
+              Sign In
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// export async function getServerSideProps({ req }) {
+//   const cookies = parse(req.headers.cookie || '');
+//   const session = cookies.session || '';
+
+//   try {
+//     const decodedToken = await getAuth().verifySessionCookie(session, true);
+//     return { props: { user: decodedToken } };
+//   } catch (error) {
+//     return {
+//       redirect: {
+//         destination: '/login',
+//         permanent: false,
+//       },
+//     };
+//   }
+// }
+
+export default function AdminLogin() {
+  return (
+    <div className="hcenter center-window">
+      <LogoHeader />'
+      <AdminLoginCard />
     </div>
   );
 }
