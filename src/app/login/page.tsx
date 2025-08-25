@@ -59,7 +59,7 @@ export default function StaffLoginPage() {
       }
 
       // Redirect to home dashboard after successful login
-      router.push("/staff-protected/dashboard");
+      router.push("/dashboard");
     } catch (err: unknown) {
       console.error("Login error:", err);
 

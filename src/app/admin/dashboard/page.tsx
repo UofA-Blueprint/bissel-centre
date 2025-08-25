@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { deleteUser, getAdminSession, listUsers } from "../../admin/actions";
+import { deleteUser, getAdminSession, listUsers } from "../actions";
 
 interface User {
   uid: string;
@@ -92,8 +92,21 @@ export default function AdminDashboardPage() {
 
   return (
     <main>
-      <h1>Welcome, Admin {session.name || session.email}</h1>
-      <p>List of all administrative staff and IT admins:</p>
+      <div className="bg-white shadow mb-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-6">
+            <h1 className="text-2xl font-bold text-gray-900">Welcome, Admin {session.name || session.email}</h1>
+            <button
+              onClick={() => router.push("/admin/login")}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <p className="text-lg text-gray-700 mb-4">List of all administrative staff and IT admins:</p>
       <table>
         <thead>
           <tr>
@@ -130,6 +143,7 @@ export default function AdminDashboardPage() {
           ))}
         </tbody>
       </table>
+      </div>
     </main>
   );
 }

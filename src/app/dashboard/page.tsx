@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 
-export default function ProtectedDashboardPage() {
+export default function DashboardPage() {
   const [userName, setUserName] = useState("User");
   const router = useRouter();
 
@@ -58,6 +58,12 @@ export default function ProtectedDashboardPage() {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">Welcome, {userName}</span>
+              <button
+                onClick={() => router.push("/profile")}
+                className="text-gray-700 hover:text-gray-900 px-4 py-2 rounded-lg text-sm font-medium"
+              >
+                Profile
+              </button>
               <button
                 onClick={handleLogout}
                 className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
