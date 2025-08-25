@@ -38,12 +38,12 @@ export default function Header({
           setUser(userData);
         } else {
           // If we're in a protected route, redirect to login
-          router.push("/admin/login");
+          router.push("/login");
         }
       } catch (error) {
         console.error("Failed to fetch user:", error);
         // If we're in a protected route, redirect to login
-        router.push("/admin/login");
+        router.push("/login");
       } finally {
         setLoading(false);
       }
@@ -174,7 +174,9 @@ export default function Header({
                       )}
 
                       <span className="text-sm text-gray-800 font-medium">
-                        {user.name || user.email || "User"}
+                        {user.name
+                          ? user.name.replace(/\s+User$/, "")
+                          : user.email}
                       </span>
 
                       <ChevronDown
