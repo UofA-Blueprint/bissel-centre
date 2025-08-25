@@ -19,7 +19,8 @@
     "dotenv": "^16.4.7",
     "firebase": "^11.3.0",
     "firebase-admin": "^13.1.0",
-    "next": "15.1.6",
+    "lucide-react": "^0.513.0",
+    "next": "^15.3.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

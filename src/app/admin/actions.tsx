@@ -95,3 +95,20 @@ export const deleteUser = async (uid: string) => {
     return false;
   }
 };
+
+export const setUserAsAdmin = async (email: string) => {
+  const admin = await initAdmin();
+  try {
+    // Find user by email
+    const userRecord = await admin.auth().getUserByEmail(email);
+
+    // Set admin custom claim
+    await admin.auth().setCustomUserClaims(userRecord.uid, { admin: true });
+
+    console.log(`User ${email} has been set as admin`);
+    return true;
+  } catch (error) {
+    console.error("Error setting user as admin:", error);
+    return false;
+  }
+};

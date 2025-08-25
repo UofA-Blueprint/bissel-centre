@@ -28,14 +28,13 @@ export default function AdminDashboardPage() {
       try {
         // Fetch session data
         const sessionResponse = await getAdminSession();
-        console.log("Session response:", sessionResponse);  
+        console.log("Session response:", sessionResponse);
         if (!sessionResponse) {
           router.push("/admin/login");
           return;
         }
         const sessionData = sessionResponse;
-        
-        
+
         setSession(sessionData);
 
         // Fetch users data
@@ -63,7 +62,6 @@ export default function AdminDashboardPage() {
     try {
       const response = await deleteUser(uid);
 
-      
       // Remove user from local state
       setUsers(users.filter((user) => user.uid !== uid));
     } catch (err) {
@@ -94,8 +92,21 @@ export default function AdminDashboardPage() {
 
   return (
     <main>
-      <h1>Welcome, Admin {session.name || session.email}</h1>
-      <p>List of all administrative staff and IT admins:</p>
+      <div className="bg-white shadow mb-6">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center py-6">
+            <h1 className="text-2xl font-bold text-gray-900">Welcome, Admin {session.name || session.email}</h1>
+            <button
+              onClick={() => router.push("/admin/login")}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <p className="text-lg text-gray-700 mb-4">List of all administrative staff and IT admins:</p>
       <table>
         <thead>
           <tr>
@@ -132,6 +143,7 @@ export default function AdminDashboardPage() {
           ))}
         </tbody>
       </table>
+      </div>
     </main>
   );
 }
