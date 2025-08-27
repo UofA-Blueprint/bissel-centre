@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import { Bell, ArrowLeft, User, LogOut, ChevronDown } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
+import { auth } from "../services/firebase";
 
 interface User {
   name?: string;
@@ -37,13 +39,13 @@ export default function Header({
           const userData = await response.json();
           setUser(userData);
         } else {
-          // If we're in a protected route, redirect to login
-          router.push("/admin/login");
+          // Session is invalid, redirect to home
+          router.replace("/");
         }
       } catch (error) {
         console.error("Failed to fetch user:", error);
-        // If we're in a protected route, redirect to login
-        router.push("/admin/login");
+        // On error, redirect to home
+        router.replace("/");
       } finally {
         setLoading(false);
       }
@@ -69,13 +71,9 @@ export default function Header({
 
   const handleLogout = async () => {
     try {
-      const response = await fetch("/api/logout", {
-        method: "POST",
-      });
-
-      if (response.ok) {
-        router.push("/");
-      }
+      await fetch("/api/logout", { method: "POST" });
+      await signOut(auth);
+      router.replace("/");
     } catch (error) {
       console.error("Logout failed:", error);
     }
