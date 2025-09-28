@@ -9,7 +9,7 @@ import { signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/app/services/firebase";
 import { useRouter } from "next/navigation";
 import { hashITIDNumber } from "../../../../utils/hashITIDNumber";
-import "./style.css"
+import "./style.css";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -32,30 +32,29 @@ function AdminLoginCard() {
         setLoading(false);
         return;
       }
-      
-      signInWithCustomToken(auth, customToken)
-      .then (async () =>  {
-        console.log("Signed in")
-        const idToken = await auth.currentUser?.getIdToken();
-      // this call sets the session cookie
-        return fetch("/admin/api", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idToken }),
-        });
-      }).then((response) => {
-        console.log(response);
-        if (response.ok) {
-          console.log("Logged in");
-          router.push("/admin/dashboard");
-        } else {
-          console.log("Failed to log in");
-          setErrorMessage("Invalid Credentials");
-          setLoading(false);
-        }
-      });
 
-      
+      signInWithCustomToken(auth, customToken)
+        .then(async () => {
+          console.log("Signed in");
+          const idToken = await auth.currentUser?.getIdToken();
+          // this call sets the session cookie
+          return fetch("/admin/api", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ idToken }),
+          });
+        })
+        .then((response) => {
+          console.log(response);
+          if (response.ok) {
+            console.log("Logged in");
+            router.push("/admin/dashboard");
+          } else {
+            console.log("Failed to log in");
+            setErrorMessage("Invalid Credentials");
+            setLoading(false);
+          }
+        });
     } catch (error) {
       console.log(error);
       setErrorMessage("Invalid Credentials");
@@ -65,43 +64,90 @@ function AdminLoginCard() {
 
   const InfoModal = () => {
     return (
-      <div className="modal-container" style={{ display: showForgotPassword ? "flex" : "none" }}>
+      <div
+        className="modal-container"
+        style={{ display: showForgotPassword ? "flex" : "none" }}
+      >
         <div className="modal">
           <div className="modal-content">
             <h1>Forgot Credentials?</h1>
             <p>
-              Unfortunately, we cannot provide credentials for IT Admins. If you are an IT Admin and have lost your credentials, please contact the Bissel Centre IT department for assistance.
+              Unfortunately, we cannot provide credentials for IT Admins. If you
+              are an IT Admin and have lost your credentials, please contact the
+              Bissel Centre IT department for assistance.
               <br />
-              As of now, no such automation exists to reset or retrieve admin credentials.
+              As of now, no such automation exists to reset or retrieve admin
+              credentials.
             </p>
           </div>
-          <button className="modal-close" onClick={() => setShowForgotPassword(false)}>
+          <button
+            className="modal-close"
+            onClick={() => setShowForgotPassword(false)}
+          >
             Close
-            </button>
+          </button>
         </div>
       </div>
     );
-  }
+  };
   return (
-    <div style={{flex:2}}>
+    <div style={{ flex: 2 }}>
       <InfoModal />
-    <div className={`${inter.className} login-card`}>
-      <form action="" className={`login-form ${loading ? "opacity-50 pointer-events-none" : ""}`} onSubmit={handleSubmit}>
-        <h1 style={{fontSize: 24}}>Admin</h1>
-        <div style={{display: "flex", flexDirection: "column", gap: 32, marginTop: 32}}>
-          <div>
-            <label htmlFor="admin-id">Identification Number</label> <br />
-            <input className="text-box-entry" required={true} type="text" aria-label="admin-id" id="admin-id" name="admin-id" placeholder="Identification Number" onChange={(e) => setAdminId(e.target.value)} /> <br />
+      <div className={`${inter.className} login-card`}>
+        <form
+          action=""
+          className={`login-form ${
+            loading ? "opacity-50 pointer-events-none" : ""
+          }`}
+          onSubmit={handleSubmit}
+        >
+          <h1 style={{ fontSize: 24 }}>Admin</h1>
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              gap: 32,
+              marginTop: 32,
+            }}
+          >
+            <div>
+              <label htmlFor="admin-id">Identification Number</label> <br />
+              <input
+                className="text-box-entry"
+                required={true}
+                type="text"
+                aria-label="admin-id"
+                id="admin-id"
+                name="admin-id"
+                placeholder="Identification Number"
+                onChange={(e) => setAdminId(e.target.value)}
+              />{" "}
+              <br />
+            </div>
+            {/* ask for  forgot password ?*/}
+
+            <button
+              type="button"
+              style={{ float: "right" }}
+              onClick={() => setShowForgotPassword(true)}
+            >
+              Forgot credentials?
+            </button>
+            {errorMessage ? (
+              <div className="error-message">
+                <p>{errorMessage}</p>
+              </div>
+            ) : null}
+            <button
+              type="submit"
+              className="form-submit-button"
+              disabled={loading}
+              aria-label="sign-in"
+            >
+              Sign In
+            </button>
           </div>
-          {/* ask for  forgot password ?*/}
-      
-          <button type="button" style={{float: "right"}} onClick={() => setShowForgotPassword(true)}>Forgot credentials?</button>
-          {errorMessage? <div className="error-message">
-            <p>{errorMessage}</p>
-          </div> : null}
-          <button type="submit" className="form-submit-button" disabled={loading} aria-label="sign-in">Sign In</button>
-        </div>
-      </form>
+        </form>
       </div>
     </div>
   );
