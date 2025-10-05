@@ -6,19 +6,14 @@ import { signInWithEmailAndPassword } from "firebase/auth";
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
 import EyeClosedIcon from "../components/icons/EyeClosedIcon";
 import EyeOpenIcon from "../components/icons/EyeOpenIcon";
+import {
+  userFormFields,
+  passwordFields,
+  validateRegistrationForm,
+  RegistrationFormData,
+} from "@/utils/registrationUtils";
 
-type FormDataKeys = keyof typeof initialFormData;
-
-type FormField = {
-  id: string;
-  name: FormDataKeys;
-  label: string;
-  type: string;
-};
-
-const CONSOLE_DEBUG: boolean = true;
-
-const initialFormData = {
+const initialFormData: RegistrationFormData = {
   firstName: "",
   lastName: "",
   email: "",
@@ -27,7 +22,7 @@ const initialFormData = {
   confirmPassword: "",
 };
 
-const initialErrors = {
+const initialErrors: Record<string, string> = {
   firstName: "",
   lastName: "",
   email: "",
@@ -38,8 +33,8 @@ const initialErrors = {
 
 const AdminRegistration: React.FC = () => {
   const [formData, setFormData] =
-    useState<typeof initialFormData>(initialFormData);
-  const [errors, setErrors] = useState<typeof initialErrors>(initialErrors);
+    useState<RegistrationFormData>(initialFormData);
+  const [errors, setErrors] = useState<Record<string, string>>(initialErrors);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -49,53 +44,9 @@ const AdminRegistration: React.FC = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  function checkPasswordStrength(input: string): string {
-    const password = input.trim();
-
-    if (
-      password.length < 8 ||
-      !/[A-Z]/.test(password) ||
-      !/[a-z]/.test(password) ||
-      !/[0-9]/.test(password)
-    ) {
-      return "Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number";
-    }
-
-    return "";
-  }
-
   const validateForm = (): boolean => {
-    const newErrors = {
-      firstName: formData.firstName.trim() ? "" : "First name is required",
-      lastName: formData.lastName.trim() ? "" : "Last name is required",
-      identificationNumber: formData.identificationNumber.trim()
-        ? ""
-        : "Identification number is required",
-      email: formData.email.trim() ? "" : "Email is required",
-      confirmPassword: formData.confirmPassword.trim()
-        ? ""
-        : "Confirm password is required",
-      password: checkPasswordStrength(formData.password),
-    };
-
-    if (formData.firstName && !/^[A-Za-z]+$/.test(formData.firstName)) {
-      newErrors.firstName = "First name must contain only letters";
-    }
-
-    if (formData.lastName && !/^[A-Za-z]+$/.test(formData.lastName)) {
-      newErrors.lastName = "Last name must contain only letters";
-    }
-
-    if (
-      formData.password &&
-      formData.confirmPassword &&
-      formData.password !== formData.confirmPassword
-    ) {
-      newErrors.confirmPassword = "Passwords do not match";
-    }
-
+    const newErrors = validateRegistrationForm(formData);
     setErrors(newErrors);
-
     return Object.values(newErrors).every((error) => error === "");
   };
 
@@ -124,22 +75,17 @@ const AdminRegistration: React.FC = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        // Handle errors from the API (e.g., email in use, invalid ID)
         const apiError = data.error || "An unknown error occurred.";
         if (response.status === 409) {
-          // Email exists
           setErrors((prev) => ({ ...prev, email: apiError }));
         } else if (response.status === 403) {
-          // Invalid ID
           setErrors((prev) => ({ ...prev, identificationNumber: apiError }));
         } else {
-          // Generic error for other cases
           setErrors((prev) => ({ ...prev, confirmPassword: apiError }));
         }
         return;
       }
 
-      // Registration successful, now sign in the user
       await signInWithEmailAndPassword(auth, formData.email, formData.password);
 
       setFormData(initialFormData);
@@ -154,33 +100,6 @@ const AdminRegistration: React.FC = () => {
       setIsLoading(false);
     }
   };
-
-  const formFields: FormField[] = [
-    { id: "first-name", name: "firstName", label: "First Name", type: "text" },
-    { id: "last-name", name: "lastName", label: "Last Name", type: "text" },
-    {
-      id: "identification-number",
-      name: "identificationNumber",
-      label: "Identification Number",
-      type: "text",
-    },
-    { id: "email", name: "email", label: "Email Address", type: "text" },
-  ];
-
-  const passwordFields: FormField[] = [
-    {
-      id: "password",
-      name: "password",
-      label: "Create Password",
-      type: "password",
-    },
-    {
-      id: "confirmPassword",
-      name: "confirmPassword",
-      label: "Confirm Password",
-      type: "password",
-    },
-  ];
 
   return (
     <div className="flex flex-col items-center w-full pt-10">
@@ -208,7 +127,7 @@ const AdminRegistration: React.FC = () => {
           onSubmit={handleSubmit}
         >
           <div className="grid grid-cols-[300px] lg:grid-cols-[300px_300px] gap-x-6">
-            {formFields.map((field) => (
+            {userFormFields.map((field) => (
               <div key={field.id} className="flex flex-col">
                 <label htmlFor={field.id} className="font-bold pb-2">
                   {field.label} <span className="text-red-600">*</span>
@@ -221,7 +140,7 @@ const AdminRegistration: React.FC = () => {
                   className={`p-2 border shadow-sm rounded-xl ${
                     errors[field.name] ? "border-red-600" : "border-gray-200"
                   }`}
-                  value={formData[field.name]}
+                  value={formData[field.name as keyof RegistrationFormData]}
                   onChange={handleChange}
                 />
                 <div className="min-h-5">
@@ -252,9 +171,9 @@ const AdminRegistration: React.FC = () => {
                     className={`p-2 border shadow-sm rounded-xl w-full ${
                       errors[field.name] ? "border-red-600" : "border-gray-200"
                     }`}
-                    value={formData[field.name]}
+                    value={formData[field.name as keyof RegistrationFormData]}
                     onChange={handleChange}
-                  ></input>
+                  />
                   <button
                     type="button"
                     onClick={() => {

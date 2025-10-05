@@ -4,8 +4,14 @@ import Image from "next/image";
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
 import EyeClosedIcon from "@/app/components/icons/EyeClosedIcon";
 import EyeOpenIcon from "@/app/components/icons/EyeOpenIcon";
+import {
+  userFormFields,
+  passwordFields,
+  validateRegistrationForm,
+  RegistrationFormData,
+} from "@/utils/registrationUtils";
 
-const initialFormData = {
+const initialFormData: RegistrationFormData = {
   firstName: "",
   lastName: "",
   email: "",
@@ -14,7 +20,7 @@ const initialFormData = {
   confirmPassword: "",
 };
 
-const initialErrors = {
+const initialErrors: Record<string, string> = {
   firstName: "",
   lastName: "",
   email: "",
@@ -24,59 +30,22 @@ const initialErrors = {
 };
 
 const AdminRegisterPage: React.FC = () => {
-  const [formData, setFormData] = useState(initialFormData);
-  const [errors, setErrors] = useState(initialErrors);
+  const [formData, setFormData] =
+    useState<RegistrationFormData>(initialFormData);
+  const [errors, setErrors] = useState<Record<string, string>>(initialErrors);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  function checkPasswordStrength(input: string): string {
-    const password = input.trim();
-    if (
-      password.length < 8 ||
-      !/[A-Z]/.test(password) ||
-      !/[a-z]/.test(password) ||
-      !/[0-9]/.test(password)
-    ) {
-      return "Password must be at least 8 characters long and contain at least one uppercase letter, one lowercase letter, and one number";
-    }
-    return "";
-  }
-
-  const validateForm = (): boolean => {
-    const newErrors = {
-      firstName: formData.firstName.trim() ? "" : "First name is required",
-      lastName: formData.lastName.trim() ? "" : "Last name is required",
-      identificationNumber: formData.identificationNumber.trim()
-        ? ""
-        : "Identification number is required",
-      email: formData.email.trim() ? "" : "Email is required",
-      confirmPassword: formData.confirmPassword.trim()
-        ? ""
-        : "Confirm password is required",
-      password: checkPasswordStrength(formData.password),
-    };
-
-    if (formData.firstName && !/^[A-Za-z]+$/.test(formData.firstName)) {
-      newErrors.firstName = "First name must contain only letters";
-    }
-    if (formData.lastName && !/^[A-Za-z]+$/.test(formData.lastName)) {
-      newErrors.lastName = "Last name must contain only letters";
-    }
-    if (
-      formData.password &&
-      formData.confirmPassword &&
-      formData.password !== formData.confirmPassword
-    ) {
-      newErrors.confirmPassword = "Passwords do not match";
-    }
-    setErrors(newErrors);
-    return Object.values(newErrors).every((error) => error === "");
-  };
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  const validateForm = (): boolean => {
+    const newErrors = validateRegistrationForm(formData);
+    setErrors(newErrors);
+    return Object.values(newErrors).every((error) => error === "");
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -90,7 +59,7 @@ const AdminRegisterPage: React.FC = () => {
       // TODO: Replace with actual registration logic
       setFormData(initialFormData);
       setDialogOpen(true);
-    } catch (error) {
+    } catch {
       setErrors((prev) => ({
         ...prev,
         confirmPassword: "Failed to register. Please try again.",
@@ -120,32 +89,7 @@ const AdminRegisterPage: React.FC = () => {
           onSubmit={handleSubmit}
         >
           <div className="grid grid-cols-[300px] lg:grid-cols-[300px_300px] gap-x-6">
-            {[
-              {
-                id: "first-name",
-                name: "firstName",
-                label: "First Name",
-                type: "text",
-              },
-              {
-                id: "last-name",
-                name: "lastName",
-                label: "Last Name",
-                type: "text",
-              },
-              {
-                id: "identification-number",
-                name: "identificationNumber",
-                label: "Identification Number",
-                type: "text",
-              },
-              {
-                id: "email",
-                name: "email",
-                label: "Email Address",
-                type: "text",
-              },
-            ].map((field) => (
+            {userFormFields.map((field) => (
               <div key={field.id} className="flex flex-col">
                 <label htmlFor={field.id} className="font-bold pb-2">
                   {field.label} <span className="text-red-600">*</span>
@@ -162,7 +106,7 @@ const AdminRegisterPage: React.FC = () => {
                   className={`p-2 border shadow-sm rounded-xl ${
                     errors[field.name] ? "border-red-600" : "border-gray-200"
                   }`}
-                  value={formData[field.name]}
+                  value={formData[field.name as keyof RegistrationFormData]}
                   onChange={handleChange}
                 />
                 <div className="min-h-5">
@@ -174,20 +118,7 @@ const AdminRegisterPage: React.FC = () => {
                 </div>
               </div>
             ))}
-            {[
-              {
-                id: "password",
-                name: "password",
-                label: "Enter the user's password",
-                type: "password",
-              },
-              {
-                id: "confirmPassword",
-                name: "confirmPassword",
-                label: "Confirm the user's password",
-                type: "password",
-              },
-            ].map((field) => (
+            {passwordFields.map((field) => (
               <div key={field.id} className="flex flex-col">
                 <label htmlFor={field.id} className="font-bold pb-2">
                   {field.label} <span className="text-red-600">*</span>
@@ -206,7 +137,7 @@ const AdminRegisterPage: React.FC = () => {
                     className={`p-2 border shadow-sm rounded-xl w-full ${
                       errors[field.name] ? "border-red-600" : "border-gray-200"
                     }`}
-                    value={formData[field.name]}
+                    value={formData[field.name as keyof RegistrationFormData]}
                     onChange={handleChange}
                   />
                   <button
