@@ -2,7 +2,7 @@
 
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { cookies } from "next/headers";
-import { hashITIDNumber } from "../../../utils/hashITIDNumber";
+import { hashITIDNumber } from "@/utils/hashITIDNumber";
 
 export const handleITAdminLogin = async (IdentificationNumber: string) => {
   // IdentificatioNumbe is same as the UID of the firebase user

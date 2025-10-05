@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hashITIDNumber } from "../../../../utils/hashITIDNumber";
+import { hashITIDNumber } from "@/utils/hashITIDNumber";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import admin from "firebase-admin";
 

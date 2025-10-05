@@ -8,7 +8,6 @@ import firebase from "firebase/compat/app";
 import { signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/app/services/firebase";
 import { useRouter } from "next/navigation";
-import { hashITIDNumber } from "../../../../utils/hashITIDNumber";
 import "./style.css";
 
 const inter = Inter({ subsets: ["latin"] });
