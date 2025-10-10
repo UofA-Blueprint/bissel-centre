@@ -43,13 +43,20 @@ export interface RegistrationFormData {
   lastName: string;
   identificationNumber: string;
   email: string;
+}
+
+export interface AdminRegistrationFormData extends RegistrationFormData {
   password: string;
   confirmPassword: string;
 }
 
 export function validateRegistrationForm(
-  formData: RegistrationFormData
+  formData: RegistrationFormData &
+    Partial<Pick<AdminRegistrationFormData, "password" | "confirmPassword">>
 ): Record<string, string> {
+  const password = (formData.password ?? "").trim();
+  const confirmPassword = (formData.confirmPassword ?? "").trim();
+
   const errors: Record<string, string> = {
     firstName: formData.firstName.trim() ? "" : "First name is required",
     lastName: formData.lastName.trim() ? "" : "Last name is required",
@@ -57,10 +64,13 @@ export function validateRegistrationForm(
       ? ""
       : "Identification number is required",
     email: formData.email.trim() ? "" : "Email is required",
-    confirmPassword: formData.confirmPassword.trim()
-      ? ""
-      : "Confirm password is required",
-    password: checkPasswordStrength(formData.password),
+
+    password: password ? checkPasswordStrength(password) : "",
+    confirmPassword: password
+      ? confirmPassword
+        ? ""
+        : "Confirm password is required"
+      : "",
   };
 
   if (formData.firstName && !/^[A-Za-z]+$/.test(formData.firstName)) {
@@ -69,11 +79,7 @@ export function validateRegistrationForm(
   if (formData.lastName && !/^[A-Za-z]+$/.test(formData.lastName)) {
     errors.lastName = "Last name must contain only letters";
   }
-  if (
-    formData.password &&
-    formData.confirmPassword &&
-    formData.password !== formData.confirmPassword
-  ) {
+  if (password && confirmPassword && password !== confirmPassword) {
     errors.confirmPassword = "Passwords do not match";
   }
   return errors;

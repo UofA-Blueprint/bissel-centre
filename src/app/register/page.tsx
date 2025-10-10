@@ -10,10 +10,10 @@ import {
   userFormFields,
   passwordFields,
   validateRegistrationForm,
-  RegistrationFormData,
+  AdminRegistrationFormData,
 } from "@/utils/registrationUtils";
 
-const initialFormData: RegistrationFormData = {
+const initialFormData: AdminRegistrationFormData = {
   firstName: "",
   lastName: "",
   email: "",
@@ -33,7 +33,7 @@ const initialErrors: Record<string, string> = {
 
 const AdminRegistration: React.FC = () => {
   const [formData, setFormData] =
-    useState<RegistrationFormData>(initialFormData);
+    useState<AdminRegistrationFormData>(initialFormData);
   const [errors, setErrors] = useState<Record<string, string>>(initialErrors);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -140,7 +140,9 @@ const AdminRegistration: React.FC = () => {
                   className={`p-2 border shadow-sm rounded-xl ${
                     errors[field.name] ? "border-red-600" : "border-gray-200"
                   }`}
-                  value={formData[field.name as keyof RegistrationFormData]}
+                  value={
+                    formData[field.name as keyof AdminRegistrationFormData]
+                  }
                   onChange={handleChange}
                 />
                 <div className="min-h-5">
@@ -171,7 +173,9 @@ const AdminRegistration: React.FC = () => {
                     className={`p-2 border shadow-sm rounded-xl w-full ${
                       errors[field.name] ? "border-red-600" : "border-gray-200"
                     }`}
-                    value={formData[field.name as keyof RegistrationFormData]}
+                    value={
+                      formData[field.name as keyof AdminRegistrationFormData]
+                    }
                     onChange={handleChange}
                   />
                   <button
