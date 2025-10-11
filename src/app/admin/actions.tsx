@@ -78,9 +78,13 @@ export const createAdmin = async (
 
     console.log("Created user");
     return { user, rawId };
-  } catch (error) {
-    console.error("createAdmin error:", error);
-    return { user: null, rawId: null };
+  } catch (error: any) {
+    console.error(
+      "createAdmin error:",
+      error?.code ?? "no-code",
+      error?.message ?? error
+    );
+    throw error;
   }
 };
 

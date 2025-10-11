@@ -64,10 +64,20 @@ const AdminRegisterPage: React.FC = () => {
       const data = await res.json();
 
       if (!res.ok) {
-        setErrors((prev) => ({
-          ...prev,
-          identificationNumber: data?.error ?? "Registration failed",
-        }));
+        if (
+          data?.error ===
+          "The email address is already in use by another account."
+        ) {
+          setErrors((prev) => ({
+            ...prev,
+            email: "Email already in use",
+          }));
+        } else {
+          setErrors((prev) => ({
+            ...prev,
+            identificationNumber: data?.error ?? "Registration failed",
+          }));
+        }
         return;
       }
 
@@ -169,6 +179,12 @@ const AdminRegisterPage: React.FC = () => {
             <Description className="mt-2 text-sm text-gray-500">
               Admin registration successful!
             </Description>
+            <div className="mt-3 text-sm text-yellow-800 bg-yellow-50 p-3 rounded">
+              <strong>Important:</strong> This is the only time you will see the
+              generated ID. If you navigate away from this page you will not be
+              able to retrieve it again. Copy it now and send it securely to the
+              new user.
+            </div>
 
             {generatedUserId ? (
               <div className="mt-4">
