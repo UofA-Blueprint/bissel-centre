@@ -1,19 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
+import { cookies } from "next/headers";
 
 export async function POST(request: NextRequest) {
   try {
-    const { uid } = await request.json();
+    // Optional: inspect cookies for debugging
+    const cookieStore = await cookies();
+    console.log("Cookies:", cookieStore.getAll());
 
-    if (!uid) {
-      return NextResponse.json({ error: "Missing UID" }, { status: 400 });
+    // Expect Authorization: Bearer <ID_TOKEN>
+    const authHeader = request.headers.get("authorization") || "";
+    const [scheme, token] = authHeader.split(" ");
+
+    if (scheme?.toLowerCase() !== "bearer" || !token) {
+      return NextResponse.json(
+        { error: "Missing or invalid Authorization header" },
+        { status: 401 }
+      );
     }
 
     const admin = await initAdmin();
+
+    // Verify the ID token to derive a trusted UID
+    const decoded = await admin.auth().verifyIdToken(token, true);
+    const trustedUid = decoded.uid;
+
     const db = admin.firestore();
 
     // Check if staff member exists in the administrative_staff collection
-    const staffDocRef = db.collection("administrative_staff").doc(uid);
+    const staffDocRef = db.collection("administrative_staff").doc(trustedUid);
     const staffDoc = await staffDocRef.get();
 
     if (!staffDoc.exists) {
@@ -38,9 +53,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Staff authorization error:", error);
+    // If token verification fails, respond with 401
     return NextResponse.json(
       { error: "Failed to authorize staff member" },
-      { status: 500 }
+      { status: 401 }
     );
   }
 }

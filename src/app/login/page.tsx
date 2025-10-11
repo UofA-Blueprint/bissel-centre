@@ -35,22 +35,22 @@ export default function StaffLoginPage() {
         password
       );
 
-      // Additional check: verify staff exists in Firestore
+      // Get the ID token
+      const idToken = await userCredential.user.getIdToken();
+
+      // Additional check: verify staff exists in Firestore using ID token (no UID in body)
       const authResponse = await fetch("/api/authorise-staff", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify({ uid: userCredential.user.uid }),
       });
 
       if (!authResponse.ok) {
         const authError = await authResponse.json();
         throw new Error(authError.error || "Staff authorization failed");
       }
-
-      // Get the ID token
-      const idToken = await userCredential.user.getIdToken();
 
       // Create session cookie via API
       const response = await fetch("/api/session-login", {
