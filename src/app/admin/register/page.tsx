@@ -29,6 +29,7 @@ const AdminRegisterPage: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [generatedUserId, setGeneratedUserId] = useState<string>("");
+  const [copied, setCopied] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -47,17 +48,52 @@ const AdminRegisterPage: React.FC = () => {
       setIsLoading(false);
       return;
     }
+
     try {
-      // TODO: Replace with actual registration logic
+      const res = await fetch("/admin/api/create-admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formData.email,
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          identificationNumber: formData.identificationNumber,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrors((prev) => ({
+          ...prev,
+          identificationNumber: data?.error ?? "Registration failed",
+        }));
+        return;
+      }
+
+      // server returns { uid, rawId }
+      setGeneratedUserId(data.rawId ?? "");
       setFormData(initialFormData);
       setDialogOpen(true);
-    } catch {
+    } catch (err) {
+      console.error("Create admin failed:", err);
       setErrors((prev) => ({
         ...prev,
-        confirmPassword: "Failed to register. Please try again.",
+        identificationNumber: "Failed to register. Please try again.",
       }));
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const copyToClipboard = async () => {
+    if (!generatedUserId) return;
+    try {
+      await navigator.clipboard.writeText(generatedUserId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Copy failed", err);
     }
   };
 
@@ -133,12 +169,35 @@ const AdminRegisterPage: React.FC = () => {
             <Description className="mt-2 text-sm text-gray-500">
               Admin registration successful!
             </Description>
-            <button
-              className="mt-4 p-2 bg-blue-500 text-white rounded"
-              onClick={() => setDialogOpen(false)}
-            >
-              Close
-            </button>
+
+            {generatedUserId ? (
+              <div className="mt-4">
+                <div className="font-mono bg-gray-100 p-3 rounded break-all">
+                  {generatedUserId}
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    className="px-3 py-1 bg-blue-500 text-white rounded"
+                    onClick={copyToClipboard}
+                  >
+                    {copied ? "Copied!" : "Copy ID"}
+                  </button>
+                  <button
+                    className="px-3 py-1 bg-gray-200 rounded"
+                    onClick={() => setDialogOpen(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                className="mt-4 p-2 bg-blue-500 text-white rounded"
+                onClick={() => setDialogOpen(false)}
+              >
+                Close
+              </button>
+            )}
           </div>
         </div>
       </Dialog>
