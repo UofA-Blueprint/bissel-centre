@@ -3,17 +3,24 @@
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { cookies } from "next/headers";
 import { hashITIDNumber } from "@/utils/hashITIDNumber";
+import { randomBytes } from "crypto";
 
 export const handleITAdminLogin = async (IdentificationNumber: string) => {
-  // IdentificatioNumbe is same as the UID of the firebase user
   const admin = await initAdmin();
-
   try {
-    const hashed_uid = hashITIDNumber(IdentificationNumber); // Example IT ID number, replace with actual logic
+    const hashed_uid = hashITIDNumber(IdentificationNumber);
     const user = await admin.auth().getUser(hashed_uid);
+
+    // REQUIRE admin custom claim
+    if (user.customClaims?.admin !== true) {
+      console.warn("Non-admin attempted admin login:", hashed_uid);
+      return null;
+    }
+
     const token = await admin.auth().createCustomToken(user.uid);
     return token;
   } catch (error) {
+    console.error("handleITAdminLogin error:", error);
     return null;
   }
 };
@@ -34,33 +41,55 @@ export async function getAdminSession(): Promise<null> {
   }
 }
 
-export const createAdmin = async () => {
-  console.log("Creating admin");
+export const createAdmin = async (
+  email: string,
+  displayName: string
+): Promise<{
+  user: import("firebase-admin").auth.UserRecord | null;
+  rawId: string | null;
+}> => {
   const admin = await initAdmin();
 
-  const hashed_uid = hashITIDNumber("ABC123"); // Example IT ID number, replace with actual logic
-  const user = await admin.auth().createUser({
-    email: "ABC123@bissel.com", // an identifier
-    password: "secret",
-    displayName: "Steve Jobs",
-    uid: hashed_uid,
-  });
+  // helper: secure alphanumeric (A-Z0-9) generator, exact length
+  const generateRawId = (length = 10) => {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const bytes = randomBytes(length);
+    let out = "";
+    for (let i = 0; i < length; i++) {
+      out += chars[bytes[i] % chars.length];
+    }
+    return out;
+  };
 
-  const userData = user;
-  console.log(userData);
+  try {
+    const rawId = generateRawId();
+    const uid = hashITIDNumber(rawId);
 
-  console.log("Attempting to make user admin");
-  const res = await admin
-    .auth()
-    .setCustomUserClaims(hashed_uid, { admin: true });
-  console.log(res);
+    const createReq: import("firebase-admin").auth.CreateRequest = {
+      uid,
+      email,
+      displayName,
+    };
+
+    const user = await admin.auth().createUser(createReq);
+
+    // set admin claim
+    await admin.auth().setCustomUserClaims(uid, { admin: true });
+
+    console.log("Created user");
+    return { user, rawId };
+  } catch (error) {
+    console.error("createAdmin error:", error);
+    return { user: null, rawId: null };
+  }
 };
 
 export const checkAdmin = async (identificationNumber: string) => {
   const admin = await initAdmin();
   console.log("Admin initialized:", admin);
+  const hashedId = hashITIDNumber(identificationNumber);
   try {
-    const user = await admin.auth().getUser(identificationNumber);
+    const user = await admin.auth().getUser(hashedId);
     console.log("User data:", user);
     return user.customClaims?.admin === true;
   } catch (error) {
