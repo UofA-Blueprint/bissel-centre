@@ -4,7 +4,6 @@ import React, { useState } from "react";
 import { Inter } from "next/font/google";
 import LogoHeader from "@/app/components/LogoHeader";
 import { handleITAdminLogin } from "@/app/admin/actions";
-import firebase from "firebase/compat/app";
 import { signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/app/services/firebase";
 import { useRouter } from "next/navigation";
@@ -37,7 +36,7 @@ function AdminLoginCard() {
           console.log("Signed in");
           const idToken = await auth.currentUser?.getIdToken();
           // this call sets the session cookie
-          return fetch("/admin/api", {
+          return fetch("/admin/api/sign-in", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ idToken }),
@@ -172,7 +171,7 @@ function AdminLoginCard() {
 export default function AdminLogin() {
   return (
     <div className="hcenter center-window">
-      <LogoHeader />'
+      <LogoHeader />
       <AdminLoginCard />
     </div>
   );
