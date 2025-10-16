@@ -3,7 +3,6 @@
 import React, { useState } from "react";
 import { Inter } from "next/font/google";
 import LogoHeader from "@/app/components/LogoHeader";
-import { handleITAdminLogin } from "@/app/admin/actions";
 import { signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/app/services/firebase";
 import { useRouter } from "next/navigation";
@@ -20,41 +19,60 @@ function AdminLoginCard() {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     setErrorMessage("");
     setLoading(true);
-    e.preventDefault();
+
     try {
-      const customToken = await handleITAdminLogin(adminId);
-      if (customToken === null) {
+      const identificationNumber = adminId.trim();
+      if (!identificationNumber) {
+        setErrorMessage("Please enter your Identification Number");
+        setLoading(false);
+        return;
+      }
+
+      // 1) request custom token from server route
+      const tokenResp = await fetch("/admin/api/get-custom-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identificationNumber: adminId }),
+      });
+
+      if (!tokenResp.ok) {
         setErrorMessage("Invalid Credentials");
         setLoading(false);
         return;
       }
 
-      signInWithCustomToken(auth, customToken)
-        .then(async () => {
-          console.log("Signed in");
-          const idToken = await auth.currentUser?.getIdToken();
-          // this call sets the session cookie
-          return fetch("/admin/api/sign-in", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ idToken }),
-          });
-        })
-        .then((response) => {
-          console.log(response);
-          if (response.ok) {
-            console.log("Logged in");
-            router.push("/admin/dashboard");
-          } else {
-            console.log("Failed to log in");
-            setErrorMessage("Invalid Credentials");
-            setLoading(false);
-          }
-        });
+      const { customToken } = await tokenResp.json();
+      if (!customToken) {
+        setErrorMessage("Invalid Credentials");
+        setLoading(false);
+        return;
+      }
+
+      // 2) sign in client with custom token
+      await signInWithCustomToken(auth, customToken);
+
+      // 3) exchange idToken for session cookie via existing sign-in route
+      const idToken = await auth.currentUser?.getIdToken();
+      const sessionResp = await fetch("/admin/api/sign-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+
+      if (!sessionResp.ok) {
+        setErrorMessage("Failed to establish session");
+        setLoading(false);
+        return;
+      }
+
+      // success -> navigate
+      setLoading(false);
+      router.push("/admin/dashboard");
     } catch (error) {
-      console.log(error);
+      console.error(error);
       setErrorMessage("Invalid Credentials");
       setLoading(false);
     }
@@ -150,23 +168,6 @@ function AdminLoginCard() {
     </div>
   );
 }
-
-// export async function getServerSideProps({ req }) {
-//   const cookies = parse(req.headers.cookie || '');
-//   const session = cookies.session || '';
-
-//   try {
-//     const decodedToken = await getAuth().verifySessionCookie(session, true);
-//     return { props: { user: decodedToken } };
-//   } catch (error) {
-//     return {
-//       redirect: {
-//         destination: '/login',
-//         permanent: false,
-//       },
-//     };
-//   }
-// }
 
 export default function AdminLogin() {
   return (
