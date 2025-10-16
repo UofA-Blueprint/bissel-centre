@@ -25,7 +25,9 @@ export const handleITAdminLogin = async (IdentificationNumber: string) => {
   }
 };
 
-export async function getAdminSession(): Promise<null> {
+export async function getAdminSession(): Promise<
+  null | import("firebase-admin").auth.DecodedIdToken
+> {
   const cookie = await cookies();
   const sessionCookie = cookie.get("session")?.value;
   if (!sessionCookie) return null;
@@ -90,11 +92,9 @@ export const createAdmin = async (
 
 export const checkAdmin = async (identificationNumber: string) => {
   const admin = await initAdmin();
-  console.log("Admin initialized:", admin);
   const hashedId = hashITIDNumber(identificationNumber);
   try {
     const user = await admin.auth().getUser(hashedId);
-    console.log("User data:", user);
     return user.customClaims?.admin === true;
   } catch (error) {
     console.error("Error checking admin status:", error);
