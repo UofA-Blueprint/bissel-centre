@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdmin, checkAdmin } from "@/app/admin/actions";
+import { initAdmin } from "@/app/services/firebaseAdmin";
+import { hashITIDNumber } from "@/utils/hashITIDNumber";
+import admin from "firebase-admin";
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,6 +34,18 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+
+    const createdBy = hashITIDNumber(identificationNumber.trim());
+    const app = await initAdmin();
+    const db = admin.firestore(app);
+    await db.collection("it_admins").doc(result.user.uid).set({
+      uid: result.user.uid,      // hashed Identification Number
+      firstName,
+      lastName,
+      email,
+      createdBy,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
 
     return NextResponse.json({
       success: true,

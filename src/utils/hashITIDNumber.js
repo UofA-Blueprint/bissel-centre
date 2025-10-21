@@ -9,6 +9,7 @@ export const hashITIDNumber = (idNumber) => {
     throw new Error("Invalid ID number provided for hashing.");
   }
 
+  const normalized = idNumber.trim().toUpperCase();
   const pepper = process.env.IT_ID_HASH_PEPPER;
 
   if (!pepper) {
@@ -17,7 +18,7 @@ export const hashITIDNumber = (idNumber) => {
     );
   }
 
-  const stringToHash = `${idNumber}${pepper}`;
+  const stringToHash = `${normalized}${pepper}`;
 
   return crypto.createHash("sha256").update(stringToHash).digest("hex");
 };
