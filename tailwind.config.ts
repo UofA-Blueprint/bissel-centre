@@ -12,6 +12,8 @@ export default {
         background: "var(--background)",
         foreground: "var(--foreground)",
         primary: "#1BC0D6",
+        lightGrey: "#FAFAFA",
+        offWhite: "#F7F7F4",
       },
       fontFamily: {
         sans: [
