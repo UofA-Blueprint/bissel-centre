@@ -13,6 +13,17 @@ export default {
         foreground: "var(--foreground)",
         primary: "#1BC0D6",
       },
+      fontFamily: {
+        sans: [
+          "var(--font-inter)",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "Segoe UI",
+          "Helvetica Neue",
+          "Arial",
+        ],
+      },
     },
   },
   plugins: [],
