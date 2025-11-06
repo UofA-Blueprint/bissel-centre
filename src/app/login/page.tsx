@@ -38,6 +38,20 @@ export default function StaffLoginPage() {
       // Get the ID token
       const idToken = await userCredential.user.getIdToken();
 
+      // Additional check: verify staff exists in Firestore using ID token (no UID in body)
+      const authResponse = await fetch("/api/authorise-staff", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+
+      if (!authResponse.ok) {
+        const authError = await authResponse.json();
+        throw new Error(authError.error || "Staff authorization failed");
+      }
+
       // Create session cookie via API
       const response = await fetch("/api/session-login", {
         method: "POST",
@@ -75,6 +89,16 @@ export default function StaffLoginPage() {
           setError("Too many failed attempts. Please try again later.");
         } else if (err.message.includes("Failed to create session")) {
           setError("Login failed. Please try again.");
+        } else if (
+          err.message.includes("Staff member not found in administrative staff")
+        ) {
+          setError(
+            "Access denied. This login is for administrative staff only."
+          );
+        } else if (err.message.includes("Staff authorization failed")) {
+          setError(
+            "Access denied. Please contact IT Admin if you need assistance."
+          );
         } else {
           setError("Invalid email or password. Please try again.");
         }

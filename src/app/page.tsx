@@ -39,7 +39,11 @@ export default function Home() {
           <button
             className="bg-primary text-white px-8 sm:px-12 md:px-16 py-2 rounded-lg shadow-md hover:bg-opacity-50 transition-all duration-200 w-full sm:w-auto"
             onClick={() => {
+              if(isAdmin){
               router.push("/admin/register");
+              } else {
+                router.push("/register")
+              }
             }}
           >
             Register

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
+import { auth } from "../services/firebase";
 import Image from "next/image";
 
 export default function DashboardPage() {
@@ -9,7 +11,7 @@ export default function DashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Fetch user information from the session
+    // Fetch user information from the session and validate access
     const fetchUserInfo = async () => {
       try {
         const response = await fetch("/api/user-session");
@@ -19,24 +21,25 @@ export default function DashboardPage() {
             // Use email as fallback, or you can set a display name if available
             setUserName(userData.email.split("@")[0]); // Use part before @ as name
           }
+        } else {
+          // Session is invalid, redirect to home
+          router.replace("/");
         }
       } catch (error) {
         console.error("Failed to fetch user info:", error);
+        // On error, redirect to home
+        router.replace("/");
       }
     };
 
     fetchUserInfo();
-  }, []);
+  }, [router]);
 
   const handleLogout = async () => {
     try {
-      const response = await fetch("/api/logout", {
-        method: "POST",
-      });
-
-      if (response.ok) {
-        router.push("/login");
-      }
+      await fetch("/api/logout", { method: "POST" });
+      await signOut(auth);
+      router.replace("/");
     } catch (error) {
       console.error("Logout failed:", error);
     }

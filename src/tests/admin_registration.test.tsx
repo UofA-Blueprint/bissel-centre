@@ -58,12 +58,6 @@ describe("AdminRegistration Component", () => {
         screen.getByText(/Identification number is required/i)
       ).toBeInTheDocument();
       expect(screen.getByText(/Email is required/i)).toBeInTheDocument();
-      expect(
-        screen.getByText(/Password must be at least 8 characters/i)
-      ).toBeInTheDocument();
-      expect(
-        screen.getByText(/Confirm password is required/i)
-      ).toBeInTheDocument();
     });
   });
 

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hashITIDNumber } from "../../../../utils/hashITIDNumber";
+import { hashITIDNumber } from "@/utils/hashITIDNumber";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import admin from "firebase-admin";
+import { checkAdmin } from "@/app/admin/actions";
 
-const IT_ADMIN_COLLECTION = "it_admin";
 const ADMIN_STAFF_COLLECTION = "administrative_staff";
 
 export async function POST(request: NextRequest) {
@@ -29,21 +29,16 @@ export async function POST(request: NextRequest) {
     const adminDb = admin.firestore(app);
     const adminAuth = admin.auth(app);
 
-    // 2. Verify the IT Admin Identification Number
-    const hashedID = hashITIDNumber(identificationNumber);
-    const snapshot = await adminDb
-      .collection(IT_ADMIN_COLLECTION)
-      .where("hashedIdentificationNumber", "==", hashedID)
-      .limit(1)
-      .get();
-
-    if (snapshot.empty) {
+    // 2. Verify the IT Admin Identification Number using checkAdmin()
+    const isAdmin = await checkAdmin(identificationNumber);
+    if (!isAdmin) {
       return NextResponse.json(
-        { error: "Invalid identification number" },
+        { error: "Invalid identification number or not authorized" },
         { status: 403 }
       );
     }
-    const itAdminDoc = snapshot.docs[0];
+
+    const hashedID = hashITIDNumber(identificationNumber);
 
     // 3. Create the user in Firebase Auth
     const userRecord = await adminAuth.createUser({
@@ -57,7 +52,7 @@ export async function POST(request: NextRequest) {
       firstName,
       lastName,
       email,
-      createdBy: itAdminDoc.id, // Store the Firestore document ID of the IT admin
+      createdBy: hashedID, // store the admin uid (hashed ID) who created this staff user
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
