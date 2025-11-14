@@ -4,16 +4,23 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "../../services/firebase";
-import { deleteUser, getAdminSession, listUsers } from "../actions";
+import {
+    deleteUser,
+    getAdminSession,
+    getAdministrativeStaff,
+} from "../actions";
 import Fuse from "fuse.js"; // Import Fuse.js for fuzzy search
 import React from "react";
 import Image from "next/image";
 
+
 interface User {
-    uid: string;
-    email: string | undefined;
-    displayName: string | undefined;
-    customClaims: Record<string, unknown> | undefined;
+    id: string;
+    createdAt: Date;
+    createdBy: string;
+    email: string;
+    firstName: string;
+    secondName: string;
 }
 
 interface Session {
@@ -30,7 +37,7 @@ function AdminUserCard({
     onDelete: () => void;
     onEdit: () => void;
 }) {
-    const isSuperAdmin = user.customClaims?.admin === true;
+    // const isSuperAdmin = user.customClaims?.admin === true;
 
     return (
         <div className="bg-white rounded-xl shadow-sm px-6 py-4 flex items-center justify-between w-full max-w-3xl hover:shadow-md transition">
@@ -39,8 +46,7 @@ function AdminUserCard({
                 {/* Avatar */}
                 <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
                     <span className="text-lg font-semibold text-gray-700">
-                        {user.displayName?.[0] ||
-                            user.email?.[0]?.toUpperCase()}
+                        {user.firstName?.[0] || user.email?.[0]?.toUpperCase()}
                     </span>
                 </div>
 
@@ -48,13 +54,13 @@ function AdminUserCard({
                 <div className="flex flex-col">
                     <div className="flex items-center gap-2">
                         <span className="text-lg font-semibold text-gray-900 truncate">
-                            {user.displayName || "Unnamed Admin"}
+                            {user.firstName + " " + user.secondName}
                         </span>
-                        {isSuperAdmin && (
+                        {/* {isSuperAdmin && (
                             <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">
                                 IT Admin
                             </span>
-                        )}
+                        )} */}
                     </div>
                     <span className="text-sm text-gray-500 truncate">
                         {user.email || "N/A"}
@@ -81,7 +87,7 @@ function AdminUserCard({
                 {/* Delete Button */}
                 <button
                     onClick={onDelete}
-                    className="flex items-center justify-center w-9 h-9 rounded-full bg-red-50 hover:bg-red-100 transition"
+                    className="flex items-center justify-center w-9 h-9 rounded-full bg-blue-50 hover:bg-blue-100 transition"
                     title="Delete"
                 >
                     <Image
@@ -89,7 +95,6 @@ function AdminUserCard({
                         alt="Delete"
                         width={16}
                         height={16}
-                        className="text-red-500"
                     />
                 </button>
             </div>
@@ -128,7 +133,7 @@ export default function AdminDashboardPage() {
                 setSession(sessionData);
 
                 // Fetch users data
-                const users = await listUsers();
+                const users = await getAdministrativeStaff();
                 // if (!usersResponse.ok) {
                 //   throw new Error("Failed to fetch users");
                 // }
@@ -168,7 +173,7 @@ export default function AdminDashboardPage() {
             await deleteUser(uid);
 
             // Remove user from local state
-            setUsers(users.filter((user) => user.uid !== uid));
+            setUsers(users.filter((user) => user.id !== uid));
         } catch (err) {
             setError(
                 err instanceof Error ? err.message : "Failed to delete user"
@@ -183,7 +188,7 @@ export default function AdminDashboardPage() {
             return;
         }
         const fuse = new Fuse(users, {
-            keys: ["email", "displayName"],
+            keys: ["email", "firstName", "secondName"],
             threshold: 0.3,
         });
         const results = fuse.search(searchQuery).map((result) => result.item);
@@ -257,9 +262,9 @@ export default function AdminDashboardPage() {
             <div className="flex flex-wrap gap-4 justify-center max-w-7xl mx-auto">
                 {searchResults.map((user) => (
                     <AdminUserCard
-                        key={user.uid}
+                        key={user.id}
                         user={user}
-                        onDelete={() => handleDeleteUser(user.uid)}
+                        onDelete={() => handleDeleteUser(user.id)}
                         onEdit={() => {}}
                     />
                 ))}
