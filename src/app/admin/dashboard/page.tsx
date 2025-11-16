@@ -13,7 +13,6 @@ import Fuse from "fuse.js"; // Import Fuse.js for fuzzy search
 import React from "react";
 import Image from "next/image";
 
-
 interface User {
     id: string;
     createdAt: Date;
@@ -154,6 +153,21 @@ export default function AdminDashboardPage() {
         fetchData();
     }, [router]);
 
+    useEffect(() => {
+        if (!searchQuery.trim()) {
+            setSearchResults(users);
+            return;
+        }
+
+        const fuse = new Fuse(users, {
+            keys: ["firstName", "secondName"],
+            threshold: 0.3,
+        });
+
+        const results = fuse.search(searchQuery).map((r) => r.item);
+        setSearchResults(results);
+    }, [searchQuery, users]);
+
     const handleLogout = async () => {
         try {
             await fetch("/api/logout", { method: "POST" });
@@ -182,18 +196,18 @@ export default function AdminDashboardPage() {
         setLoading(false);
     }
 
-    const handleSearch = () => {
-        if (!searchQuery) {
-            setSearchResults(users);
-            return;
-        }
-        const fuse = new Fuse(users, {
-            keys: ["email", "firstName", "secondName"],
-            threshold: 0.3,
-        });
-        const results = fuse.search(searchQuery).map((result) => result.item);
-        setSearchResults(results);
-    };
+    // const handleSearch = () => {
+    //     if (!searchQuery) {
+    //         setSearchResults(users);
+    //         return;
+    //     }
+    //     const fuse = new Fuse(users, {
+    //         keys: ["email", "firstName", "secondName"],
+    //         threshold: 0.3,
+    //     });
+    //     const results = fuse.search(searchQuery).map((result) => result.item);
+    //     setSearchResults(results);
+    // };
 
     if (loading) {
         return (
@@ -246,7 +260,7 @@ export default function AdminDashboardPage() {
                     />
                     <button
                         className="p-2 bg-cyan-500 hover:bg-cyan-600 rounded-full"
-                        onClick={handleSearch}
+                        // onClick={handleSearch}F
                     >
                         <Image
                             src="/search-enter.svg"
