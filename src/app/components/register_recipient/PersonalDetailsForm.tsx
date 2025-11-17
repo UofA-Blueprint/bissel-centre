@@ -1,13 +1,5 @@
 import React, { forwardRef, useImperativeHandle, useState } from "react";
-import {
-  Listbox,
-  ListboxButton,
-  ListboxOptions,
-  ListboxOption,
-} from "@headlessui/react";
-import ChevronDownIcon from "../icons/ChevronDownIcon";
-import CheckIcon from "../icons/CheckIcon";
-import clsx from "clsx";
+import CustomListbox from "./CustomListbox";
 
 export type RecipientFormData = {
   firstName: string;
@@ -24,21 +16,22 @@ export type RecipientFormData = {
 type Props = {
   onSubmit: (data: RecipientFormData) => void;
   onError?: (msg: string | null) => void;
+  initialData?: Partial<RecipientFormData>;
 };
 
 const genders = ["Female", "Male", "Non-binary", "Prefer not to say", "Other"];
 
 const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
-  ({ onSubmit, onError }, ref) => {
-    const [firstName, setFirstName] = useState("");
-    const [lastName, setLastName] = useState("");
-    const [alias, setAlias] = useState("");
-    const [gender, setGender] = useState<string>("");
-    const [phone, setPhone] = useState("");
-    const [dob, setDob] = useState("");
-    const [email, setEmail] = useState("");
-    const [address, setAddress] = useState("");
-    const [postalCode, setPostalCode] = useState("");
+  ({ onSubmit, onError, initialData = {} }, ref) => {
+    const [firstName, setFirstName] = useState(initialData.firstName || "");
+    const [lastName, setLastName] = useState(initialData.lastName || "");
+    const [alias, setAlias] = useState(initialData.alias || "");
+    const [gender, setGender] = useState<string>(initialData.gender || "");
+    const [phone, setPhone] = useState(initialData.phone || "");
+    const [dob, setDob] = useState(initialData.dob || "");
+    const [email, setEmail] = useState(initialData.email || "");
+    const [address, setAddress] = useState(initialData.address || "");
+    const [postalCode, setPostalCode] = useState(initialData.postalCode || "");
 
     const collect = (): RecipientFormData => ({
       firstName: firstName.trim(),
@@ -125,58 +118,12 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
           <label className="flex flex-col">
-            <span className="text-sm mb-1">Gender Identity</span>
-
-            <Listbox value={gender} onChange={(v) => setGender(v ?? "")}>
-              <div className="relative">
-                <ListboxButton
-                  className={clsx(
-                    "relative font-normal block w-full rounded-lg bg-white py-3 pr-8 pl-3 text-left text-sm text-gray-900 border",
-                    "focus:outline-none focus:ring-2 focus:ring-primary"
-                  )}
-                >
-                  <span
-                    className={clsx("truncate", !gender && "text-gray-400")}
-                  >
-                    {gender || "Select gender"}
-                  </span>
-                  <ChevronDownIcon
-                    className="pointer-events-none absolute top-2.5 right-2.5 h-4 w-4 text-gray-600"
-                    aria-hidden="true"
-                  />
-                </ListboxButton>
-
-                <ListboxOptions className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm">
-                  {genders.map((g) => (
-                    <ListboxOption
-                      key={g}
-                      value={g}
-                      className="font-normal flex items-center gap-2 rounded-md px-3 py-1.5 select-none"
-                    >
-                      {({ selected }) => (
-                        <>
-                          <CheckIcon
-                            className={clsx(
-                              selected
-                                ? "h-4 w-4 text-primary"
-                                : "invisible h-4 w-4"
-                            )}
-                          />
-                          <div
-                            className={clsx(
-                              "text-sm",
-                              selected && "font-semibold"
-                            )}
-                          >
-                            {g}
-                          </div>
-                        </>
-                      )}
-                    </ListboxOption>
-                  ))}
-                </ListboxOptions>
-              </div>
-            </Listbox>
+            <CustomListbox
+              label="Gender Identity"
+              value={gender}
+              onChange={setGender}
+              options={genders}
+            />
 
             <input type="hidden" name="gender" value={gender} />
           </label>

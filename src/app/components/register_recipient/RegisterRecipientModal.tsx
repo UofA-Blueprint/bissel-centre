@@ -3,10 +3,18 @@ import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import RegisterRecipientForm, {
   RecipientFormData,
 } from "./PersonalDetailsForm";
+import AdditionalInfoForm, { AdditionalInfoData } from "./AdditionalInfoForm";
+import SidebarSteps from "./SidebarSteps";
 
 type Props = {
   open: boolean;
   onClose: () => void;
+};
+
+type FormData = {
+  personalDetails?: RecipientFormData;
+  additionalInfo?: AdditionalInfoData;
+  photoUpload?: PhotoUploadData;
 };
 
 const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
@@ -14,13 +22,87 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
     null
   );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const formRef = useRef<{ submit: () => void }>(null);
+  const personalDetailsRef = useRef<{ submit: () => void }>(null);
+  const additionalInfoRef = useRef<{ submit: () => void }>(null);
+  const photouploadRef = useRef<{ submit: () => void }>(null);
+  const reviewRef = useRef<{ submit: () => void }>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [formData, setFormData] = useState<FormData>({});
 
-  const handleFormSubmit = (data: RecipientFormData) => {
+  const handlePersonalDetailsSubmit = (data: RecipientFormData) => {
     setErrorMessage(null);
-    setSubmittedData(data);
-    console.log("recipient form submitted", data);
+    setFormData((prev) => ({ ...prev, personalDetails: data }));
+    setCurrentPage(2);
   };
+
+  const handleAdditionalInfoSubmit = (data: AdditionalInfoData) => {
+    setErrorMessage(null);
+    setFormData((prev) => ({ ...prev, additionalInfo: data }));
+    setCurrentPage(3);
+  };
+
+  const handlePhotoUploadSubmit = (data: PhotoUploadData) => {
+    setErrorMessage(null);
+    setFormData((prev) => ({ ...prev, photoUpload: data }));
+    setCurrentPage(4);
+  };
+
+  const handleFinalSubmit = () => {
+    console.log("Final submitted data:", formData);
+    // Here you would typically send `formData` to your server or API
+    onClose();
+  };
+
+  const handleContinue = () => {
+    setErrorMessage(null);
+    switch (currentPage) {
+      case 1:
+        personalDetailsRef.current?.submit();
+        break;
+      case 2:
+        additionalInfoRef.current?.submit();
+        break;
+      case 3:
+        photouploadRef.current?.submit();
+        break;
+      case 4:
+        reviewRef.current?.submit();
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleBack = () => {
+    setErrorMessage(null);
+    setCurrentPage((prev) => prev - 1);
+  };
+
+  const renderCurrentPage = () => {
+    switch (currentPage) {
+      case 1:
+        return (
+          <RegisterRecipientForm
+            ref={personalDetailsRef}
+            onSubmit={handlePersonalDetailsSubmit}
+            onError={setErrorMessage}
+            initialData={formData.personalDetails}
+          />
+        );
+      case 2:
+        return (
+          <AdditionalInfoForm
+            ref={additionalInfoRef}
+            onSubmit={handleAdditionalInfoSubmit}
+            onError={setErrorMessage}
+            initialData={formData.additionalInfo}
+          />
+        );
+      default:
+        return <div>Step not implemented yet.</div>;
+    }
+  };
+
   return (
     <Dialog
       open={open}
@@ -47,54 +129,30 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
           {/* Modal Body */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[600px] flex-grow bg-lightGrey">
             {/* Sidebar (small column) */}
-            <aside className="md:col-span-1 space-y-3 text-sm border-r-2 font-medium p-4">
-              <ul className="space-y-4 text-sm">
-                <li className="flex items-center">
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-semibold mr-3">
-                    1
-                  </span>
-                  <span>Personal Details</span>
-                </li>
-                <li className="flex items-center">
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-semibold mr-3">
-                    2
-                  </span>
-                  <span>Additional Information</span>
-                </li>
-                <li className="flex items-center">
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-semibold mr-3">
-                    3
-                  </span>
-                  <span>Upload Photo</span>
-                </li>
-                <li className="flex items-center">
-                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-primary text-white text-xs font-semibold mr-3">
-                    4
-                  </span>
-                  <span>Review</span>
-                </li>
-              </ul>
-            </aside>
+            <SidebarSteps currentPage={currentPage} />
 
             {/* Form (larger column) */}
             <section className="md:col-span-3 overflow-y-auto p-4">
-              <RegisterRecipientForm
-                ref={formRef}
-                onSubmit={handleFormSubmit}
-                onError={setErrorMessage}
-              />
+              {renderCurrentPage()}
             </section>
           </div>
           {/* Modal Footer */}
-          <div className="flex-shrink-0 bg-offWhite rounded-b-lg p-4 flex items-center justify-end border-t-2">
+          <div className="flex items-center justify-end bg-offWhite rounded-b-lg p-4 border-t-2">
             <div className="text-sm text-red-600 font-medium mr-4">
               {errorMessage && <span>{errorMessage}</span>}
             </div>
+            <div>
+              {currentPage > 1 && (
+                <button onClick={handleBack} className="px-3 py-2 text-primary">
+                  ← Back
+                </button>
+              )}
+            </div>
             <button
-              onClick={() => formRef.current?.submit()}
+              onClick={handleContinue}
               className="px-3 py-2 bg-primary text-white rounded-xl"
             >
-              Continue →
+              {currentPage === 4 ? "Finish Registration" : "Continue →"}
             </button>
           </div>
         </DialogPanel>
