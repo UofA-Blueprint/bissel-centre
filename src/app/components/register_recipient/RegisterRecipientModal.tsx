@@ -5,6 +5,7 @@ import RegisterRecipientForm, {
 } from "./PersonalDetailsForm";
 import AdditionalInfoForm, { AdditionalInfoData } from "./AdditionalInfoForm";
 import PhotoUploadForm, { PhotoUploadData } from "./PhotoUploadForm";
+import ReviewDetails from "./ReviewDetails";
 import SidebarSteps from "./SidebarSteps";
 
 type Props = {
@@ -108,6 +109,8 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
             initialData={formData.photoUpload}
           />
         );
+      case 4:
+        return <ReviewDetails formData={formData} />;
       default:
         return <div>Step not implemented yet.</div>;
     }

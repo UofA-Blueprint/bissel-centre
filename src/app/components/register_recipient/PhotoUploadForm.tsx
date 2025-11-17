@@ -5,12 +5,7 @@ import React, {
   useEffect,
   useRef,
 } from "react";
-import { storage } from "@/app/services/firebase";
-import {
-  ref as storageRef,
-  uploadBytesResumable,
-  getDownloadURL,
-} from "firebase/storage";
+// REMOVED: Firebase-related imports
 import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
 import "react-circular-progressbar/dist/styles.css";
 import SearchIcon from "../icons/SearchIcon";
@@ -23,6 +18,7 @@ type Props = {
   initialData?: Partial<PhotoUploadData>;
 };
 
+// --- WebcamCapture component remains exactly the same ---
 const WebcamCapture = ({
   onCapture,
   onCancel,
@@ -43,12 +39,12 @@ const WebcamCapture = ({
         }
       } catch (err) {
         console.error("Error accessing webcam:", err);
-        onCancel(); // Go back if permission is denied
+        onCancel();
       }
     };
     startCamera();
     return () => {
-      stream?.getTracks().forEach((track) => track.stop()); // IMPORTANT: Stop camera on unmount
+      stream?.getTracks().forEach((track) => track.stop());
     };
   }, [onCancel]);
 
@@ -124,7 +120,6 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
       const file = event.target.files?.[0];
       if (file) {
         if (file.size > 2 * 1024 * 1024) {
-          // 2MB limit from Figma
           onError?.("File is too large. Please select an image under 2MB.");
           return;
         }
@@ -141,36 +136,37 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
       setView("preview");
     };
 
+    // MODIFIED: This function now simulates an upload.
     const handleUpload = () => {
       if (imageFile) {
-        // Standard upload logic
+        // Simulate the upload process
         setIsUploading(true);
         setUploadProgress(0);
-        const fileName = `${Date.now()}-${imageFile.name}`;
-        const fileRef = storageRef(storage, `recipient-photos/${fileName}`);
-        const uploadTask = uploadBytesResumable(fileRef, imageFile);
 
-        uploadTask.on(
-          "state_changed",
-          (snapshot) => {
-            const progress =
-              (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            setUploadProgress(Math.round(progress));
-          },
-          (error) => {
-            onError?.(`Upload failed: ${error.message}`);
-            setIsUploading(false);
-          },
-          () => {
-            getDownloadURL(uploadTask.snapshot.ref).then((downloadURL) => {
-              setIsUploading(false);
-              onSubmit({ imageUrl: downloadURL });
-            });
-          }
-        );
+        // Animate the progress bar over 1.5 seconds
+        const interval = setInterval(() => {
+          setUploadProgress((prev) => {
+            if (prev >= 99) {
+              clearInterval(interval);
+              return 100;
+            }
+            return prev + 10;
+          });
+        }, 150);
+
+        // Simulate the completion of the upload
+        setTimeout(() => {
+          clearInterval(interval);
+          setUploadProgress(100);
+          setIsUploading(false);
+          // On success, submit the temporary blob URL for the preview.
+          onSubmit({ imageUrl: previewUrl! });
+        }, 1500);
       } else if (previewUrl) {
+        // If a photo exists from initialData but wasn't changed, just proceed.
         onSubmit({ imageUrl: previewUrl });
       } else {
+        // If no photo was selected, submit an empty string.
         onSubmit({ imageUrl: "" });
       }
     };
@@ -183,6 +179,8 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
           Upload a photo of the recipient
         </h1>
         <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center min-h-[400px]">
+          {/* --- The entire JSX remains exactly the same --- */}
+
           {view === "initial" && (
             <div className="text-center space-y-4">
               <p className="font-semibold">Browse a file or use webcam</p>
