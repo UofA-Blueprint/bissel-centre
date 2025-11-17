@@ -66,6 +66,29 @@ export interface BannedUser {
   notes: string;
 }
 
+
+// Fetch all users
+export async function getAllUsers(): Promise<User[]> {
+  try {
+    const usersRef = collection(db, "users");
+    const snapshot = await getDocs(usersRef);
+
+    return snapshot.docs.map((doc) => {
+      const data = doc.data();
+
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate?.() || data.createdAt,
+        updatedAt: data.updatedAt?.toDate?.() || data.updatedAt,
+      } as User;
+    });
+  } catch (error) {
+    console.error("Error fetching all users:", error);
+    throw error;
+  }
+}
+
 // Fetch user by email (case-insensitive compare by lowercasing input)
 export async function getUserByEmail(email: string): Promise<User | null> {
   try {

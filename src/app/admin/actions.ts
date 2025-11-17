@@ -1,6 +1,7 @@
 "use server";
 
 import { initAdmin } from "@/app/services/firebaseAdmin";
+import { getAllAdministrativeStaff } from "@/app/services/administrativeStaffService";
 import { cookies } from "next/headers";
 import { hashITIDNumber } from "@/utils/hashITIDNumber";
 import { randomBytes } from "crypto";
@@ -117,6 +118,10 @@ export const listUsers = async () => {
     return [];
   }
 };
+
+export const getAdministrativeStaff = async () => {
+  return await getAllAdministrativeStaff(); 
+}
 
 export const deleteUser = async (uid: string) => {
   const admin = await initAdmin();
