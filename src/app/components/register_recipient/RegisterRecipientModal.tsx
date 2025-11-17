@@ -4,6 +4,7 @@ import RegisterRecipientForm, {
   RecipientFormData,
 } from "./PersonalDetailsForm";
 import AdditionalInfoForm, { AdditionalInfoData } from "./AdditionalInfoForm";
+import PhotoUploadForm, { PhotoUploadData } from "./PhotoUploadForm";
 import SidebarSteps from "./SidebarSteps";
 
 type Props = {
@@ -96,6 +97,15 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
             onSubmit={handleAdditionalInfoSubmit}
             onError={setErrorMessage}
             initialData={formData.additionalInfo}
+          />
+        );
+      case 3:
+        return (
+          <PhotoUploadForm
+            ref={photouploadRef}
+            onSubmit={handlePhotoUploadSubmit}
+            onError={setErrorMessage}
+            initialData={formData.photoUpload}
           />
         );
       default:
