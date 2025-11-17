@@ -14,6 +14,7 @@ export default {
         primary: "#1BC0D6",
         lightGrey: "#FAFAFA",
         offWhite: "#F7F7F4",
+        lightBlue: "#DCEFF3",
       },
       fontFamily: {
         sans: [
