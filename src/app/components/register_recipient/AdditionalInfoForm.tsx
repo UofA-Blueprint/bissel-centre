@@ -16,22 +16,31 @@ type Props = {
 };
 
 const journeyOptions = [
-  "Sustainable and affordable transit journey",
-  "Option B",
-  "Option C",
+  "Not yet ready to apply for Ride Transit/LAP programs due to housing situation",
+  "Waiting/working with agency for documentation needed to apply for Ride Transit/LAP programs",
+  "This agency emailed in their application for Ride Transit/LAP programs, waiting on approval",
+  "Applied for the Ride Transit/LAP programs via Conditional Pass option at Edmonton Service Centre (ESC)",
+  "Unattributed PATH Pass",
 ];
 const reasonOptions = [
-  "Commuting to work/school",
-  "Medical appointments",
-  "Social/recreational activities",
-  "Shopping/errands",
+  "Financial/Support Appointments (Government, Agencies, Bank)",
+  "Housing Appointments (Agencies, Viewing, Paperwork)",
+  "Health and Wellness (Medical Appointments, Physical Health, i.e. Physio/Specialists)",
+  "Food Security (Shopping, Food bank, Soup kitchen)",
+  "Legal  (Court/Lawyer Appointments, Probation )",
+  "Employment (Attendance and Seeking)",
+  "Connection (Visiting friends and Family)",
+  "Education (Attendance and Seeking)",
+  "Recreation (Attending Events, Finding Activities)",
+  "Safety (Weather Related, After Dark Safety)",
+  "Volunteering",
 ];
 const housingOptions = [
-  "Emergency shelter",
-  "Transitional housing",
-  "Rented apartment/house",
-  "Living with family/friends",
-  "No fixed address",
+  "Unsheltered (Sleeping outdoors in a temporary home, i.e. tent, doorway etc.)",
+  "Emergency Sheltered (Stayed at one of the overnight shelters)",
+  "Provisionally Accommodated (limited time program i.e. treatment or hospitalization)",
+  "Precariously Accommodated (high chance of eviction due to unstable income/behaviour, past due rent, utility cut off, couch surfing, no contract or lease)",
+  "Transitioned to housing (up to 3 months post move-in)",
 ];
 
 const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
