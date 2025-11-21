@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "../../services/firebase";
 import {
-    deleteUser,
     getAdminSession,
     getAdministrativeStaff,
+    deleteAdministrativeStaff
 } from "../actions";
 import Fuse from "fuse.js"; // Import Fuse.js for fuzzy search
 import React from "react";
@@ -184,7 +184,7 @@ export default function AdminDashboardPage() {
         }
         setLoading(true);
         try {
-            await deleteUser(uid);
+            await deleteAdministrativeStaff(uid);
 
             // Remove user from local state
             setUsers(users.filter((user) => user.id !== uid));
