@@ -39,7 +39,7 @@ type CardRow = {
   final7Digits: string;
   securityCode: string;
   passRecipient: string;
-  issueDates: string;
+  issueDates: string[];
   notes: string;
 };
 
@@ -52,7 +52,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Ervin Badam",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024"],
     notes: "Notes",
   },
   {
@@ -63,7 +63,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Gerald Maryniak",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024", "4/10/2024", "4/01/2024", "3/25/2024", "3/18/2024", "3/11/2024"],
     notes: "Notes",
   },
   {
@@ -74,7 +74,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Shayla Daniels-Lewis",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024", "4/10/2024"],
     notes: "Notes",
   },
   {
@@ -85,7 +85,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Unknown",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024"],
     notes: "Notes",
   },
   {
@@ -96,7 +96,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Tayna Dequaine",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024"],
     notes: "Notes",
   },
   {
@@ -107,7 +107,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Augustine Tourangeau",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024"],
     notes: "Notes",
   },
   {
@@ -118,7 +118,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Unknown",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024"],
     notes: "Notes",
   },
   {
@@ -129,7 +129,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Trevor Kootenay",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024"],
     notes: "Notes",
   },
   {
@@ -140,7 +140,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Anthony Gordon Cardinal",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024"],
     notes: "Notes",
   },
   {
@@ -151,7 +151,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Rehema Mutsei",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024"],
     notes: "Notes",
   },
   {
@@ -162,7 +162,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Ken Toma",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024"],
     notes: "Notes",
   },
   {
@@ -173,7 +173,7 @@ const sampleRows: CardRow[] = [
     final7Digits: "6879001",
     securityCode: "789",
     passRecipient: "Jason Holman",
-    issueDates: "4/17/2024",
+    issueDates: ["4/17/2024"],
     notes: "Notes",
   },
 ];
@@ -203,7 +203,7 @@ const deptStyles: Partial<Record<CardDepartment, string>> = {
 function Chip({ label, tone }: { label: string; tone?: string }) {
   return (
     <span
-      className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${tone ?? "bg-gray-100 text-gray-700"}`}
+      className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${tone ?? "bg-gray-100 text-gray-700"}  cursor-default `}
     >
       {label}
     </span>
@@ -235,6 +235,7 @@ function SortableHeader({
 export default function CardsPage() {
   const [data] = useState<CardRow[]>(sampleRows);
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [expandedDates, setExpandedDates] = useState<Record<number, boolean>>({});
 
   const columns = useMemo<ColumnDef<CardRow>[]>(
     () => [
@@ -319,7 +320,51 @@ export default function CardsPage() {
             Issue Dates
           </span>
         ),
-        cell: ({ getValue }) => <span className="text-gray-700">{getValue<string>()}</span>,
+        cell: ({ getValue, row }) => {
+          const dates = getValue<string[]>();
+          const isExpanded = expandedDates[row.original.id];
+          const toggle = () =>
+            setExpandedDates((prev) => ({ ...prev, [row.original.id]: !isExpanded }));
+
+          if (!dates?.length) {
+            return <span className="text-gray-500">—</span>;
+          }
+
+          if (dates.length === 1) {
+            return <span className="text-gray-700 cursor-pointer">{dates[0]}</span>;
+          }
+
+          if (isExpanded) {
+            return (
+              <button
+                type="button"
+                onClick={toggle}
+                className="flex w-full flex-col gap-1 text-left text-gray-700 hover:text-gray-900"
+              >
+                {dates.map((d) => (
+                  <span key={d}>{d}</span>
+                ))}
+                <span className="text-xs font-bold">Show less</span>
+              </button>
+            );
+          }
+
+          const [first, ...rest] = dates;
+          const remainingCount = rest.length;
+
+          return (
+            <button
+              type="button"
+              onClick={toggle}
+              className="flex w-full items-center gap-2 text-left text-gray-700 hover:text-gray-900 hover:underline"
+            >
+              <span>{first}...</span>
+              <span className="text-xs font-bold">
+                +{remainingCount} more
+              </span>
+            </button>
+          );
+        },
       },
       {
         accessorKey: "notes",
@@ -329,7 +374,7 @@ export default function CardsPage() {
         cell: ({ getValue }) => <span className="text-gray-500">{getValue<string>()}</span>,
       },
     ],
-    []
+    [expandedDates]
   );
 
   const table = useReactTable({
