@@ -9,7 +9,7 @@ import {
   SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type CardStatus =
   | "Active"
@@ -387,7 +387,7 @@ export default function CardsPage() {
     getPaginationRowModel: getPaginationRowModel(),
     initialState: {
       pagination: {
-        pageSize: 8,
+        pageSize: 15,
       },
     },
   });
@@ -396,6 +396,32 @@ export default function CardsPage() {
   const { pageIndex, pageSize } = table.getState().pagination;
   const start = pageIndex * pageSize + 1;
   const end = Math.min(start + rows.length - 1, data.length);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [showFade, setShowFade] = useState(false);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => {
+      const hasOverflow = el.scrollHeight > el.clientHeight + 2;
+      const notAtBottom = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
+      setShowFade(hasOverflow && notAtBottom);
+    };
+    update();
+    el.addEventListener("scroll", update);
+    return () => el.removeEventListener("scroll", update);
+  }, [rows]);
+  const columnWidths: Record<string, string> = {
+    id: "64px",
+    allocationDate: "140px",
+    status: "140px",
+    department: "200px",
+    final7Digits: "140px",
+    securityCode: "120px",
+    passRecipient: "200px",
+    issueDates: "180px",
+    notes: "160px",
+  };
 
   return (
     <div className="space-y-6">
@@ -419,52 +445,67 @@ export default function CardsPage() {
         </div>
       </header>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id}>
-                {headerGroup.headers.map((header) => (
-                  <th key={header.id} className="px-4 py-3">
-                    {header.isPlaceholder
-                      ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
-                ))}
-              </tr>
-            ))}
-          </thead>
-          <tbody className="text-sm">
-            {rows.map((row, index) => (
-              <tr
-                key={row.id}
-                className={`${
-                  index % 2 === 0 ? "bg-white" : "bg-gray-50"
-                } hover:bg-gray-100 transition-colors`}
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-3">
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <div className="flex items-center justify-between px-4 py-3 text-sm text-gray-600 bg-gray-50">
-          <span>
-            Showing {start}–{end} of {data.length}
-          </span>
-          <div className="flex items-center gap-2">
+      <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
+        <div ref={scrollRef} className="max-h-[85vh] min-h-[70vh] overflow-auto pr-2">
+          <table className="min-w-full table-fixed border-separate border-spacing-y-3">
+            <thead className="bg-sky-100">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => (
+                    <th
+                      key={header.id}
+                      className="px-4 py-3 text-gray-700"
+                      style={{ width: columnWidths[header.column.id] ?? "auto" }}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(header.column.columnDef.header, header.getContext())}
+                    </th>
+                  ))}
+                </tr>
+              ))}
+            </thead>
+            <tbody className="text-sm">
+              {rows.map((row, index) => (
+                <tr
+                  key={row.id}
+                  className={`hover:bg-gray-100 transition-colors shadow-sm rounded-2xl border border-gray-200`}
+                  style={{ backgroundColor: index % 2 === 0 ? "#ffffff" : "#E4E4E4" }}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td
+                      key={cell.id}
+                      className="px-4 py-3"
+                      style={{ width: columnWidths[cell.column.id] ?? "auto" }}
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {showFade && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white via-white/80 to-white/0" />
+        )}
+      </div>
+
+      <div className="fixed inset-x-0 bottom-0 z-20 flex justify-center px-4 w-full">
+        <div className="flex items-center gap-3 rounded-full border border-gray-300 bg-white/90 px-4 py-2 text-sm text-gray-700 shadow-lg backdrop-blur w-full">
+          <div className="flex items-center gap-2 justify-center w-full">
             <button
-              className="rounded border border-gray-300 px-3 py-1 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded border border-gray-300 px-10 py-1 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
               onClick={() => table.previousPage()}
               disabled={!table.getCanPreviousPage()}
             >
               Prev
             </button>
+            <span className="font-semibold text-gray-800">
+              {start}–{end} of {data.length}
+            </span>
             <button
-              className="rounded border border-gray-300 px-3 py-1 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded border border-gray-300 px-10 py-1 hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
               onClick={() => table.nextPage()}
               disabled={!table.getCanNextPage()}
             >
