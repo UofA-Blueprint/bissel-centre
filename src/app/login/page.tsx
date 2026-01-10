@@ -150,7 +150,6 @@ export default function StaffLoginPage() {
               </label>
               <input
                 id="email"
-                type="email"
                 autoComplete="email"
                 required
                 disabled={loading}
