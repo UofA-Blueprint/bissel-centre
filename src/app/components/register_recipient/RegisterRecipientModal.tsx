@@ -80,6 +80,11 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
     setCurrentPage((prev) => prev - 1);
   };
 
+  const handleBackToStep = (step: number) => {
+    setErrorMessage(null);
+    setCurrentPage(step);
+  };
+
   const renderCurrentPage = () => {
     switch (currentPage) {
       case 1:
@@ -110,7 +115,14 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
           />
         );
       case 4:
-        return <ReviewDetails formData={formData} />;
+        return (
+          <ReviewDetails
+            formData={formData}
+            goToPersonal={() => handleBackToStep(1)}
+            goToAdditionalInfo={() => handleBackToStep(2)}
+            goToPhotoUpload={() => handleBackToStep(3)}
+          />
+        );
       default:
         return <div>Step not implemented yet.</div>;
     }

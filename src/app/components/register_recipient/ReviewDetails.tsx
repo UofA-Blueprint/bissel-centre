@@ -14,6 +14,9 @@ type FullFormData = {
 // Props for our component
 type Props = {
   formData: FullFormData;
+  goToPersonal: () => void;
+  goToAdditionalInfo: () => void;
+  goToPhotoUpload: () => void;
 };
 
 // A small helper component to keep the main JSX clean and consistent
@@ -34,7 +37,12 @@ const DetailItem = ({
   </div>
 );
 
-const ReviewDetails: React.FC<Props> = ({ formData }) => {
+const ReviewDetails: React.FC<Props> = ({
+  formData,
+  goToPersonal,
+  goToAdditionalInfo,
+  goToPhotoUpload,
+}) => {
   const { personalDetails, additionalInfo, photoUpload } = formData;
 
   return (
@@ -53,7 +61,8 @@ const ReviewDetails: React.FC<Props> = ({ formData }) => {
             <img
               src={photoUpload.imageUrl}
               alt="Recipient"
-              className="w-32 h-32 rounded-full object-cover shadow-md"
+              className="w-32 h-32 rounded-full object-cover shadow-md hover:scale-105 transition-transform cursor-pointer"
+              onClick={goToPhotoUpload}
             />
           ) : (
             // Fallback if no image was uploaded
@@ -72,10 +81,9 @@ const ReviewDetails: React.FC<Props> = ({ formData }) => {
           </h2>
           <button
             type="button"
-            className="text-sm flex items-center space-x-2 px-3 py-1.5 border border-gray-300 rounded-lg text-primary bg-white cursor-not-allowed opacity-60"
-            aria-disabled="true"
+            className="text-sm flex items-center space-x-2 px-3 py-1.5 border border-gray-300 rounded-lg text-primary bg-white opacity-60 hover:opacity-100"
+            onClick={goToPersonal}
           >
-            {/* You can add an edit icon here later if needed */}
             <span>Edit</span>
           </button>
         </div>
@@ -85,10 +93,8 @@ const ReviewDetails: React.FC<Props> = ({ formData }) => {
           <DetailItem label="Alias" value={personalDetails?.alias} />
           <DetailItem label="Gender Identity" value={personalDetails?.gender} />
           <DetailItem label="Date of Birth" value={personalDetails?.dob} />
-          <DetailItem /> {/* Empty item for grid alignment */}
           <DetailItem label="Email" value={personalDetails?.email} />
           <DetailItem label="Phone Number" value={personalDetails?.phone} />
-          <DetailItem /> {/* Empty item for grid alignment */}
           <DetailItem
             label="Address"
             value={personalDetails?.address}
@@ -110,8 +116,8 @@ const ReviewDetails: React.FC<Props> = ({ formData }) => {
           </h2>
           <button
             type="button"
-            className="text-sm flex items-center space-x-2 px-3 py-1.5 border border-gray-300 rounded-lg text-primary bg-white cursor-not-allowed opacity-60"
-            aria-disabled="true"
+            className="text-sm flex items-center space-x-2 px-3 py-1.5 border border-gray-300 rounded-lg text-primary bg-white opacity-60 hover:opacity-100"
+            onClick={goToAdditionalInfo}
           >
             <span>Edit</span>
           </button>
