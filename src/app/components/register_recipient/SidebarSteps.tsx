@@ -2,10 +2,15 @@ import React from "react";
 
 type Props = {
   currentPage: number;
+  goToStep: (step: number) => void;
   className?: string;
 };
 
-export default function SidebarSteps({ currentPage, className }: Props) {
+export default function SidebarSteps({
+  currentPage,
+  goToStep,
+  className,
+}: Props) {
   const steps = [
     { id: 1, label: "Personal Details" },
     { id: 2, label: "Additional Information" },
@@ -21,7 +26,11 @@ export default function SidebarSteps({ currentPage, className }: Props) {
     >
       <ul className="space-y-4 text-sm">
         {steps.map((s) => (
-          <li key={s.id} className="flex items-center">
+          <li
+            key={s.id}
+            className="flex items-center cursor-pointer hover:bg-gray-100 p-2 rounded-lg"
+            onClick={() => goToStep(s.id)}
+          >
             <span className="inline-flex items-center justify-center w-7 h-6 rounded-full bg-primary text-white text-xs font-semibold mr-1">
               {s.id}
             </span>

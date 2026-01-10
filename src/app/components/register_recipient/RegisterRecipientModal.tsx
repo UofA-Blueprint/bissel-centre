@@ -80,7 +80,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
     setCurrentPage((prev) => prev - 1);
   };
 
-  const handleBackToStep = (step: number) => {
+  const handleGoToStep = (step: number) => {
     setErrorMessage(null);
     setCurrentPage(step);
   };
@@ -118,9 +118,9 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
         return (
           <ReviewDetails
             formData={formData}
-            goToPersonal={() => handleBackToStep(1)}
-            goToAdditionalInfo={() => handleBackToStep(2)}
-            goToPhotoUpload={() => handleBackToStep(3)}
+            goToPersonal={() => handleGoToStep(1)}
+            goToAdditionalInfo={() => handleGoToStep(2)}
+            goToPhotoUpload={() => handleGoToStep(3)}
           />
         );
       default:
@@ -154,7 +154,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
           {/* Modal Body */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[600px] flex-grow bg-lightGrey">
             {/* Sidebar (small column) */}
-            <SidebarSteps currentPage={currentPage} />
+            <SidebarSteps currentPage={currentPage} goToStep={handleGoToStep} />
 
             {/* Form (larger column) */}
             <section className="md:col-span-3 overflow-y-auto p-4">
