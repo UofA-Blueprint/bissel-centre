@@ -39,7 +39,10 @@ const CustomListbox = ({
             aria-hidden="true"
           />
         </ListboxButton>
-        <ListboxOptions className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm">
+        <ListboxOptions
+          anchor="bottom"
+          className="z-50 mt-1 max-h-60 w-[var(--button-width)] overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm"
+        >
           {options.map((opt) => (
             <ListboxOption
               key={opt}
