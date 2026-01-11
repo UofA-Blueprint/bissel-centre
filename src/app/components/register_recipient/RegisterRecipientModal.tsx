@@ -74,7 +74,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
     try {
       setErrorMessage(null);
 
-      const response = await fetch("/api/register-participant", {
+      const response = await fetch("/api/register-recipient", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
