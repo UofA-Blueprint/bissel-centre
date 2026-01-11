@@ -41,92 +41,88 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
 
+  const fetchData = async () => {
+    try {
+      // Fetch ARC Cards
+      const arcCards = await getAllArcCards();
+
+      const availableCards = arcCards.length;
+      const activeCards = arcCards.filter((c) => c.status === "Active").length;
+      const expiredCards = arcCards.filter(
+        (c) => c.status === "Expired"
+      ).length;
+
+      // Create lookup: cardNumber → card object
+      const arcCardMap = Object.fromEntries(
+        arcCards.map((card) => [card.arcCardNumber, card])
+      );
+
+      // Fetch banned users count
+      const bannedSnapshot = await getDocs(collection(db, "banned_users"));
+      const flaggedUsers = bannedSnapshot.size;
+
+      //f etch users
+      const users = await getAllUsers();
+
+      // Attach computed fields: lastIssued + arcCardStatus
+      const usersData = users.map((user) => {
+        const card = user.arcCardNumber ? arcCardMap[user.arcCardNumber] : null;
+
+        // ARC Card Status
+        const arcCardStatus = card?.status ?? undefined;
+
+        // Last issued pass date (mm/dd/yy)
+        let lastIssued = "N/A";
+        if (card?.issuedAt instanceof Date) {
+          const mm = String(card.issuedAt.getMonth() + 1).padStart(2, "0");
+          const dd = String(card.issuedAt.getDate()).padStart(2, "0");
+          const yy = String(card.issuedAt.getFullYear()).slice(-2);
+          lastIssued = `${mm}/${dd}/${yy}`;
+        }
+
+        return {
+          id: user.id,
+          firstName: user.firstName,
+          secondName: user.secondName,
+          picture: user.picture,
+          arcCardStatus,
+          lastIssued,
+          banned: user.banned,
+        };
+      });
+
+      // Update Dashboard Stats
+      setStats([
+        {
+          icon: "/card.svg",
+          number: availableCards,
+          label: "Available Cards",
+        },
+        {
+          icon: "/checkmark.svg",
+          number: activeCards,
+          label: "Active Cards",
+        },
+        {
+          icon: "/caution.svg",
+          number: expiredCards,
+          label: "Expired Cards",
+        },
+        {
+          icon: "/flag.svg",
+          number: flaggedUsers,
+          label: "Flagged Users",
+        },
+      ]);
+
+      // Update Users Table
+      setUsers(usersData);
+    } catch (error) {
+      console.error("Error fetching dashboard data:", error);
+    }
+  };
+
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        // Fetch ARC Cards
-        const arcCards = await getAllArcCards();
-
-        const availableCards = arcCards.length;
-        const activeCards = arcCards.filter(
-          (c) => c.status === "Active"
-        ).length;
-        const expiredCards = arcCards.filter(
-          (c) => c.status === "Expired"
-        ).length;
-
-        // Create lookup: cardNumber → card object
-        const arcCardMap = Object.fromEntries(
-          arcCards.map((card) => [card.arcCardNumber, card])
-        );
-
-        // Fetch banned users count
-        const bannedSnapshot = await getDocs(collection(db, "banned_users"));
-        const flaggedUsers = bannedSnapshot.size;
-
-        //f etch users
-        const users = await getAllUsers();
-
-        // Attach computed fields: lastIssued + arcCardStatus
-        const usersData = users.map((user) => {
-          const card = user.arcCardNumber
-            ? arcCardMap[user.arcCardNumber]
-            : null;
-
-          // ARC Card Status
-          const arcCardStatus = card?.status ?? undefined;
-
-          // Last issued pass date (mm/dd/yy)
-          let lastIssued = "N/A";
-          if (card?.issuedAt instanceof Date) {
-            const mm = String(card.issuedAt.getMonth() + 1).padStart(2, "0");
-            const dd = String(card.issuedAt.getDate()).padStart(2, "0");
-            const yy = String(card.issuedAt.getFullYear()).slice(-2);
-            lastIssued = `${mm}/${dd}/${yy}`;
-          }
-
-          return {
-            id: user.id,
-            firstName: user.firstName,
-            secondName: user.secondName,
-            picture: user.picture,
-            arcCardStatus,
-            lastIssued,
-            banned: user.banned,
-          };
-        });
-
-        // Update Dashboard Stats
-        setStats([
-          {
-            icon: "/card.svg",
-            number: availableCards,
-            label: "Available Cards",
-          },
-          {
-            icon: "/checkmark.svg",
-            number: activeCards,
-            label: "Active Cards",
-          },
-          {
-            icon: "/caution.svg",
-            number: expiredCards,
-            label: "Expired Cards",
-          },
-          {
-            icon: "/flag.svg",
-            number: flaggedUsers,
-            label: "Flagged Users",
-          },
-        ]);
-
-        // Update Users Table
-        setUsers(usersData);
-      } catch (error) {
-        console.error("Error fetching dashboard data:", error);
-      }
-    };
-
     fetchData();
   }, []);
 
@@ -218,7 +214,10 @@ export default function DashboardPage() {
       )}
       <RegisterRecipientModal
         open={isRegisterModalOpen}
-        onClose={() => setIsRegisterModalOpen(false)}
+        onClose={() => {
+          setIsRegisterModalOpen(false);
+          fetchData();
+        }}
       />
     </div>
   );
