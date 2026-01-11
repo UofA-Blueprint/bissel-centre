@@ -31,7 +31,7 @@ const CustomListbox = ({
     <Listbox value={value} onChange={onChange}>
       <div className="relative">
         <ListboxButton className="relative font-normal block w-full rounded-lg bg-white py-3 pr-8 pl-3 text-left text-sm text-gray-900 border focus:outline-none focus:ring-2 focus:ring-primary">
-          <span className={clsx("truncate", !value && "text-gray-400")}>
+          <span className={clsx("block truncate", !value && "text-gray-400")}>
             {value || "Select an Option"}
           </span>
           <ChevronDownIcon
