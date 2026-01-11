@@ -31,6 +31,30 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [formData, setFormData] = useState<FormData>({});
 
+  const hasFormData = () => {
+    return (
+      Object.keys(formData.personalDetails || {}).length > 0 ||
+      Object.keys(formData.additionalInfo || {}).length > 0 ||
+      Object.keys(formData.photoUpload || {}).length > 0
+    );
+  };
+
+  const handleClose = () => {
+    if (hasFormData()) {
+      const confirmed = window.confirm(
+        "Are you sure you want to exit? All entered data will be lost."
+      );
+      if (!confirmed) {
+        return;
+      }
+      // Clear all form data
+      setFormData({});
+      setCurrentPage(1);
+      setErrorMessage(null);
+    }
+    onClose();
+  };
+
   const handlePersonalDetailsSubmit = (data: RecipientFormData) => {
     setErrorMessage(null);
     setFormData((prev) => ({ ...prev, personalDetails: data }));
@@ -52,6 +76,9 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
   const handleFinalSubmit = () => {
     console.log("Final submitted data:", formData);
     // Here you would typically send `formData` to your server or API
+    setFormData({});
+    setCurrentPage(1);
+    setErrorMessage(null);
     onClose();
   };
 
@@ -131,7 +158,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       className="fixed inset-0 z-50 overflow-y-auto"
     >
       <div className="flex items-center justify-center min-h-screen p-4">
@@ -145,7 +172,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
             <button
               type="button"
               aria-label="Close"
-              onClick={onClose}
+              onClick={handleClose}
               className="ml-3 inline-flex items-center justify-center rounded-md p-1 text-gray-500 hover:text-gray-700"
             >
               <span className="sr-only">Close</span>✕
