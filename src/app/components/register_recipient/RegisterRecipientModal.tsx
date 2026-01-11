@@ -20,9 +20,6 @@ type FormData = {
 };
 
 const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
-  const [submittedData, setSubmittedData] = useState<RecipientFormData | null>(
-    null
-  );
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const personalDetailsRef = useRef<{ submit: () => void }>(null);
   const additionalInfoRef = useRef<{ submit: () => void }>(null);
@@ -73,13 +70,36 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
     setCurrentPage(4);
   };
 
-  const handleFinalSubmit = () => {
-    console.log("Final submitted data:", formData);
-    // Here you would typically send `formData` to your server or API
-    setFormData({});
-    setCurrentPage(1);
-    setErrorMessage(null);
-    onClose();
+  const handleFinalSubmit = async () => {
+    try {
+      setErrorMessage(null);
+
+      const response = await fetch("/api/register-participant", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to register recipient");
+      }
+
+      // Clear form and close modal on success
+      setFormData({});
+      setCurrentPage(1);
+      setErrorMessage(null);
+      onClose();
+    } catch (error) {
+      console.error("Registration error:", error);
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to register recipient. Please try again."
+      );
+    }
   };
 
   const handleContinue = () => {
@@ -201,7 +221,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
               )}
             </div>
             <button
-              onClick={handleContinue}
+              onClick={currentPage === 4 ? handleFinalSubmit : handleContinue}
               className="px-3 py-2 bg-primary text-white rounded-xl"
             >
               {currentPage === 4 ? "Finish Registration" : "Continue →"}
