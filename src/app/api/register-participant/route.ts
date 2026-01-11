@@ -73,7 +73,6 @@ export async function POST(request: NextRequest) {
       mostCommonReason: additionalInfo?.mostCommonReason || null,
       secondMostCommonReason: additionalInfo?.secondMostCommonReason || null,
       housingOption: additionalInfo?.housingOption || null,
-      status: "Active", // Created users are active by default
     };
 
     // Store user in Firestore
