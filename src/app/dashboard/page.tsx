@@ -18,7 +18,23 @@ interface User {
     id: string;
     firstName: string;
     secondName: string;
-    picture: string | undefined;
+    picture?: string;
+    genderIdentity: string;
+    aliases: string[];
+    dateOfBirth: string;
+    arcCardNumber?: string;
+    address: string;
+    postalCode: string;
+    passesIssued: string[];
+    banned: boolean;
+    banReason?: string;
+    notes?: string;
+    status?: "Active" | "Inactive"; // Account status (different from banned)
+    createdAt: Date | string;
+    createdBy: string;
+    updatedAt?: Date | string;
+    email?: string;
+    phoneNumber?: string;
     arcCardStatus:
         | "Active"
         | "Unattributed"
@@ -26,7 +42,6 @@ interface User {
         | "Unloaded"
         | undefined;
     lastIssued: string;
-    banned: boolean;
 }
 
 export default function DashboardPage() {
@@ -52,20 +67,20 @@ export default function DashboardPage() {
 
                 const availableCards = arcCards.length;
                 const activeCards = arcCards.filter(
-                    (c) => c.status === "Active"
+                    (c) => c.status === "Active",
                 ).length;
                 const expiredCards = arcCards.filter(
-                    (c) => c.status === "Expired"
+                    (c) => c.status === "Expired",
                 ).length;
 
                 // Create lookup: cardNumber → card object
                 const arcCardMap = Object.fromEntries(
-                    arcCards.map((card) => [card.arcCardNumber, card])
+                    arcCards.map((card) => [card.arcCardNumber, card]),
                 );
 
                 // Fetch banned users count
                 const bannedSnapshot = await getDocs(
-                    collection(db, "banned_users")
+                    collection(db, "banned_users"),
                 );
                 const flaggedUsers = bannedSnapshot.size;
 
@@ -85,26 +100,27 @@ export default function DashboardPage() {
                     let lastIssued = "N/A";
                     if (card?.issuedAt instanceof Date) {
                         const mm = String(
-                            card.issuedAt.getMonth() + 1
+                            card.issuedAt.getMonth() + 1,
                         ).padStart(2, "0");
                         const dd = String(card.issuedAt.getDate()).padStart(
                             2,
-                            "0"
+                            "0",
                         );
                         const yy = String(card.issuedAt.getFullYear()).slice(
-                            -2
+                            -2,
                         );
                         lastIssued = `${mm}/${dd}/${yy}`;
                     }
 
                     return {
-                        id: user.id,
-                        firstName: user.firstName,
-                        secondName: user.secondName,
-                        picture: user.picture,
+                        ...user,
+                        // id: user.id,
+                        // firstName: user.firstName,
+                        // secondName: user.secondName,
+                        // picture: user.picture,
+                        // banned: user.banned,
                         arcCardStatus,
                         lastIssued,
-                        banned: user.banned,
                     };
                 });
 
@@ -287,8 +303,8 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
                             arcCardStatus === "Expired"
                                 ? "text-red-500"
                                 : arcCardStatus === "Active"
-                                ? "text-gray-500"
-                                : "text-gray-500"
+                                  ? "text-gray-500"
+                                  : "text-gray-500"
                         }`}
                     >
                         {isBanned && (
