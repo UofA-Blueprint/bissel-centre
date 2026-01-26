@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     if (!sessionCookie) {
       return NextResponse.json(
         { error: "Unauthorized - No session found" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
@@ -23,13 +23,21 @@ export async function POST(request: NextRequest) {
     const createdByUid = decodedClaims.uid;
 
     const body = await request.json();
-    const { personalDetails, additionalInfo } = body;
+    const { personalDetails, additionalInfo, photoUpload } = body;
 
     // Validate required fields
     if (!personalDetails) {
       return NextResponse.json(
         { error: "Personal details are required" },
-        { status: 400 }
+        { status: 400 },
+      );
+    }
+
+    // Validate photo is provided
+    if (!photoUpload?.imageUrl) {
+      return NextResponse.json(
+        { error: "Recipient photo is required" },
+        { status: 400 },
       );
     }
 
@@ -39,7 +47,7 @@ export async function POST(request: NextRequest) {
       if (!personalDetails[field]) {
         return NextResponse.json(
           { error: `${field} is required` },
-          { status: 400 }
+          { status: 400 },
         );
       }
     }
@@ -51,7 +59,7 @@ export async function POST(request: NextRequest) {
       // Required schema fields
       firstName: personalDetails.firstName,
       secondName: personalDetails.lastName,
-      picture: null, // Photo handling to be implemented later
+      picture: photoUpload.imageUrl, // Base64 encoded image
       genderIdentity: personalDetails.gender || null,
       aliases: personalDetails.alias ? [personalDetails.alias] : [],
       dateOfBirth: personalDetails.dob || null,
@@ -84,7 +92,7 @@ export async function POST(request: NextRequest) {
         message: "Recipient registered successfully",
         userId: userRef.id,
       },
-      { status: 201 }
+      { status: 201 },
     );
   } catch (error) {
     console.error("Error registering recipient:", error);
@@ -95,7 +103,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       { error: "Failed to register recipient" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

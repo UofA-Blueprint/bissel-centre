@@ -55,8 +55,8 @@ const ReviewDetails: React.FC<Props> = ({
       <div className="flex justify-center py-4">
         <div className="relative">
           {photoUpload?.imageUrl ? (
-            // We use a standard <img> tag here because the imageUrl is a temporary
-            // 'blob:' URL from the client's browser, which next/image cannot optimize.
+            // We use a standard <img> tag here because the imageUrl is a base64
+            // data URL (data:image/jpeg;base64,...), which next/image cannot optimize.
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={photoUpload.imageUrl}

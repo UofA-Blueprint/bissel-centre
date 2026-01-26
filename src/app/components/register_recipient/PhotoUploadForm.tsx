@@ -192,8 +192,8 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
         // If a photo exists from initialData but wasn't changed, just proceed.
         onSubmit({ imageUrl: previewUrl });
       } else {
-        // If no photo was selected, submit an empty string.
-        onSubmit({ imageUrl: "" });
+        // No photo was selected - show error
+        onError?.("Please upload a photo of the recipient");
       }
     };
 
