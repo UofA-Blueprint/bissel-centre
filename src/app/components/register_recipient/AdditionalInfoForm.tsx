@@ -47,16 +47,16 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
   ({ onSubmit, onError, initialData = {} }, ref) => {
     const [journey, setJourney] = useState(initialData.journey ?? "");
     const [mostCommonReason, setMostCommonReason] = useState(
-      initialData.mostCommonReason ?? ""
+      initialData.mostCommonReason ?? "",
     );
     const [secondMostCommonReason, setSecondMostCommonReason] = useState(
-      initialData.secondMostCommonReason ?? ""
+      initialData.secondMostCommonReason ?? "",
     );
     const [housingOption, setHousingOption] = useState(
-      initialData.housingOption ?? ""
+      initialData.housingOption ?? "",
     );
     const [arcCardDigits, setArcCardDigits] = useState(
-      initialData.arcCardDigits ?? ""
+      initialData.arcCardDigits ?? "",
     );
     const [notes, setNotes] = useState(initialData.notes ?? "");
 
@@ -94,7 +94,7 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
 
     return (
       <form
-        className="space-y-6"
+        className="space-y-5"
         onSubmit={(e) => {
           e.preventDefault();
           handleSubmit();
@@ -166,7 +166,7 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
         </div>
       </form>
     );
-  }
+  },
 );
 
 AdditionalInfoForm.displayName = "AdditionalInfoForm";

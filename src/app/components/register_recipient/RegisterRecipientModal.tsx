@@ -39,7 +39,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
   const handleClose = () => {
     if (hasFormData()) {
       const confirmed = window.confirm(
-        "Are you sure you want to exit? All entered data will be lost."
+        "Are you sure you want to exit? All entered data will be lost.",
       );
       if (!confirmed) {
         return;
@@ -97,7 +97,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Failed to register recipient. Please try again."
+          : "Failed to register recipient. Please try again.",
       );
     }
   };
@@ -183,7 +183,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
     >
       <div className="flex items-center justify-center min-h-screen p-4">
         <div className="fixed inset-0 bg-black/40" aria-hidden="true" />
-        <DialogPanel className="bg-white rounded-lg z-20 shadow-lg max-w-7xl w-full flex flex-col">
+        <DialogPanel className="bg-white rounded-lg z-20 shadow-lg max-w-7xl w-full flex flex-col h-[90vh]">
           {/* Modal Header */}
           <div className="flex-shrink-0 flex items-start justify-between bg-offWhite p-4 rounded-t-lg border-b-2">
             <DialogTitle className="text-lg font-medium">
@@ -199,7 +199,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
             </button>
           </div>
           {/* Modal Body */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 h-[600px] flex-grow bg-lightGrey">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-grow bg-lightGrey overflow-hidden">
             {/* Sidebar (small column) */}
             <SidebarSteps currentPage={currentPage} goToStep={handleGoToStep} />
 

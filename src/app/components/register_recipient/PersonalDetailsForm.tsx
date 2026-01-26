@@ -64,7 +64,7 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
 
     return (
       <form
-        className="space-y-6"
+        className="space-y-5"
         onSubmit={(e) => {
           e.preventDefault();
           handleSubmit();
@@ -194,7 +194,7 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
         </div>
       </form>
     );
-  }
+  },
 );
 
 RegisterRecipientForm.displayName = "RegisterRecipientForm";
