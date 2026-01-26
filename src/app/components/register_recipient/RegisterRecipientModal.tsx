@@ -27,6 +27,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
   const reviewRef = useRef<{ submit: () => void }>(null);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [formData, setFormData] = useState<FormData>({});
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
 
   const hasFormData = () => {
     return (
@@ -47,6 +48,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
       // Clear all form data
       setFormData({});
       setCurrentPage(1);
+      setCompletedSteps(new Set());
       setErrorMessage(null);
     }
     onClose();
@@ -55,18 +57,21 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
   const handlePersonalDetailsSubmit = (data: RecipientFormData) => {
     setErrorMessage(null);
     setFormData((prev) => ({ ...prev, personalDetails: data }));
+    setCompletedSteps((prev) => new Set(prev).add(1));
     setCurrentPage(2);
   };
 
   const handleAdditionalInfoSubmit = (data: AdditionalInfoData) => {
     setErrorMessage(null);
     setFormData((prev) => ({ ...prev, additionalInfo: data }));
+    setCompletedSteps((prev) => new Set(prev).add(2));
     setCurrentPage(3);
   };
 
   const handlePhotoUploadSubmit = (data: PhotoUploadData) => {
     setErrorMessage(null);
     setFormData((prev) => ({ ...prev, photoUpload: data }));
+    setCompletedSteps((prev) => new Set(prev).add(3));
     setCurrentPage(4);
   };
 
@@ -90,6 +95,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
       // Clear form and close modal on success
       setFormData({});
       setCurrentPage(1);
+      setCompletedSteps(new Set());
       setErrorMessage(null);
       onClose();
     } catch (error) {
@@ -128,8 +134,10 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
   };
 
   const handleGoToStep = (step: number) => {
-    setErrorMessage(null);
-    setCurrentPage(step);
+    if (step < completedSteps.size + 2) {
+      setErrorMessage(null);
+      setCurrentPage(step);
+    }
   };
 
   const renderCurrentPage = () => {
@@ -201,7 +209,11 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
           {/* Modal Body */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-grow bg-lightGrey overflow-hidden">
             {/* Sidebar (small column) */}
-            <SidebarSteps currentPage={currentPage} goToStep={handleGoToStep} />
+            <SidebarSteps
+              currentPage={currentPage}
+              goToStep={handleGoToStep}
+              completedSteps={completedSteps}
+            />
 
             {/* Form (larger column) */}
             <section className="md:col-span-3 overflow-y-auto p-4">
