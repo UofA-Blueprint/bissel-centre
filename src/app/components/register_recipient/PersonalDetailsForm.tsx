@@ -177,7 +177,7 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
           </label>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <label className="flex flex-col col-span-1">
+          <label className="flex flex-col sm:col-span-3">
             <span className="text-sm">
               Postal Code: Where did the recipient stay last night?{" "}
               <span className="text-red-500">*</span>
@@ -188,7 +188,7 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
               type="text"
               name="postalCode"
               placeholder="Recipient's postal code"
-              className="mt-1 text-sm font-normal border rounded-xl px-3 py-3 w-full focus:outline-none focus:ring-2 focus:ring-primary"
+              className="mt-1 text-sm font-normal border rounded-xl px-3 py-3 w-full sm:w-1/3 focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </label>
         </div>

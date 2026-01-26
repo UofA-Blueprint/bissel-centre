@@ -20,11 +20,11 @@ export default function SidebarSteps({
 
   return (
     <aside
-      className={`md:col-span-1 space-y-3 text-sm border-r-2 font-medium p-4 pr-8 ${
+      className={`md:col-span-1 space-y-2 text-sm border-r-2 font-medium p-4 pr-8 ${
         className ?? ""
       }`}
     >
-      <ul className="space-y-4 text-sm">
+      <ul className="text-sm">
         {steps.map((s) => (
           <li
             key={s.id}
