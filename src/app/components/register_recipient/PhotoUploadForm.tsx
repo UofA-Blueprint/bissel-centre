@@ -100,15 +100,24 @@ const WebcamCapture = ({
 const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
   ({ onSubmit, onError, initialData = {} }, ref) => {
     const [view, setView] = useState<"initial" | "preview" | "webcam">(
-      "initial"
+      "initial",
     );
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(
-      initialData.imageUrl ?? null
+      initialData.imageUrl ?? null,
     );
     const [uploadProgress, setUploadProgress] = useState(0);
     const [isUploading, setIsUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Clean up blob URLs when component unmounts or when previewUrl changes
+    useEffect(() => {
+      return () => {
+        if (previewUrl && previewUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(previewUrl);
+        }
+      };
+    }, [previewUrl]);
 
     useEffect(() => {
       if (initialData.imageUrl) {
@@ -123,6 +132,10 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
           onError?.("File is too large. Please select an image under 2MB.");
           return;
         }
+        // Revoke the previous blob URL before creating a new one
+        if (previewUrl && previewUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(previewUrl);
+        }
         setImageFile(file);
         setPreviewUrl(URL.createObjectURL(file));
         setView("preview");
@@ -131,6 +144,10 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
     };
 
     const handleWebcamCapture = (file: File) => {
+      // Revoke the previous blob URL before creating a new one
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
       setImageFile(file);
       setPreviewUrl(URL.createObjectURL(file));
       setView("preview");
@@ -245,6 +262,10 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
                   <button
                     type="button"
                     onClick={() => {
+                      // Revoke blob URL before removing
+                      if (previewUrl && previewUrl.startsWith("blob:")) {
+                        URL.revokeObjectURL(previewUrl);
+                      }
                       setImageFile(null);
                       setPreviewUrl(null);
                       setView("initial");
@@ -275,7 +296,7 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
         </div>
       </div>
     );
-  }
+  },
 );
 
 PhotoUploadForm.displayName = "PhotoUploadForm";
