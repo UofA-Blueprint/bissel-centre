@@ -101,6 +101,9 @@ describe("POST /api/register-recipient", () => {
         arcCardDigits: "1234567",
         notes: "Test notes",
       },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
+      },
     };
 
     const req = createMockRequest(requestBody);
@@ -115,6 +118,7 @@ describe("POST /api/register-recipient", () => {
       expect.objectContaining({
         firstName: "John",
         secondName: "Doe",
+        picture: "data:image/jpeg;base64,test-image-data",
         genderIdentity: "Male",
         aliases: ["Johnny"],
         dateOfBirth: "1990-01-01",
@@ -132,7 +136,7 @@ describe("POST /api/register-recipient", () => {
         mostCommonReason: "Health and Wellness",
         secondMostCommonReason: "Food Security",
         housingOption: "Emergency Sheltered",
-      })
+      }),
     );
   });
 
@@ -143,6 +147,9 @@ describe("POST /api/register-recipient", () => {
       personalDetails: {
         firstName: "John",
         lastName: "Doe",
+      },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
       },
     };
 
@@ -163,6 +170,9 @@ describe("POST /api/register-recipient", () => {
         firstName: "John",
         lastName: "Doe",
       },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
+      },
     };
 
     const req = createMockRequest(requestBody);
@@ -179,6 +189,9 @@ describe("POST /api/register-recipient", () => {
       additionalInfo: {
         journey: "Test journey",
       },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
+      },
     };
 
     const req = createMockRequest(requestBody);
@@ -190,10 +203,30 @@ describe("POST /api/register-recipient", () => {
     expect(mockAdd).not.toHaveBeenCalled();
   });
 
+  it("returns 400 when photoUpload is missing", async () => {
+    const requestBody = {
+      personalDetails: {
+        firstName: "John",
+        lastName: "Doe",
+      },
+    };
+
+    const req = createMockRequest(requestBody);
+    const response = await POST(req);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("Recipient photo is required");
+    expect(mockAdd).not.toHaveBeenCalled();
+  });
+
   it("returns 400 when firstName is missing", async () => {
     const requestBody = {
       personalDetails: {
         lastName: "Doe",
+      },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
       },
     };
 
@@ -210,6 +243,9 @@ describe("POST /api/register-recipient", () => {
     const requestBody = {
       personalDetails: {
         firstName: "John",
+      },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
       },
     };
 
@@ -228,6 +264,9 @@ describe("POST /api/register-recipient", () => {
         firstName: "Jane",
         lastName: "Smith",
       },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
+      },
     };
 
     const req = createMockRequest(requestBody);
@@ -239,6 +278,7 @@ describe("POST /api/register-recipient", () => {
       expect.objectContaining({
         firstName: "Jane",
         secondName: "Smith",
+        picture: "data:image/jpeg;base64,test-image-data",
         aliases: [],
         genderIdentity: null,
         phone: null,
@@ -252,7 +292,7 @@ describe("POST /api/register-recipient", () => {
         mostCommonReason: null,
         secondMostCommonReason: null,
         housingOption: null,
-      })
+      }),
     );
   });
 
@@ -263,6 +303,9 @@ describe("POST /api/register-recipient", () => {
         lastName: "Doe",
         alias: "Johnny",
       },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
+      },
     };
 
     const req = createMockRequest(requestBody);
@@ -272,7 +315,7 @@ describe("POST /api/register-recipient", () => {
     expect(mockAdd).toHaveBeenCalledWith(
       expect.objectContaining({
         aliases: ["Johnny"],
-      })
+      }),
     );
   });
 
@@ -281,6 +324,9 @@ describe("POST /api/register-recipient", () => {
       personalDetails: {
         firstName: "John",
         lastName: "Doe",
+      },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
       },
     };
 
@@ -291,7 +337,7 @@ describe("POST /api/register-recipient", () => {
     expect(mockAdd).toHaveBeenCalledWith(
       expect.objectContaining({
         aliases: [],
-      })
+      }),
     );
   });
 
@@ -301,6 +347,9 @@ describe("POST /api/register-recipient", () => {
         firstName: "John",
         lastName: "Doe",
       },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
+      },
     };
 
     const req = createMockRequest(requestBody);
@@ -309,14 +358,14 @@ describe("POST /api/register-recipient", () => {
     expect(response.status).toBe(201);
     expect(mockAdd).toHaveBeenCalledWith(
       expect.objectContaining({
-        picture: null,
+        picture: "data:image/jpeg;base64,test-image-data",
         passesIssued: [],
         banned: false,
         banReason: null,
         createdBy: "test-admin-uid",
         createdAt: expect.any(String),
         updatedAt: expect.any(String),
-      })
+      }),
     );
   });
 
@@ -327,6 +376,9 @@ describe("POST /api/register-recipient", () => {
       personalDetails: {
         firstName: "John",
         lastName: "Doe",
+      },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
       },
     };
 
