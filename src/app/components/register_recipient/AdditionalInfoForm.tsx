@@ -21,7 +21,6 @@ const journeyOptions = [
   "This agency emailed in their application for Ride Transit/LAP programs, waiting on approval",
   "Applied for the Ride Transit/LAP programs via Conditional Pass option at Edmonton Service Centre (ESC)",
   "Unattributed PATH Pass",
-  "Other",
 ];
 const reasonOptions = [
   "Financial/Support Appointments (Government, Agencies, Bank)",
@@ -35,7 +34,6 @@ const reasonOptions = [
   "Recreation (Attending Events, Finding Activities)",
   "Safety (Weather Related, After Dark Safety)",
   "Volunteering",
-  "Other",
 ];
 const housingOptions = [
   "Unsheltered (Sleeping outdoors in a temporary home, i.e. tent, doorway etc.)",
@@ -43,7 +41,6 @@ const housingOptions = [
   "Provisionally Accommodated (limited time program i.e. treatment or hospitalization)",
   "Precariously Accommodated (high chance of eviction due to unstable income/behaviour, past due rent, utility cut off, couch surfing, no contract or lease)",
   "Transitioned to housing (up to 3 months post move-in)",
-  "Other",
 ];
 
 const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
