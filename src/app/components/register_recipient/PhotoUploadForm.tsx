@@ -5,7 +5,6 @@ import React, {
   useEffect,
   useRef,
 } from "react";
-// REMOVED: Firebase-related imports
 import { CircularProgressbar, buildStyles } from "react-circular-progressbar";
 import "react-circular-progressbar/dist/styles.css";
 import SearchIcon from "../icons/SearchIcon";
@@ -153,32 +152,42 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
       setView("preview");
     };
 
-    // MODIFIED: This function now simulates an upload.
-    const handleUpload = () => {
+    // Convert File to base64
+    const fileToBase64 = (file: File): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    };
+
+    // MODIFIED: Convert to base64 instead of simulating upload
+    const handleUpload = async () => {
       if (imageFile) {
-        // Simulate the upload process
         setIsUploading(true);
         setUploadProgress(0);
 
-        // Animate the progress bar over 1.5 seconds
-        const interval = setInterval(() => {
-          setUploadProgress((prev) => {
-            if (prev >= 99) {
-              clearInterval(interval);
-              return 100;
-            }
-            return prev + 10;
-          });
-        }, 150);
+        try {
+          // Animate progress while converting
+          const progressInterval = setInterval(() => {
+            setUploadProgress((prev) => Math.min(prev + 10, 90));
+          }, 150);
 
-        // Simulate the completion of the upload
-        setTimeout(() => {
-          clearInterval(interval);
+          // Convert to base64
+          const base64String = await fileToBase64(imageFile);
+
+          clearInterval(progressInterval);
           setUploadProgress(100);
           setIsUploading(false);
-          // On success, submit the temporary blob URL for the preview.
-          onSubmit({ imageUrl: previewUrl! });
-        }, 1500);
+
+          // Submit the base64 string
+          onSubmit({ imageUrl: base64String });
+        } catch (error) {
+          console.error("Error converting image:", error);
+          onError?.("Failed to process image");
+          setIsUploading(false);
+        }
       } else if (previewUrl) {
         // If a photo exists from initialData but wasn't changed, just proceed.
         onSubmit({ imageUrl: previewUrl });
