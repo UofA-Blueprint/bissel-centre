@@ -30,7 +30,11 @@ const CustomListbox = ({
     </span>
     <Listbox value={value} onChange={onChange}>
       <div className="relative">
-        <ListboxButton className="relative font-normal block w-full rounded-lg bg-white py-3 pr-8 pl-3 text-left text-sm text-gray-900 border focus:outline-none focus:ring-2 focus:ring-primary">
+        <ListboxButton
+          className="relative font-normal block w-full rounded-lg bg-white py-3 pr-8 pl-3 text-left text-sm text-gray-900 border focus:outline-none focus:ring-2 focus:ring-primary"
+          aria-required={required}
+          aria-invalid={required && !value}
+        >
           <span className={clsx("block truncate", !value && "text-gray-400")}>
             {value || "Select an Option"}
           </span>
@@ -54,7 +58,7 @@ const CustomListbox = ({
                   <CheckIcon
                     className={clsx(
                       "h-4 w-4 text-primary",
-                      !selected && "invisible"
+                      !selected && "invisible",
                     )}
                   />
                   <div className={clsx("text-sm", selected && "font-semibold")}>
