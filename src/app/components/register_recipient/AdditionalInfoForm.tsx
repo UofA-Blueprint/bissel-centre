@@ -69,17 +69,24 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
       notes: notes.trim(),
     });
 
-    const handleSubmit = () => {
-      const data = collect();
-
+    const validate = (data: AdditionalInfoData): string | null => {
       if (
         !data.journey ||
         !data.mostCommonReason ||
         !data.secondMostCommonReason ||
         !data.housingOption
       ) {
-        const msg = "Please fill out all required fields.";
-        onError?.(msg);
+        return "Please fill out all required fields.";
+      }
+      return null;
+    };
+
+    const handleSubmit = () => {
+      const data = collect();
+      const error = validate(data);
+
+      if (error) {
+        onError?.(error);
         return;
       }
 
@@ -90,6 +97,8 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
     // Expose the submit method to parent components
     useImperativeHandle(ref, () => ({
       submit: handleSubmit,
+      getData: collect,
+      validate: () => validate(collect()),
     }));
 
     return (

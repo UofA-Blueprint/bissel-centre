@@ -45,30 +45,32 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
       postalCode: postalCode.trim(),
     });
 
-    const handleSubmit = () => {
-      const data = collect();
-
+    const validate = (data: RecipientFormData): string | null => {
       // Validate required fields
       if (!data.firstName || !data.lastName || !data.postalCode) {
-        const msg =
-          "First name, last name, postal code, and one of email or phone are required.";
-        onError?.(msg);
-        return;
+        return "First name, last name, postal code, and one of email or phone are required.";
       }
 
       // Validate that at least one contact method is provided
       if (!data.email && !data.phone) {
-        const msg = "Please provide either an email address or phone number.";
-        onError?.(msg);
-        return;
+        return "Please provide either an email address or phone number.";
       }
 
       // Validate postal code format (Canadian: A1A1A1 or A1A 1A1)
       const postalCodeRegex = /^[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d$/;
       if (!postalCodeRegex.test(data.postalCode)) {
-        const msg =
-          "Invalid postal code format. Please use the format A1A1A1 (e.g., T5Z1H3 or T5Z 1H3).";
-        onError?.(msg);
+        return "Invalid postal code format. Please use the format A1A1A1 (e.g., T5Z1H3 or T5Z 1H3).";
+      }
+
+      return null;
+    };
+
+    const handleSubmit = () => {
+      const data = collect();
+      const error = validate(data);
+
+      if (error) {
+        onError?.(error);
         return;
       }
 
@@ -78,6 +80,8 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
 
     useImperativeHandle(ref, () => ({
       submit: handleSubmit,
+      getData: collect,
+      validate: () => validate(collect()),
     }));
 
     return (

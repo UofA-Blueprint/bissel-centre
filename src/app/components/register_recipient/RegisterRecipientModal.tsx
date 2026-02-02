@@ -136,7 +136,63 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
   const handleGoToStep = (step: number) => {
     if (step < completedSteps.size + 2) {
       setErrorMessage(null);
-      setCurrentPage(step);
+
+      // Don't validate or save if navigating to the current page
+      if (step === currentPage) {
+        return;
+      }
+
+      // Save current form data before navigating
+      // Only validate if we're navigating from a page we've already been on (not the current one)
+      let shouldNavigate = true;
+
+      if (currentPage === 1 && personalDetailsRef.current) {
+        const data = (personalDetailsRef.current as any).getData?.();
+        if (data) {
+          setFormData((prev) => ({ ...prev, personalDetails: data }));
+        }
+
+        // If this page is completed, validate before allowing navigation
+        if (completedSteps.has(currentPage)) {
+          const error = (personalDetailsRef.current as any).validate?.();
+          if (error) {
+            setErrorMessage(error);
+            shouldNavigate = false;
+          }
+        }
+      } else if (currentPage === 2 && additionalInfoRef.current) {
+        const data = (additionalInfoRef.current as any).getData?.();
+        if (data) {
+          setFormData((prev) => ({ ...prev, additionalInfo: data }));
+        }
+
+        // If this page is completed, validate before allowing navigation
+        if (completedSteps.has(currentPage)) {
+          const error = (additionalInfoRef.current as any).validate?.();
+          if (error) {
+            setErrorMessage(error);
+            shouldNavigate = false;
+          }
+        }
+      } else if (currentPage === 3 && photouploadRef.current) {
+        const data = (photouploadRef.current as any).getData?.();
+        if (data) {
+          setFormData((prev) => ({ ...prev, photoUpload: data }));
+        }
+
+        // If this page is completed, validate before allowing navigation
+        if (completedSteps.has(currentPage)) {
+          const error = (photouploadRef.current as any).validate?.();
+          if (error) {
+            setErrorMessage(error);
+            shouldNavigate = false;
+          }
+        }
+      }
+
+      if (shouldNavigate) {
+        setCurrentPage(step);
+      }
     }
   };
 

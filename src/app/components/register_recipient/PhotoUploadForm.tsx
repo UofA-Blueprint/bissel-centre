@@ -162,8 +162,28 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
       });
     };
 
+    const collect = (): PhotoUploadData | null => {
+      if (previewUrl) {
+        return { imageUrl: previewUrl };
+      }
+      return null;
+    };
+
+    const validate = (): string | null => {
+      if (!previewUrl) {
+        return "Please upload a photo of the recipient";
+      }
+      return null;
+    };
+
     // MODIFIED: Convert to base64 instead of simulating upload
     const handleUpload = async () => {
+      const validationError = validate();
+      if (validationError) {
+        onError?.(validationError);
+        return;
+      }
+
       if (imageFile) {
         setIsUploading(true);
         setUploadProgress(0);
@@ -191,13 +211,14 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
       } else if (previewUrl) {
         // If a photo exists from initialData but wasn't changed, just proceed.
         onSubmit({ imageUrl: previewUrl });
-      } else {
-        // No photo was selected - show error
-        onError?.("Please upload a photo of the recipient");
       }
     };
 
-    useImperativeHandle(ref, () => ({ submit: handleUpload }));
+    useImperativeHandle(ref, () => ({
+      submit: handleUpload,
+      getData: collect,
+      validate,
+    }));
 
     return (
       <div className="space-y-4">
