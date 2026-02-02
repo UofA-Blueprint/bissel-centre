@@ -37,6 +37,7 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
       firstName: firstName.trim(),
       lastName: lastName.trim(),
       alias: alias.trim(),
+      email: email.trim(),
       gender,
       phone: phone.trim(),
       dob: dob.trim(),
@@ -49,7 +50,24 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
 
       // Validate required fields
       if (!data.firstName || !data.lastName || !data.postalCode) {
-        const msg = "First name, last name, and postal code are required.";
+        const msg =
+          "First name, last name, postal code, and one of email or phone are required.";
+        onError?.(msg);
+        return;
+      }
+
+      // Validate that at least one contact method is provided
+      if (!data.email && !data.phone) {
+        const msg = "Please provide either an email address or phone number.";
+        onError?.(msg);
+        return;
+      }
+
+      // Validate postal code format (Canadian: A1A1A1 or A1A 1A1)
+      const postalCodeRegex = /^[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d$/;
+      if (!postalCodeRegex.test(data.postalCode)) {
+        const msg =
+          "Invalid postal code format. Please use the format A1A1A1 (e.g., T5Z1H3 or T5Z 1H3).";
         onError?.(msg);
         return;
       }
@@ -141,7 +159,12 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <label className="flex flex-col">
-            <span className="text-sm">Email</span>
+            <span className="text-sm">
+              Email{" "}
+              <span className="text-gray-500 text-xs">
+                (required if no phone)
+              </span>
+            </span>
             <input
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -152,7 +175,12 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
             />
           </label>
           <label className="flex flex-col">
-            <span className="text-sm">Phone</span>
+            <span className="text-sm">
+              Phone{" "}
+              <span className="text-gray-500 text-xs">
+                (required if no email)
+              </span>
+            </span>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
@@ -181,13 +209,18 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
             <span className="text-sm">
               Postal Code: Where did the recipient stay last night?{" "}
               <span className="text-red-500">*</span>
+              <span className="text-gray-500 text-xs">
+                {" "}
+                (Format: A1A1A1, e.g., T5Z1H3)
+              </span>
             </span>
             <input
               value={postalCode}
-              onChange={(e) => setPostalCode(e.target.value)}
+              onChange={(e) => setPostalCode(e.target.value.toUpperCase())}
               type="text"
               name="postalCode"
-              placeholder="Recipient's postal code"
+              placeholder="e.g., T5Z1H3"
+              maxLength={7}
               className="mt-1 text-sm font-normal border rounded-xl px-3 py-3 w-full sm:w-1/3 focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </label>
