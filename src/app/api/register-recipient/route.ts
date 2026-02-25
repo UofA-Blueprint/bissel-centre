@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { getFirestore } from "firebase-admin/firestore";
 import { cookies } from "next/headers";
+import { encryptPhone } from "@/utils/phoneEncryption";
 
 export async function POST(request: NextRequest) {
   try {
@@ -54,6 +55,9 @@ export async function POST(request: NextRequest) {
 
     const db = getFirestore();
 
+    // Encrypt phone number before storing
+    const encryptedPhone = encryptPhone(personalDetails.phone || null);
+
     // Prepare flattened user data matching schema
     const userData = {
       // Required schema fields
@@ -75,7 +79,7 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date().toISOString(),
 
       // Additional fields from form (not in core schema but preserving data)
-      phone: personalDetails.phone || null,
+      phone: encryptedPhone, // Encrypted phone number
       email: personalDetails.email || null,
       journey: additionalInfo?.journey || null,
       mostCommonReason: additionalInfo?.mostCommonReason || null,

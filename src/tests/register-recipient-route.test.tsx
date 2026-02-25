@@ -27,6 +27,13 @@ jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(),
 }));
 
+jest.mock("@/utils/phoneEncryption", () => ({
+  encryptPhone: jest.fn((phone) => {
+    // Mock encryption returns a base64-like string if phone is provided
+    return phone ? `encrypted_${phone}` : null;
+  }),
+}));
+
 // Mock Firestore
 const mockAdd = jest.fn();
 const mockCollection = jest.fn(() => ({
@@ -130,7 +137,7 @@ describe("POST /api/register-recipient", () => {
         banReason: null,
         notes: "Test notes",
         createdBy: "test-admin-uid",
-        phone: "555-1234",
+        phone: "encrypted_555-1234", // Phone should be encrypted
         email: "john@example.com",
         journey: "Applied for the Ride Transit/LAP programs",
         mostCommonReason: "Health and Wellness",
