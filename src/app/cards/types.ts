@@ -70,27 +70,46 @@ export const DEPARTMENT_STYLES: Record<CardDepartment, string> = {
 
 export interface ArcCard {
   id: string;
-  userId?: string;
+  currentUserId?: string | null; // Current holder (null if unassigned)
   allocationDate: string;
   status: CardStatus;
   department: CardDepartment;
   arcCardNumber: string; // final7Digits in UI
   securityCode: string;
-  passRecipient: string;
-  issueDates: string[];
   notes: string;
   createdAt?: unknown;
   updatedAt?: unknown;
+  // Derived at query time from issues collection:
+  passRecipient?: string;
+  issueDates?: string[];
 }
 
 export interface ArcCardInput {
-  userId?: string;
+  currentUserId?: string | null;
   allocationDate: string;
   status: CardStatus;
   department: CardDepartment;
   arcCardNumber: string;
   securityCode: string;
-  passRecipient?: string;
-  issueDates?: string[];
+  notes?: string;
+}
+
+// Issue represents a single card issuance to a user
+export interface Issue {
+  id: string;
+  cardId: string;         // Reference to arc_cards doc
+  userId: string;         // Who received the card
+  issueDate: string;      // When issued (e.g., "4/17/2024")
+  issuedBy?: string;      // Staff who issued it
+  returnedAt?: unknown;   // When returned (null = still active)
+  notes?: string;
+  createdAt?: unknown;
+}
+
+export interface IssueInput {
+  cardId: string;
+  userId: string;
+  issueDate: string;
+  issuedBy?: string;
   notes?: string;
 }
