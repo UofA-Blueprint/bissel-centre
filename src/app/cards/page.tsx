@@ -10,6 +10,7 @@ import {
   useReactTable,
 } from "@tanstack/react-table";
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Filter, Plus, Search } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 // --- Types ---
@@ -35,7 +36,7 @@ type CardDepartment =
   | "HELP Program";
 
 type CardRow = {
-  id: number;
+  id: string;
   allocationDate: string;
   status: CardStatus;
   department: CardDepartment;
@@ -46,142 +47,36 @@ type CardRow = {
   notes: string;
 };
 
-// --- Data ---
+// --- API Fetch Function ---
 
-const sampleRows: CardRow[] = [
-  {
-    id: 1,
-    allocationDate: "4/17/2024",
-    status: "Active",
-    department: "Mental Health",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "Ervin Badam",
-    issueDates: ["4/17/2024"],
-    notes: "Notes",
-  },
-  {
-    id: 2,
-    allocationDate: "4/17/2024",
-    status: "Unattributed",
-    department: "Emergency",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "Gerald Maryniak",
-    issueDates: ["4/17/2024", "4/10/2024"],
-    notes: "Notes",
-  },
-  {
-    id: 3,
-    allocationDate: "4/17/2024",
-    status: "Expired",
-    department: "Case MCT",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "Shayla Daniels-Lewis",
-    issueDates: ["4/17/2024", "4/10/2024", "4/01/2024", "3/25/2024", "3/18/2024", "3/11/2024"],
-    notes: "Notes",
-  },
-  {
-    id: 4,
-    allocationDate: "4/17/2024",
-    status: "Unloaded",
-    department: "Newcomer Volunteer",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "",
-    issueDates: [],
-    notes: "",
-  },
-  {
-    id: 5,
-    allocationDate: "4/17/2024",
-    status: "Active",
-    department: "Reception",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "Tayna Dequaine",
-    issueDates: ["4/17/2024"],
-    notes: "Notes",
-  },
-  {
-    id: 6,
-    allocationDate: "4/17/2024",
-    status: "Active",
-    department: "Housing",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "Augustine Tourangeau",
-    issueDates: ["4/17/2024", "4/10/2024", "4/03/2024", "3/20/2024"],
-    notes: "Notes",
-  },
-  {
-    id: 7,
-    allocationDate: "4/17/2024",
-    status: "Active",
-    department: "FE/Comm Bridge",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "Unknown",
-    issueDates: ["4/17/2024", "4/10/2024", "4/03/2024", "3/20/2024", "3/10/2024", "3/01/2024", "2/20/2024", "2/10/2024", "2/01/2024", "1/20/2024", "1/10/2024", "1/01/2024"],
-    notes: "Notes",
-  },
-  {
-    id: 8,
-    allocationDate: "4/17/2024",
-    status: "Unattributed",
-    department: "FASS",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "Trevor Kootenay",
-    issueDates: ["4/17/2024"],
-    notes: "Notes",
-  },
-  {
-    id: 9,
-    allocationDate: "4/17/2024",
-    status: "Expired",
-    department: "Child Care",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "Anthony Gordon Cardinal",
-    issueDates: ["4/17/2024", "4/10/2024"],
-    notes: "Notes",
-  },
-  {
-    id: 10,
-    allocationDate: "4/17/2024",
-    status: "Unattributed",
-    department: "Employment",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "Rehema Mutsei",
-    issueDates: ["4/17/2024", "4/10/2024", "4/01/2024", "3/25/2024", "3/18/2024", "3/11/2024", "3/04/2024", "2/26/2024", "2/19/2024", "2/12/2024"],
-    notes: "Notes",
-  },
-  {
-    id: 11,
-    allocationDate: "4/17/2024",
-    status: "Active",
-    department: "HELP Program",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "Ken Toma",
-    issueDates: ["4/17/2024"],
-    notes: "",
-  },
-  {
-    id: 12,
-    allocationDate: "4/17/2024",
-    status: "Expired",
-    department: "Emergency",
-    final7Digits: "6879001",
-    securityCode: "789",
-    passRecipient: "Jason Holman",
-    issueDates: ["4/17/2024", "4/10/2024", "4/01/2024"],
-    notes: "Notes",
-  },
-];
+async function fetchCards(): Promise<CardRow[]> {
+  const response = await fetch("/api/cards");
+  if (!response.ok) {
+    throw new Error("Failed to fetch cards");
+  }
+  const data = await response.json();
+  return data.cards.map((card: {
+    id: string;
+    allocationDate: string;
+    status: CardStatus;
+    department: CardDepartment;
+    arcCardNumber: string;
+    securityCode: string;
+    passRecipient: string;
+    issueDates: string[];
+    notes: string;
+  }) => ({
+    id: card.id,
+    allocationDate: card.allocationDate,
+    status: card.status,
+    department: card.department,
+    final7Digits: card.arcCardNumber,
+    securityCode: card.securityCode,
+    passRecipient: card.passRecipient,
+    issueDates: card.issueDates,
+    notes: card.notes,
+  }));
+}
 
 // --- Styles ---
 
@@ -244,15 +139,29 @@ function SortableHeader({
 }
 
 export default function CardsPage() {
-  const [data] = useState<CardRow[]>(sampleRows);
+  const [data, setData] = useState<CardRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [expandedDates, setExpandedDates] = useState<Record<number, boolean>>({});
+  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    fetchCards()
+      .then((cards) => {
+        setData(cards);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, []);
 
   // Column Definitions
   const columns = useMemo<ColumnDef<CardRow>[]>(
     () => [
       {
-        accessorKey: "id",
+        id: "rowNumber",
         header: ({ column }) => (
           <SortableHeader
             label="No."
@@ -260,8 +169,8 @@ export default function CardsPage() {
             onClick={column.getToggleSortingHandler()}
           />
         ),
-        cell: ({ getValue }) => (
-          <span className="text-gray-500 font-medium pl-2">{getValue<number>()}</span>
+        cell: ({ row }) => (
+          <span className="text-gray-500 font-medium pl-2">{row.index + 1}</span>
         ),
         size: 50,
       },
@@ -391,7 +300,7 @@ export default function CardsPage() {
   
   // Hardcoded width based on the screenshot column distribution
   const columnWidths: Record<string, string> = {
-    id: "60px",
+    rowNumber: "60px",
     allocationDate: "130px",
     status: "130px",
     department: "180px",
@@ -401,6 +310,22 @@ export default function CardsPage() {
     issueDates: "180px",
     notes: "100px",
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px] bg-gray-50">
+        <div className="text-gray-500">Loading cards...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px] bg-gray-50">
+        <div className="text-red-500">Error: {error}</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 p-6 bg-gray-50 font-sans">
@@ -426,10 +351,13 @@ export default function CardsPage() {
             Filter
           </button>
           
-          <button className="flex items-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors">
+          <Link
+            href="/cards/new"
+            className="flex items-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors"
+          >
             <Plus className="h-4 w-4" strokeWidth={3} />
             New Allocation
-          </button>
+          </Link>
         </div>
       </header>
 
@@ -497,7 +425,7 @@ export default function CardsPage() {
         </button>
         
         <span className="text-sm font-medium text-gray-600">
-          {start}-{end} of 1238
+          {start}-{end} of {data.length}
         </span>
 
         <button

@@ -11,10 +11,11 @@ type CardDepartment =
   | "Newcomer Volunteer"
   | "Reception"
   | "Housing"
-  | "FEComm Bridge"
+  | "FE/Comm Bridge"
   | "FASS"
   | "Child Care"
   | "Employment"
+  | "Comp Eng Dept"
   | "HELP Program";
 
 type DraftCard = {
@@ -34,7 +35,7 @@ const departmentOptions: CardDepartment[] = [
   "Newcomer Volunteer",
   "Reception",
   "Housing",
-  "FEComm Bridge",
+  "FE/Comm Bridge",
   "FASS",
   "Child Care",
   "Employment",
@@ -48,10 +49,12 @@ const deptTone: Partial<Record<CardDepartment, string>> = {
   "Newcomer Volunteer": "bg-violet-100 text-violet-700",
   Reception: "bg-rose-100 text-rose-700",
   Housing: "bg-orange-100 text-orange-700",
-  "FEComm Bridge": "bg-sky-100 text-sky-700",
+  "FE/Comm Bridge": "bg-sky-100 text-sky-700",
   FASS: "bg-pink-100 text-pink-700",
   "Child Care": "bg-amber-100 text-amber-700",
   Employment: "bg-blue-100 text-blue-700",
+  "Comp Eng Dept": "bg-cyan-100 text-cyan-700",
+  "Transit Dept": "bg-gray-100 text-gray-700",
   "HELP Program": "bg-gray-100 text-gray-700",
 };
 
@@ -69,14 +72,16 @@ function DeptPill({ value }: { value: CardDepartment }) {
 
 export default function NewAllocationPage() {
   const router = useRouter();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<DraftCard[]>(() =>
     Array.from({ length: 8 }).map((_, idx) => ({
       id: idx + 1,
-      allocationDate: "4/17/2024",
+      allocationDate: new Date().toLocaleDateString("en-US"),
       status: "Unloaded",
       department: departmentOptions[idx % departmentOptions.length],
-      final7Digits: "6879001",
-      securityCode: "789",
+      final7Digits: "",
+      securityCode: "",
     }))
   );
 
@@ -91,13 +96,57 @@ export default function NewAllocationPage() {
       ...prev,
       {
         id: nextId,
-        allocationDate: "4/17/2024",
+        allocationDate: new Date().toLocaleDateString("en-US"),
         status: "Unloaded",
         department: "Mental Health",
         final7Digits: "",
         securityCode: "",
       },
     ]);
+  };
+
+  const handleSubmit = async () => {
+    // Validate that all rows have required fields
+    const invalidRows = rows.filter(
+      (row) => !row.final7Digits || !row.securityCode
+    );
+    if (invalidRows.length > 0) {
+      setError("Please fill in all required fields (Final 7 Digits and Security Code)");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+
+    try {
+      const cardsToCreate = rows.map((row) => ({
+        allocationDate: row.allocationDate,
+        status: row.status,
+        department: row.department,
+        arcCardNumber: row.final7Digits,
+        securityCode: row.securityCode,
+        passRecipient: "",
+        issueDates: [row.allocationDate],
+        notes: "",
+      }));
+
+      const response = await fetch("/api/cards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cards: cardsToCreate }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create cards");
+      }
+
+      // Navigate back to cards list
+      router.push("/cards");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -112,10 +161,20 @@ export default function NewAllocationPage() {
             ← New Allocation
           </button>
         </div>
-        <button className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-opacity-90">
-          Submit →
+        <button 
+          onClick={handleSubmit}
+          disabled={submitting}
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {submitting ? "Submitting..." : "Submit →"}
         </button>
       </header>
+
+      {error && (
+        <div className="rounded-md bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+          {error}
+        </div>
+      )}
 
       <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-gray-200">
