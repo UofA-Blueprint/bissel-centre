@@ -3,53 +3,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import admin from "firebase-admin";
+import { CardStatus, CardDepartment, ArcCard, ArcCardInput } from "@/app/cards/types";
 
-export type CardStatus =
-  | "Active"
-  | "Unattributed"
-  | "Expired"
-  | "Unloaded"
-  | "Cancelled";
-
-export type CardDepartment =
-  | "Mental Health"
-  | "Emergency"
-  | "Case MCT"
-  | "Newcomer Volunteer"
-  | "Reception"
-  | "Housing"
-  | "FE/Comm Bridge"
-  | "FASS"
-  | "Child Care"
-  | "Employment"
-  | "HELP Program";
-
-export interface ArcCard {
-  id: string;
-  userId?: string;
-  allocationDate: string;
-  status: CardStatus;
-  department: CardDepartment;
-  arcCardNumber: string; // final7Digits in UI
-  securityCode: string;
-  passRecipient: string;
-  issueDates: string[];
-  notes: string;
-  createdAt?: admin.firestore.Timestamp;
-  updatedAt?: admin.firestore.Timestamp;
-}
-
-export interface ArcCardInput {
-  userId?: string;
-  allocationDate: string;
-  status: CardStatus;
-  department: CardDepartment;
-  arcCardNumber: string;
-  securityCode: string;
-  passRecipient?: string;
-  issueDates?: string[];
-  notes?: string;
-}
 // GET /api/cards - Fetch all cards
 export async function GET() {
   try {
@@ -59,7 +14,6 @@ export async function GET() {
     console.log("Fetched cards snapshot:", cardsSnapshot_.docs.map(doc => ({ id: doc.id, data: doc.data() })));
     const cardsSnapshot = await db
       .collection("arc_cards")
-      .orderBy("issuedAt", "desc")
       .get();
 
     const cards: ArcCard[] = [];

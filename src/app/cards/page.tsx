@@ -12,28 +12,14 @@ import {
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Filter, Plus, Search } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  CardStatus,
+  CardDepartment,
+  STATUS_STYLES,
+  DEPARTMENT_STYLES,
+} from "./types";
 
 // --- Types ---
-
-type CardStatus =
-  | "Active"
-  | "Unattributed"
-  | "Expired"
-  | "Unloaded"
-  | "Cancelled";
-
-type CardDepartment =
-  | "Mental Health"
-  | "Emergency"
-  | "Case MCT"
-  | "Newcomer Volunteer"
-  | "Reception"
-  | "Housing"
-  | "FE/Comm Bridge"
-  | "FASS"
-  | "Child Care"
-  | "Employment"
-  | "HELP Program";
 
 type CardRow = {
   id: string;
@@ -80,27 +66,9 @@ async function fetchCards(): Promise<CardRow[]> {
 
 // --- Styles ---
 
-const statusStyles: Record<CardStatus, string> = {
-  Active: "bg-green-100 text-green-700",
-  Unattributed: "bg-yellow-100 text-yellow-800",
-  Expired: "bg-red-100 text-red-700",
-  Unloaded: "bg-gray-200 text-gray-700",
-  Cancelled: "bg-red-100 text-red-700",
-};
+const statusStyles = STATUS_STYLES;
 
-const deptStyles: Record<CardDepartment, string> = {
-  "Mental Health": "bg-green-100 text-green-800",
-  Emergency: "bg-red-100 text-red-800",
-  "Case MCT": "bg-sky-100 text-sky-800",
-  "Newcomer Volunteer": "bg-purple-100 text-purple-800",
-  Reception: "bg-pink-100 text-pink-800",
-  Housing: "bg-orange-100 text-orange-800",
-  "FE/Comm Bridge": "bg-teal-100 text-teal-800",
-  FASS: "bg-fuchsia-100 text-fuchsia-800",
-  "Child Care": "bg-yellow-100 text-yellow-800",
-  Employment: "bg-gray-200 text-gray-700",
-  "HELP Program": "bg-gray-800 text-white", // Dark pill as seen in Row 11
-};
+const deptStyles = DEPARTMENT_STYLES;
 
 // --- Components ---
 

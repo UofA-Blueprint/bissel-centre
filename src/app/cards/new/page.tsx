@@ -2,21 +2,13 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-
-type CardStatus = "Unloaded" | "Active" | "Unattributed" | "Expired" | "Cancelled";
-type CardDepartment =
-  | "Mental Health"
-  | "Emergency"
-  | "Case MCT"
-  | "Newcomer Volunteer"
-  | "Reception"
-  | "Housing"
-  | "FE/Comm Bridge"
-  | "FASS"
-  | "Child Care"
-  | "Employment"
-  | "Comp Eng Dept"
-  | "HELP Program";
+import {
+  CardStatus,
+  CardDepartment,
+  STATUS_OPTIONS,
+  DEPARTMENT_OPTIONS,
+  DEPARTMENT_STYLES,
+} from "../types";
 
 type DraftCard = {
   id: number;
@@ -27,42 +19,11 @@ type DraftCard = {
   securityCode: string;
 };
 
-const statusOptions: CardStatus[] = ["Unloaded", "Active", "Unattributed", "Expired", "Cancelled"];
-const departmentOptions: CardDepartment[] = [
-  "Mental Health",
-  "Emergency",
-  "Case MCT",
-  "Newcomer Volunteer",
-  "Reception",
-  "Housing",
-  "FE/Comm Bridge",
-  "FASS",
-  "Child Care",
-  "Employment",
-  "HELP Program",
-];
-
-const deptTone: Partial<Record<CardDepartment, string>> = {
-  "Mental Health": "bg-green-100 text-green-700",
-  Emergency: "bg-red-100 text-red-700",
-  "Case MCT": "bg-teal-100 text-teal-700",
-  "Newcomer Volunteer": "bg-violet-100 text-violet-700",
-  Reception: "bg-rose-100 text-rose-700",
-  Housing: "bg-orange-100 text-orange-700",
-  "FE/Comm Bridge": "bg-sky-100 text-sky-700",
-  FASS: "bg-pink-100 text-pink-700",
-  "Child Care": "bg-amber-100 text-amber-700",
-  Employment: "bg-blue-100 text-blue-700",
-  "Comp Eng Dept": "bg-cyan-100 text-cyan-700",
-  "Transit Dept": "bg-gray-100 text-gray-700",
-  "HELP Program": "bg-gray-100 text-gray-700",
-};
-
 function DeptPill({ value }: { value: CardDepartment }) {
   return (
     <span
       className={`inline-flex min-w-[140px] justify-center rounded-full px-3 py-1 text-sm font-semibold ${
-        deptTone[value] ?? "bg-gray-100 text-gray-700"
+        DEPARTMENT_STYLES[value] ?? "bg-gray-100 text-gray-700"
       }`}
     >
       {value}
@@ -74,16 +35,7 @@ export default function NewAllocationPage() {
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rows, setRows] = useState<DraftCard[]>(() =>
-    Array.from({ length: 8 }).map((_, idx) => ({
-      id: idx + 1,
-      allocationDate: new Date().toLocaleDateString("en-US"),
-      status: "Unloaded",
-      department: departmentOptions[idx % departmentOptions.length],
-      final7Digits: "",
-      securityCode: "",
-    }))
-  );
+  const [rows, setRows] = useState<DraftCard[]>([]);
 
   const nextId = useMemo(() => rows.length + 1, [rows.length]);
 
@@ -106,6 +58,12 @@ export default function NewAllocationPage() {
   };
 
   const handleSubmit = async () => {
+    // Validate that there are rows to submit
+    if (rows.length === 0) {
+      setError("Please add at least one card before submitting");
+      return;
+    }
+
     // Validate that all rows have required fields
     const invalidRows = rows.filter(
       (row) => !row.final7Digits || !row.securityCode
@@ -204,7 +162,7 @@ export default function NewAllocationPage() {
                     value={row.status}
                     onChange={(e) => updateRow(row.id, "status", e.target.value as CardStatus)}
                   >
-                    {statusOptions.map((s) => (
+                    {STATUS_OPTIONS.map((s) => (
                       <option key={s} value={s}>
                         {s}
                       </option>
@@ -221,7 +179,7 @@ export default function NewAllocationPage() {
                         updateRow(row.id, "department", e.target.value as CardDepartment)
                       }
                     >
-                      {departmentOptions.map((dept) => (
+                      {DEPARTMENT_OPTIONS.map((dept) => (
                         <option key={dept} value={dept}>
                           {dept}
                         </option>
