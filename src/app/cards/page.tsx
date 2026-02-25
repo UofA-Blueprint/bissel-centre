@@ -9,7 +9,7 @@ import {
   SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Filter, Plus, Search } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Filter, Plus, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -17,6 +17,8 @@ import {
   CardDepartment,
   STATUS_STYLES,
   DEPARTMENT_STYLES,
+  STATUS_OPTIONS,
+  DEPARTMENT_OPTIONS,
 } from "./types";
 
 // --- Types ---
@@ -112,6 +114,24 @@ export default function CardsPage() {
   const [error, setError] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+  
+  // Search and Filter state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [statusFilters, setStatusFilters] = useState<CardStatus[]>([]);
+  const [departmentFilters, setDepartmentFilters] = useState<CardDepartment[]>([]);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  // Close filter dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setShowFilterDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     fetchCards()
@@ -124,6 +144,55 @@ export default function CardsPage() {
         setLoading(false);
       });
   }, []);
+
+  // Filter and search logic
+  const filteredData = useMemo(() => {
+    let result = data;
+
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.toLowerCase();
+      result = result.filter((card) =>
+        card.passRecipient.toLowerCase().includes(query) ||
+        card.final7Digits.toLowerCase().includes(query) ||
+        card.securityCode.toLowerCase().includes(query) ||
+        card.notes.toLowerCase().includes(query) ||
+        card.department.toLowerCase().includes(query)
+      );
+    }
+
+    // Apply status filter
+    if (statusFilters.length > 0) {
+      result = result.filter((card) => statusFilters.includes(card.status));
+    }
+
+    // Apply department filter
+    if (departmentFilters.length > 0) {
+      result = result.filter((card) => departmentFilters.includes(card.department));
+    }
+
+    return result;
+  }, [data, searchQuery, statusFilters, departmentFilters]);
+
+  const toggleStatusFilter = (status: CardStatus) => {
+    setStatusFilters((prev) =>
+      prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]
+    );
+  };
+
+  const toggleDepartmentFilter = (dept: CardDepartment) => {
+    setDepartmentFilters((prev) =>
+      prev.includes(dept) ? prev.filter((d) => d !== dept) : [...prev, dept]
+    );
+  };
+
+  const clearAllFilters = () => {
+    setStatusFilters([]);
+    setDepartmentFilters([]);
+    setSearchQuery("");
+  };
+
+  const activeFilterCount = statusFilters.length + departmentFilters.length;
 
   // Column Definitions
   const columns = useMemo<ColumnDef<CardRow>[]>(
@@ -247,7 +316,7 @@ export default function CardsPage() {
   );
 
   const table = useReactTable({
-    data,
+    data: filteredData,
     columns,
     state: { sorting },
     onSortingChange: setSorting,
@@ -264,7 +333,7 @@ export default function CardsPage() {
   const rows = table.getRowModel().rows;
   const { pageIndex, pageSize } = table.getState().pagination;
   const start = pageIndex * pageSize + 1;
-  const end = Math.min(start + rows.length - 1, data.length);
+  const end = Math.min(start + rows.length - 1, filteredData.length);
   
   // Hardcoded width based on the screenshot column distribution
   const columnWidths: Record<string, string> = {
@@ -307,17 +376,100 @@ export default function CardsPage() {
             <input
               type="search"
               placeholder="Search cards..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-64 rounded-md border border-gray-300 bg-white pl-4 pr-10 py-2 text-sm placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
             />
-            <button className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-white bg-cyan-400 hover:bg-cyan-500">
-               <ArrowRight size={14} strokeWidth={3} />
-            </button>
+            {searchQuery ? (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-gray-400 hover:text-gray-600"
+              >
+                <X size={14} strokeWidth={3} />
+              </button>
+            ) : (
+              <div className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-white bg-cyan-400">
+                <Search size={14} strokeWidth={3} />
+              </div>
+            )}
           </div>
           
-          <button className="flex items-center gap-2 rounded-md border border-cyan-500 px-4 py-2 text-sm font-semibold text-cyan-600 hover:bg-cyan-50 transition-colors">
-            <Filter className="h-4 w-4" />
-            Filter
-          </button>
+          <div className="relative" ref={filterRef}>
+            <button
+              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+              className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition-colors ${
+                activeFilterCount > 0
+                  ? "border-cyan-500 bg-cyan-50 text-cyan-700"
+                  : "border-cyan-500 text-cyan-600 hover:bg-cyan-50"
+              }`}
+            >
+              <Filter className="h-4 w-4" />
+              Filter
+              {activeFilterCount > 0 && (
+                <span className="ml-1 rounded-full bg-cyan-500 px-2 py-0.5 text-xs text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            
+            {showFilterDropdown && (
+              <div className="absolute right-0 top-full mt-2 w-80 rounded-lg border border-gray-200 bg-white shadow-lg z-50">
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-gray-900">Filters</h3>
+                    {activeFilterCount > 0 && (
+                      <button
+                        onClick={clearAllFilters}
+                        className="text-xs text-cyan-600 hover:text-cyan-700"
+                      >
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                  
+                  {/* Status Filter */}
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Status</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {STATUS_OPTIONS.map((status) => (
+                        <button
+                          key={status}
+                          onClick={() => toggleStatusFilter(status)}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            statusFilters.includes(status)
+                              ? STATUS_STYLES[status] + " ring-2 ring-offset-1 ring-cyan-500"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          {status}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Department Filter */}
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Department</h4>
+                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                      {DEPARTMENT_OPTIONS.map((dept) => (
+                        <button
+                          key={dept}
+                          onClick={() => toggleDepartmentFilter(dept)}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            departmentFilters.includes(dept)
+                              ? DEPARTMENT_STYLES[dept] + " ring-2 ring-offset-1 ring-cyan-500"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          {dept}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
           
           <Link
             href="/cards/new"
@@ -393,7 +545,10 @@ export default function CardsPage() {
         </button>
         
         <span className="text-sm font-medium text-gray-600">
-          {start}-{end} of {data.length}
+          {filteredData.length === 0 ? "0" : `${start}-${end}`} of {filteredData.length}
+          {filteredData.length !== data.length && (
+            <span className="text-gray-400"> (filtered from {data.length})</span>
+          )}
         </span>
 
         <button
