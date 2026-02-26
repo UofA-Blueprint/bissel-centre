@@ -4,12 +4,54 @@ import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import admin from "firebase-admin";
 import { ArcCard, ArcCardInput } from "@/app/cards/types";
+import { cookies } from "next/headers";
+
+async function verifyStaffAccess() {
+  const cookieStore = await cookies();
+  const sessionCookie = cookieStore.get("session")?.value;
+
+  if (!sessionCookie) {
+    return {
+      error: NextResponse.json({ error: "Unauthorized - No session found" }, { status: 401 }),
+    };
+  }
+
+  const app = await initAdmin();
+  const decodedClaims = await app.auth().verifySessionCookie(sessionCookie, true);
+
+  // IT Admins are intentionally restricted from staff cards access.
+  if (decodedClaims.admin === true) {
+    return {
+      error: NextResponse.json(
+        { error: "Forbidden - Staff access only" },
+        { status: 403 }
+      ),
+    };
+  }
+
+  const db = app.firestore();
+  const staffDoc = await db.collection("administrative_staff").doc(decodedClaims.uid).get();
+
+  if (!staffDoc.exists) {
+    return {
+      error: NextResponse.json(
+        { error: "Forbidden - Staff access only" },
+        { status: 403 }
+      ),
+    };
+  }
+
+  return { app, db };
+}
 
 // GET /api/cards - Fetch all cards
 export async function GET() {
   try {
-    const app = await initAdmin();
-    const db = app.firestore();
+    const access = await verifyStaffAccess();
+    if ("error" in access) {
+      return access.error;
+    }
+    const { db } = access;
 
     const cardsSnapshot = await db.collection("arc_cards").get();
 
@@ -141,8 +183,11 @@ export async function GET() {
 // POST /api/cards - Create new card(s)
 export async function POST(request: NextRequest) {
   try {
-    const app = await initAdmin();
-    const db = app.firestore();
+    const access = await verifyStaffAccess();
+    if ("error" in access) {
+      return access.error;
+    }
+    const { db } = access;
 
     const body = await request.json();
     const cardsToCreate: ArcCardInput[] = Array.isArray(body.cards)

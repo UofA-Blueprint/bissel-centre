@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 // Define protected routes that require authentication
-const PROTECTED_ROUTES = ["/dashboard", "/profile"];
+const PROTECTED_ROUTES = ["/dashboard", "/profile", "/cards"];
+
+// Define staff-only routes (regular administrative staff, not IT admins)
+const STAFF_ONLY_ROUTES = ["/cards"];
 
 // Define admin-only routes
 const ADMIN_ROUTES = ["/admin"];
@@ -49,6 +52,9 @@ export async function middleware(request: NextRequest) {
   );
 
   const isAdminRoute = ADMIN_ROUTES.some((route) => pathname.startsWith(route));
+  const isStaffOnlyRoute = STAFF_ONLY_ROUTES.some((route) =>
+    pathname.startsWith(route)
+  );
 
   // If it's a public route, allow access
   if (PUBLIC_ROUTES.includes(pathname) && !isProtectedRoute && !isAdminRoute) {
@@ -91,6 +97,19 @@ export async function middleware(request: NextRequest) {
     // For admin routes, check if user has admin privileges
     if (!userData.admin) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
+  }
+
+  // Check staff-only routes access
+  if (isStaffOnlyRoute && userData.admin) {
+    return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+  }
+
+  // Cards routes are intentionally entered from dashboard action only.
+  if (isStaffOnlyRoute) {
+    const cardsAccessCookie = request.cookies.get("cards_access")?.value;
+    if (cardsAccessCookie !== "1") {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }
 
