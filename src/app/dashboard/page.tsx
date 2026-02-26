@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { db } from "../services/firebase";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import Fuse from "fuse.js";
 import { collection, getDocs } from "firebase/firestore";
 import { getAllUsers } from "@/app/services/userService";
@@ -30,6 +32,7 @@ interface User {
 }
 
 export default function DashboardPage() {
+    const router = useRouter();
     const [stats, setStats] = useState([
         { icon: "/card.svg", number: 0, label: "Available Cards" },
         { icon: "/checkmark.svg", number: 0, label: "Active Cards" },
@@ -157,6 +160,12 @@ export default function DashboardPage() {
         setSearchResults(results);
     }, [searchQuery, users]);
 
+    const handleGoToCards = () => {
+        document.cookie =
+            "cards_access=1; Path=/; Max-Age=600; SameSite=Lax";
+        router.push("/cards");
+    };
+
     return (
         <div className="p-6 bg-gray-100 min-h-screen px-24">
             {/* Stats Section */}
@@ -200,15 +209,28 @@ export default function DashboardPage() {
                     <button className="flex items-center gap-1">
                         <span className="text-xl">＋</span> New Recipient
                     </button>
-                    <button className="flex items-center gap-2">
-                        <Image
-                            src="/filter.svg"
-                            alt="Filter"
-                            width={16}
-                            height={16}
-                        />
-                        Filters
-                    </button>
+                    <div className="flex items-center gap-4">
+                        <Link
+                            href="#"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleGoToCards();
+                            }}
+                            className="flex items-center gap-2 rounded-lg border border-white/40 px-3 py-1.5 hover:bg-white/10 transition-colors"
+                        >
+                            <Image src="/card.svg" alt="ARC Cards" width={16} height={16} />
+                            ARC Cards
+                        </Link>
+                        <button className="flex items-center gap-2">
+                            <Image
+                                src="/filter.svg"
+                                alt="Filter"
+                                width={16}
+                                height={16}
+                            />
+                            Filters
+                        </button>
+                    </div>
                 </div>
             </div>
 
