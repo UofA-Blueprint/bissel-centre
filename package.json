@@ -17,6 +17,7 @@
     "@next/env": "^15.1.7",
     "@svgr/webpack": "^8.1.0",
     "cookie": "^1.0.2",
+    "@tanstack/react-table": "^8.20.5",
     "dotenv": "^16.4.7",
     "firebase": "^11.3.0",
     "firebase-admin": "^13.1.0",
