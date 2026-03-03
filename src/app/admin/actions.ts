@@ -1,7 +1,8 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use server";
 
 import { initAdmin } from "@/app/services/firebaseAdmin";
-import { getAllAdministrativeStaff } from "@/app/services/administrativeStaffService";
+import { deleteAdministrativeStaffById, getAllAdministrativeStaff } from "@/app/services/administrativeStaffService";
 import { cookies } from "next/headers";
 import { hashITIDNumber } from "@/utils/hashITIDNumber";
 import { randomBytes } from "crypto";
@@ -123,16 +124,10 @@ export const getAdministrativeStaff = async () => {
   return await getAllAdministrativeStaff(); 
 }
 
-export const deleteUser = async (uid: string) => {
-  const admin = await initAdmin();
-  try {
-    await admin.auth().deleteUser(uid);
-    return true;
-  } catch (error) {
-    console.error("Error deleting user:", error);
-    return false;
-  }
-};
+export const deleteAdministrativeStaff = async (id: string) => {
+  return await deleteAdministrativeStaffById(id);
+}
+
 
 export const setUserAsAdmin = async (email: string) => {
   const admin = await initAdmin();

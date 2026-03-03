@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { signOut } from "firebase/auth";
 import { auth } from "../../services/firebase";
 import {
-    deleteUser,
     getAdminSession,
     getAdministrativeStaff,
+    deleteAdministrativeStaff,
 } from "../actions";
 import Fuse from "fuse.js"; // Import Fuse.js for fuzzy search
 import React from "react";
@@ -39,28 +39,22 @@ function AdminUserCard({
     // const isSuperAdmin = user.customClaims?.admin === true;
 
     return (
-        <div className="bg-white rounded-xl shadow-sm px-6 py-4 flex items-center justify-between w-full max-w-3xl hover:shadow-md transition">
+        <div className="bg-white rounded-lg shadow-md px-6 py-4 w-full flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             {/* Left: Avatar + Info */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+                {" "}
+                {/* min-w-0 helps truncation work */}
                 {/* Avatar */}
-                <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
+                <div className="shrink-0 w-12 h-12 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center">
                     <span className="text-lg font-semibold text-gray-700">
                         {user.firstName?.[0] || user.email?.[0]?.toUpperCase()}
                     </span>
                 </div>
-
                 {/* Name + Email */}
-                <div className="flex flex-col">
-                    <div className="flex items-center gap-2">
-                        <span className="text-lg font-semibold text-gray-900 truncate">
-                            {user.firstName + " " + user.secondName}
-                        </span>
-                        {/* {isSuperAdmin && (
-                            <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">
-                                IT Admin
-                            </span>
-                        )} */}
-                    </div>
+                <div className="flex flex-col min-w-0">
+                    <span className="text-lg font-semibold text-gray-900 truncate">
+                        {user.firstName + " " + user.secondName}
+                    </span>
                     <span className="text-sm text-gray-500 truncate">
                         {user.email || "N/A"}
                     </span>
@@ -68,7 +62,9 @@ function AdminUserCard({
             </div>
 
             {/* Right: Action buttons */}
-            <div className="flex items-center gap-3">
+            {/* sm:self-center keeps buttons aligned when row-mode, 
+        self-end or self-start looks better in column-mode */}
+            <div className="flex items-center gap-3 sm:justify-end border-t sm:border-t-0 pt-3 sm:pt-0">
                 {/* Edit Button */}
                 <button
                     onClick={onEdit}
@@ -86,7 +82,7 @@ function AdminUserCard({
                 {/* Delete Button */}
                 <button
                     onClick={onDelete}
-                    className="flex items-center justify-center w-9 h-9 rounded-full bg-blue-50 hover:bg-blue-100 transition"
+                    className="flex items-center justify-center w-9 h-9 rounded-full bg-red-50 hover:bg-red-100 transition"
                     title="Delete"
                 >
                     <Image
@@ -141,7 +137,7 @@ export default function AdminDashboardPage() {
                 setSearchResults(users);
             } catch (err) {
                 setError(
-                    err instanceof Error ? err.message : "An error occurred"
+                    err instanceof Error ? err.message : "An error occurred",
                 );
                 // On error, redirect to home
                 router.replace("/");
@@ -184,13 +180,13 @@ export default function AdminDashboardPage() {
         }
         setLoading(true);
         try {
-            await deleteUser(uid);
+            await deleteAdministrativeStaff(uid);
 
             // Remove user from local state
             setUsers(users.filter((user) => user.id !== uid));
         } catch (err) {
             setError(
-                err instanceof Error ? err.message : "Failed to delete user"
+                err instanceof Error ? err.message : "Failed to delete user",
             );
         }
         setLoading(false);
@@ -246,55 +242,123 @@ export default function AdminDashboardPage() {
                     </div>
                 </div>
             </div>
-
-            {/* Search Bar */}
-            <div className="bg-[#979793] rounded-xl shadow-md w-full max-w-3xl mx-auto mb-6 px-2 py-2">
-                {/* Search input row */}
-                <div className="flex items-center bg-white rounded-lg px-4 py-2 ">
-                    <input
-                        type="text"
-                        placeholder="Search recipients..."
-                        className="flex-1 outline-none text-gray-00 text-base bg-white"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    <button
-                        className="p-2 bg-cyan-500 hover:bg-cyan-600 rounded-full"
-                        // onClick={handleSearch}F
-                    >
-                        <Image
-                            src="/search-enter.svg"
-                            alt="Search"
-                            width={20}
-                            height={20}
+            <div className="p-6 bg-gray-100 min-h-screen px-24">
+                {/* Search Bar */}
+                <div className="bg-[#979793] rounded-xl shadow-md max-w-7xl mx-auto mb-6 px-2 py-2">
+                    {/* Search input row */}
+                    <div className="flex items-center bg-white rounded-lg px-4 py-2 mb-3">
+                        <input
+                            type="text"
+                            placeholder="Search recipients..."
+                            className="flex-1 outline-none text-gray-700 text-base bg-white"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
                         />
-                    </button>
-                </div>
-            </div>
+                        <button
+                            className="p-2 bg-cyan-500 hover:bg-cyan-600 rounded-full"
+                            // onClick={handleSearch}
+                        >
+                            <Image
+                                src="/search-enter.svg"
+                                alt="Search"
+                                width={20}
+                                height={20}
+                            />
+                        </button>
+                    </div>
 
-            {/* Search Results */}
-            <div className="flex flex-wrap gap-4 justify-center max-w-7xl mx-auto">
-                {searchResults.map((user) => (
-                    <AdminUserCard
-                        key={user.id}
-                        user={user}
-                        onDelete={() => handleDeleteUser(user.id)}
-                        onEdit={() => {}}
-                    />
-                ))}
-            </div>
-
-            {/* Placeholder for Illustration - only show if no user cards */}
-            {searchResults.length === 0 && (
-                <div className="flex justify-center items-center p-10 rounded-lg">
-                    <Image
-                        src="/no-results.svg"
-                        alt="Illustration"
-                        width={370}
-                        height={370}
-                    />
+                    {/* Button row inside gray container */}
+                    <div className="flex justify-between items-center text-white text-sm">
+                        <button className="flex items-center gap-1">
+                            <span className="text-xl">＋</span> New Recipient
+                        </button>
+                        <button className="flex items-center gap-2">
+                            <Image
+                                src="/filter.svg"
+                                alt="Filter"
+                                width={16}
+                                height={16}
+                            />
+                            Filters
+                        </button>
+                    </div>
                 </div>
-            )}
+
+                {/* Search Results */}
+                <div className="flex flex-wrap gap-4 justify-center max-w-7xl mx-auto">
+                    {searchResults.map((user) => (
+                        <AdminUserCard
+                            key={user.id}
+                            user={user}
+                            onDelete={() => handleDeleteUser(user.id)}
+                            onEdit={() => {}}
+                        />
+                    ))}
+                </div>
+
+                {/* Placeholder for Illustration - only show if no user cards */}
+                {searchResults.length === 0 && (
+                    <div className="flex justify-center items-center p-10 rounded-lg">
+                        <Image
+                            src="/no-results.svg"
+                            alt="Illustration"
+                            width={370}
+                            height={370}
+                        />
+                    </div>
+                )}
+            </div>
         </main>
     );
 }
+
+// <div className="p-6 bg-gray-100 min-h-screen px-24">
+//     {/* Search Bar */}
+//     <div className="bg-[#979793] rounded-xl shadow-md max-w-7xl mx-auto mb-6 px-2 py-2">
+//         {/* Search input row */}
+//         <div className="flex items-center bg-white rounded-lg px-4 py-2 mb-3">
+//             <input
+//                 type="text"
+//                 placeholder="Search recipients..."
+//                 className="flex-1 outline-none text-gray-700 text-base bg-white"
+//                 value={searchQuery}
+//                 onChange={(e) => setSearchQuery(e.target.value)}
+//             />
+//             <button
+//                 className="p-2 bg-cyan-500 hover:bg-cyan-600 rounded-full"
+//                 // onClick={handleSearch}
+//             >
+//                 <Image
+//                     src="/search-enter.svg"
+//                     alt="Search"
+//                     width={20}
+//                     height={20}
+//                 />
+//             </button>
+//         </div>
+//     </div>
+
+//     {/* Search Results */}
+//     <div className="flex flex-wrap gap-4 justify-center max-w-7xl mx-auto">
+//         {searchResults.map((user) => (
+//             <AdminUserCard
+//                 key={user.id}
+//                 user={user}
+//                 onDelete={() => handleDeleteUser(user.id)}
+//                 onEdit={() => {}}
+//             />
+//         ))}
+//     </div>
+
+//     {/* Placeholder for Illustration - only show if no user cards */}
+//     {searchResults.length === 0 && (
+//         <div className="flex justify-center items-center p-10 rounded-lg">
+//             <Image
+//                 src="/no-results.svg"
+//                 alt="Illustration"
+//                 width={370}
+//                 height={370}
+//             />
+//         </div>
+//     )}
+// </div>;
