@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { db } from "../services/firebase";
+import { auth, db } from "../services/firebase";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Fuse from "fuse.js";
 import { collection, getDocs } from "firebase/firestore";
+import { signOut } from "firebase/auth";
 import { getAllUsers } from "@/app/services/userService";
 import { getAllArcCards } from "@/app/services/arcCardService";
 
@@ -46,8 +47,14 @@ interface User {
     lastIssued: string;
 }
 
+interface SessionUser {
+    name?: string;
+    email: string;
+}
+
 export default function DashboardPage() {
     const router = useRouter();
+    const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
     const [stats, setStats] = useState([
         { icon: "/card.svg", number: 0, label: "Available Cards" },
         { icon: "/checkmark.svg", number: 0, label: "Active Cards" },
@@ -65,6 +72,23 @@ export default function DashboardPage() {
     useEffect(() => {
         const fetchData = async () => {
             try {
+                const sessionResponse = await fetch("/api/user-session");
+                if (!sessionResponse.ok) {
+                    router.replace("/login");
+                    return;
+                }
+
+                const sessionData = await sessionResponse.json();
+                if (sessionData.admin) {
+                    router.replace("/admin/dashboard");
+                    return;
+                }
+
+                setSessionUser({
+                    name: sessionData.name,
+                    email: sessionData.email,
+                });
+
                 // Fetch ARC Cards
                 const arcCards = await getAllArcCards();
 
@@ -159,7 +183,7 @@ export default function DashboardPage() {
         };
 
         fetchData();
-    }, []);
+    }, [router]);
 
     useEffect(() => {
         if (!searchQuery.trim()) {
@@ -182,93 +206,120 @@ export default function DashboardPage() {
         router.push("/cards");
     };
 
+    const handleLogout = async () => {
+        try {
+            await fetch("/api/logout", { method: "POST" });
+            await signOut(auth);
+            router.replace("/login");
+        } catch (error) {
+            console.error("Logout failed:", error);
+        }
+    };
+
     return (
-        <div className="p-6 bg-gray-100 min-h-screen px-24">
-            {/* Stats Section */}
-            <div className="flex flex-wrap gap-4 mb-6 px-6 sm:px-12 lg:px-24 justify-center max-w-7xl mx-auto">
-                {stats.map((stat, index) => (
-                    <StatCard
-                        key={index}
-                        icon={stat.icon}
-                        number={stat.number}
-                        label={stat.label}
-                    />
-                ))}
-            </div>
-
-            {/* Search Bar */}
-            <div className="bg-[#979793] rounded-xl shadow-md max-w-7xl mx-auto mb-6 px-2 py-2">
-                {/* Search input row */}
-                <div className="flex items-center bg-white rounded-lg px-4 py-2 mb-3">
-                    <input
-                        type="text"
-                        placeholder="Search recipients..."
-                        className="flex-1 outline-none text-gray-700 text-base bg-white"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    <button
-                        className="p-2 bg-cyan-500 hover:bg-cyan-600 rounded-full"
-                        // onClick={handleSearch}
-                    >
-                        <Image
-                            src="/search-enter.svg"
-                            alt="Search"
-                            width={20}
-                            height={20}
-                        />
-                    </button>
-                </div>
-
-                {/* Button row inside gray container */}
-                <div className="flex justify-between items-center text-white text-sm">
-                    <button className="flex items-center gap-1">
-                        <span className="text-xl">＋</span> New Recipient
-                    </button>
-                    <div className="flex items-center gap-4">
-                        <Link
-                            href="#"
-                            onClick={(e) => {
-                                e.preventDefault();
-                                handleGoToCards();
-                            }}
-                            className="flex items-center gap-2 rounded-lg border border-white/40 px-3 py-1.5 hover:bg-white/10 transition-colors"
+        <main>
+            <div className="bg-white shadow mb-6">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div className="flex justify-between items-center py-6">
+                        <h1 className="text-2xl font-bold text-gray-900">
+                            Welcome, {sessionUser?.name || sessionUser?.email || "Staff"}
+                        </h1>
+                        <button
+                            onClick={handleLogout}
+                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
                         >
-                            <Image src="/card.svg" alt="ARC Cards" width={16} height={16} />
-                            ARC Cards
-                        </Link>
-                        <button className="flex items-center gap-2">
-                            <Image
-                                src="/filter.svg"
-                                alt="Filter"
-                                width={16}
-                                height={16}
-                            />
-                            Filters
+                            Logout
                         </button>
                     </div>
                 </div>
             </div>
-
-            {/* Search Results */}
-            <div className="flex flex-wrap gap-4 justify-center max-w-7xl mx-auto">
-                {searchResults.map((user) => (
-                    <UserCard key={user.id} user={user} />
-                ))}
-            </div>
-
-            {/* Placeholder for Illustration - only show if no user cards */}
-            {searchResults.length === 0 && (
-                <div className="flex justify-center items-center p-10 rounded-lg">
-                    <Image
-                        src="/no-results.svg"
-                        alt="Illustration"
-                        width={370}
-                        height={370}
-                    />
+            <div className="p-6 bg-gray-100 min-h-screen px-24">
+                {/* Stats Section */}
+                <div className="flex flex-wrap gap-4 mb-6 px-6 sm:px-12 lg:px-24 justify-center max-w-7xl mx-auto">
+                    {stats.map((stat, index) => (
+                        <StatCard
+                            key={index}
+                            icon={stat.icon}
+                            number={stat.number}
+                            label={stat.label}
+                        />
+                    ))}
                 </div>
-            )}
-        </div>
+
+                {/* Search Bar */}
+                <div className="bg-[#979793] rounded-xl shadow-md max-w-7xl mx-auto mb-6 px-2 py-2">
+                    {/* Search input row */}
+                    <div className="flex items-center bg-white rounded-lg px-4 py-2 mb-3">
+                        <input
+                            type="text"
+                            placeholder="Search recipients..."
+                            className="flex-1 outline-none text-gray-700 text-base bg-white"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                        <button
+                            className="p-2 bg-cyan-500 hover:bg-cyan-600 rounded-full"
+                            // onClick={handleSearch}
+                        >
+                            <Image
+                                src="/search-enter.svg"
+                                alt="Search"
+                                width={20}
+                                height={20}
+                            />
+                        </button>
+                    </div>
+
+                    {/* Button row inside gray container */}
+                    <div className="flex justify-between items-center text-white text-sm">
+                        <button className="flex items-center gap-1">
+                            <span className="text-xl">＋</span> New Recipient
+                        </button>
+                        <div className="flex items-center gap-4">
+                            <Link
+                                href="#"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    handleGoToCards();
+                                }}
+                                className="flex items-center gap-2 rounded-lg border border-white/40 px-3 py-1.5 hover:bg-white/10 transition-colors"
+                            >
+                                <Image src="/card.svg" alt="ARC Cards" width={16} height={16} />
+                                ARC Cards
+                            </Link>
+                            <button className="flex items-center gap-2">
+                                <Image
+                                    src="/filter.svg"
+                                    alt="Filter"
+                                    width={16}
+                                    height={16}
+                                />
+                                Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Search Results */}
+                <div className="flex flex-wrap gap-4 justify-center max-w-7xl mx-auto">
+                    {searchResults.map((user) => (
+                        <UserCard key={user.id} user={user} />
+                    ))}
+                </div>
+
+                {/* Placeholder for Illustration - only show if no user cards */}
+                {searchResults.length === 0 && (
+                    <div className="flex justify-center items-center p-10 rounded-lg">
+                        <Image
+                            src="/no-results.svg"
+                            alt="Illustration"
+                            width={370}
+                            height={370}
+                        />
+                    </div>
+                )}
+            </div>
+        </main>
     );
 }
 

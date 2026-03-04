@@ -24,7 +24,7 @@ interface User {
 
 interface Session {
     name?: string;
-    email: string;
+    email?: string;
 }
 
 function AdminUserCard({
@@ -249,7 +249,7 @@ export default function AdminDashboardPage() {
                     <div className="flex items-center bg-white rounded-lg px-4 py-2 mb-3">
                         <input
                             type="text"
-                            placeholder="Search recipients..."
+                            placeholder="Search administrative staff..."
                             className="flex-1 outline-none text-gray-700 text-base bg-white"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
@@ -269,9 +269,7 @@ export default function AdminDashboardPage() {
 
                     {/* Button row inside gray container */}
                     <div className="flex justify-between items-center text-white text-sm">
-                        <button className="flex items-center gap-1">
-                            <span className="text-xl">＋</span> New Recipient
-                        </button>
+                        
                         <button className="flex items-center gap-2">
                             <Image
                                 src="/filter.svg"

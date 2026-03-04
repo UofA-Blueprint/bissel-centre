@@ -1,39 +1,62 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 
 export async function POST(request: NextRequest) {
   try {
-    const { email } = await request.json();
+    const cookieStore = await cookies();
+    const sessionCookie = cookieStore.get("session")?.value;
 
-    if (!email) {
-      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    if (!sessionCookie) {
+      return NextResponse.json(
+        { error: "Unauthorized: missing session" },
+        { status: 401 }
+      );
     }
-
-    console.log(`Setting admin privileges for: ${email}`);
 
     const admin = await initAdmin();
 
+    let decodedClaims: import("firebase-admin").auth.DecodedIdToken;
+    try {
+      decodedClaims = await admin.auth().verifySessionCookie(sessionCookie, true);
+    } catch {
+      return NextResponse.json(
+        { error: "Unauthorized: invalid session" },
+        { status: 401 }
+      );
+    }
+
+    if ((decodedClaims.admin as boolean | undefined) !== true) {
+      return NextResponse.json(
+        { error: "Forbidden: IT admin access required" },
+        { status: 403 }
+      );
+    }
+
+    const { email } = await request.json();
+    const normalizedEmail =
+      typeof email === "string" ? email.trim().toLowerCase() : "";
+
+    if (!normalizedEmail) {
+      return NextResponse.json({ error: "Email is required" }, { status: 400 });
+    }
+
     // Get user by email
-    const userRecord = await admin.auth().getUserByEmail(email);
-    console.log(`Found user: ${userRecord.uid}`);
+    const userRecord = await admin.auth().getUserByEmail(normalizedEmail);
 
-    // Set admin custom claim
-    await admin.auth().setCustomUserClaims(userRecord.uid, { admin: true });
-
-    console.log(`✅ Successfully set admin privileges for ${email}`);
-
-    // Verify the change
-    const updatedUser = await admin.auth().getUser(userRecord.uid);
-    const isAdmin = updatedUser.customClaims?.admin === true;
+    // Preserve existing claims while setting admin
+    await admin.auth().setCustomUserClaims(userRecord.uid, {
+      ...(userRecord.customClaims ?? {}),
+      admin: true,
+    });
 
     return NextResponse.json({
       success: true,
-      message: `Admin privileges set for ${email}`,
-      isAdmin,
+      message: `Admin privileges set for ${normalizedEmail}`,
       uid: userRecord.uid,
     });
   } catch (error) {
-    console.error("❌ Error setting admin privileges:", error);
+    console.error("Error setting admin privileges:", error);
     return NextResponse.json(
       {
         error: "Failed to set admin privileges",

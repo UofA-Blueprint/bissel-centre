@@ -1,16 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Define protected routes that require authentication
-const PROTECTED_ROUTES = ["/dashboard", "/profile", "/cards"];
+// Staff-only routes (regular administrative staff, not IT admins)
+const STAFF_ONLY_ROUTES = ["/dashboard", "/profile", "/cards"];
 
-// Define staff-only routes (regular administrative staff, not IT admins)
-const STAFF_ONLY_ROUTES = ["/cards"];
+// Admin routes that remain public for authentication/bootstrap
+const ADMIN_PUBLIC_ROUTES = ["/admin/login", "/admin/register"];
+const STAFF_PUBLIC_ROUTES = ["/login", "/register"];
+const GLOBAL_PUBLIC_ROUTES = ["/"];
 
-// Define admin-only routes
-const ADMIN_ROUTES = ["/admin"];
+function isAdminProtectedRoute(pathname: string) {
+  return pathname.startsWith("/admin") && !ADMIN_PUBLIC_ROUTES.includes(pathname);
+}
 
-// Define public routes that don't require authentication
-const PUBLIC_ROUTES = ["/", "/login", "/admin/login", "/admin/register"];
+function isStaffProtectedRoute(pathname: string) {
+  return STAFF_ONLY_ROUTES.some((route) => pathname.startsWith(route));
+}
+
+function isPublicRoute(pathname: string) {
+  return (
+    GLOBAL_PUBLIC_ROUTES.includes(pathname) ||
+    STAFF_PUBLIC_ROUTES.includes(pathname) ||
+    ADMIN_PUBLIC_ROUTES.includes(pathname)
+  );
+}
 
 async function verifySessionAndClaims(sessionCookie: string, baseUrl: string) {
   try {
@@ -46,31 +58,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check if route is protected
-  const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
-    pathname.startsWith(route)
-  );
-
-  const isAdminRoute = ADMIN_ROUTES.some((route) => pathname.startsWith(route));
-  const isStaffOnlyRoute = STAFF_ONLY_ROUTES.some((route) =>
-    pathname.startsWith(route)
-  );
-
-  // If it's a public route, allow access
-  if (PUBLIC_ROUTES.includes(pathname) && !isProtectedRoute && !isAdminRoute) {
-    return NextResponse.next();
-  }
+  const isAdminRoute = isAdminProtectedRoute(pathname);
+  const isStaffRoute = isStaffProtectedRoute(pathname);
+  const isAdminAuthRoute = ADMIN_PUBLIC_ROUTES.includes(pathname);
+  const isStaffAuthRoute = STAFF_PUBLIC_ROUTES.includes(pathname);
+  const publicRoute = isPublicRoute(pathname);
 
   // Get session cookie
   const sessionCookie = request.cookies.get("session")?.value;
 
-  // If no session cookie and accessing protected route, redirect to appropriate login
+  // No session:
+  // - allow public pages (/ , /login, /register, /admin/login, /admin/register)
+  // - redirect protected pages to their respective login pages
   if (!sessionCookie) {
-    if (isProtectedRoute) {
-      return NextResponse.redirect(new URL("/login", request.url));
+    if (publicRoute) {
+      return NextResponse.next();
     }
     if (isAdminRoute) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
+    if (isStaffRoute) {
+      return NextResponse.redirect(new URL("/login", request.url));
     }
     return NextResponse.next();
   }
@@ -82,31 +90,62 @@ export async function middleware(request: NextRequest) {
   );
 
   if (!userData) {
-    // Invalid session, redirect to appropriate login
-    if (isAdminRoute) {
+    // Invalid session: send users back to the appropriate login page
+    if (isAdminRoute || isAdminAuthRoute) {
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
-    if (isProtectedRoute) {
+    if (isStaffRoute || isStaffAuthRoute) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
     return NextResponse.next();
   }
 
-  // Check admin routes access
+  const isAdminUser = userData.admin === true;
+  const isStaffUser = userData.staff === true;
+
+  // Keep authenticated users away from login/register screens
+  if (isAdminAuthRoute) {
+    if (isAdminUser) {
+      return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+    }
+    if (isStaffUser) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+    return NextResponse.redirect(new URL("/admin/login", request.url));
+  }
+
+  if (isStaffAuthRoute) {
+    if (isAdminUser) {
+      return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+    }
+    if (isStaffUser) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  // Admin route access: IT admins only
   if (isAdminRoute) {
-    // For admin routes, check if user has admin privileges
-    if (!userData.admin) {
+    if (!isAdminUser) {
+      if (isStaffUser) {
+        return NextResponse.redirect(new URL("/dashboard", request.url));
+      }
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
   }
 
-  // Check staff-only routes access
-  if (isStaffOnlyRoute && userData.admin) {
-    return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+  // Staff route access: administrative staff only
+  if (isStaffRoute) {
+    if (isAdminUser) {
+      return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+    }
+    if (!isStaffUser) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
   }
 
   // Cards routes are intentionally entered from dashboard action only.
-  if (isStaffOnlyRoute) {
+  if (pathname.startsWith("/cards")) {
     const cardsAccessCookie = request.cookies.get("cards_access")?.value;
     if (cardsAccessCookie !== "1") {
       return NextResponse.redirect(new URL("/dashboard", request.url));
