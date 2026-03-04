@@ -1,5 +1,5 @@
 import { db } from "./firebase";
-import { collection, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, deleteDoc } from "firebase/firestore";
 
 export interface AdministrativeStaff {
   id: string;
@@ -44,6 +44,16 @@ export async function getAdministrativeStaffById(id: string): Promise<Administra
     createdBy: data.createdBy ?? "",
     email: data.email ?? "",
     firstName: data.firstName ?? "",
-    lastName: data.lastName ?? ""
+    secondName: data.lastName ?? ""
   };
+}
+
+export async function deleteAdministrativeStaffById(id: string): Promise<void> {
+  try {
+    const ref = doc(db, COLLECTION, id);
+    await deleteDoc(ref);
+  } catch (error) {
+    console.error("Error deleting administrative staff:", error);
+    throw error;
+  }
 }
