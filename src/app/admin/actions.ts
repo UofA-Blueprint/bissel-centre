@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use server";
 
 import { initAdmin } from "@/app/services/firebaseAdmin";
@@ -123,16 +124,30 @@ export const getAdministrativeStaff = async () => {
   return await getAllAdministrativeStaff(); 
 }
 
-export const deleteUser = async (uid: string) => {
-  const admin = await initAdmin();
-  try {
-    await admin.auth().deleteUser(uid);
-    return true;
-  } catch (error) {
-    console.error("Error deleting user:", error);
-    return false;
+export const deleteAdministrativeStaff = async (id: string) => {
+  const session = await getAdminSession();
+  if (!session) {
+    throw new Error("Unauthorized: IT admin session required");
   }
-};
+
+  const admin = await initAdmin();
+  const db = admin.firestore();
+
+  // Remove the user from Firebase Authentication first.
+  // If the auth user does not exist, we still continue deleting the staff record.
+  try {
+    await admin.auth().deleteUser(id);
+  } catch (error: any) {
+    if (error?.code !== "auth/user-not-found") {
+      throw error;
+    }
+  }
+
+  await db.collection("administrative_staff").doc(id).delete();
+
+  return { success: true };
+}
+
 
 export const setUserAsAdmin = async (email: string) => {
   const admin = await initAdmin();
