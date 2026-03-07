@@ -6,7 +6,7 @@ import { NextRequest } from "next/server";
 jest.mock("next/server", () => ({
   NextRequest: jest.fn(),
   NextResponse: {
-    json: (data: any, init?: ResponseInit) => ({
+    json: (data: Record<string, unknown>, init?: ResponseInit) => ({
       json: async () => data,
       status: init?.status || 200,
     }),
@@ -17,7 +17,7 @@ jest.mock("next/server", () => ({
 jest.mock("@/app/admin/actions");
 
 // mock NextRequest
-const mockNextRequest = (body: any): NextRequest => {
+const mockNextRequest = (body: Record<string, unknown>): NextRequest => {
   return {
     json: async () => body,
   } as unknown as NextRequest;
@@ -85,9 +85,9 @@ describe("POST /admin/api/create-admin", () => {
 
   test("propagates Firebase email-already-exists error with 409", async () => {
     mockCheckAdmin.mockResolvedValue(true);
-    const err: any = new Error(
+    const err = new Error(
       "The email address is already in use by another account."
-    );
+    ) as Error & { code?: string };
     err.code = "auth/email-already-exists";
     mockCreateAdmin.mockRejectedValue(err);
 

@@ -395,7 +395,7 @@ export async function updateUserStatus(
       date: Timestamp.now(),
       userId,
       modifiedBy,
-      event: "Profile Updated",
+      event: "Status Change",
       notes: `Account status changed to ${status}`,
     });
   } catch (error) {

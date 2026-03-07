@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import {
@@ -41,7 +41,7 @@ import {
   updateUserWithHistory,
 } from "../../services/userService";
 
-export default function DisplayRecipientProfile() {
+function DisplayRecipientProfileContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const userId = searchParams.get("id");
@@ -161,81 +161,14 @@ export default function DisplayRecipientProfile() {
       setLoading(false);
     }
   }, [userId]);
+
   useEffect(() => {
     if (!userId) {
-      console.log("No userId provided");
       setLoading(false);
       return;
     }
-
-    const loadData = async () => {
-      try {
-        console.log("Loading user data for userId:", userId);
-        setLoading(true);
-        setLoadingStep("Connecting to database...");
-
-        // Test Firebase connection first
-        setLoadingStep("Testing Firebase connection...");
-
-        // Load data from Firebase with timeout
-        const timeout = new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Request timeout after 10 seconds")),
-            10000
-          )
-        );
-
-        setLoadingStep("Fetching user data...");
-        const dataPromise = Promise.all([
-          getUserById(userId).catch((err) => {
-            console.error("Error fetching user:", err);
-            throw new Error(`Failed to fetch user: ${err.message}`);
-          }),
-          getArcCardsByUserId(userId).catch((err) => {
-            console.error("Error fetching arc cards:", err);
-            throw new Error(`Failed to fetch arc cards: ${err.message}`);
-          }),
-          getHistoryByUserId(userId).catch((err) => {
-            console.error("Error fetching history:", err);
-            throw new Error(`Failed to fetch history: ${err.message}`);
-          }),
-          getBannedUserInfo(userId).catch((err) => {
-            console.error("Error fetching banned info:", err);
-            throw new Error(`Failed to fetch banned info: ${err.message}`);
-          }),
-        ]);
-
-        setLoadingStep("Processing data...");
-        const [userData, arcCardsData, historyData, bannedData] =
-          (await Promise.race([dataPromise, timeout])) as [
-            User | null,
-            ArcCard[],
-            HistoryEntry[],
-            BannedUser | null
-          ];
-
-        console.log("User data loaded:", userData);
-        console.log("Arc cards data:", arcCardsData);
-        console.log("History data:", historyData);
-        console.log("Banned data:", bannedData);
-
-        setUser(userData);
-        setArcCards(arcCardsData);
-        setHistory(historyData);
-        setBannedInfo(bannedData);
-        setLoadingStep("Complete");
-      } catch (error) {
-        console.error("Error loading user data:", error);
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error";
-        setLoadingStep(`Error: ${errorMessage}`);
-        // Keep the loading state with error message
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, [userId]); // Only depends on userId, preventing the dependency loop
+    loadUserData();
+  }, [userId, loadUserData]);
 
   // Handle action functions
   const handleIssueCard = async () => {
@@ -1137,6 +1070,8 @@ export default function DisplayRecipientProfile() {
                                     ? "Account created"
                                     : entry.event === "ARC Card Lost"
                                     ? "ARC Card lost"
+                                    : entry.event === "Status Change"
+                                    ? entry.notes || "Account status changed"
                                     : entry.notes || entry.event}
                                 </div>
 
@@ -1192,6 +1127,7 @@ export default function DisplayRecipientProfile() {
         onConfirm={handleOverrideConfirm}
         action={overrideAction}
         banReason={user.banReason || ""}
+        banNotes={bannedInfo?.notes ?? ""}
       />
 
       <AccountStatusModal
@@ -1230,5 +1166,21 @@ export default function DisplayRecipientProfile() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function DisplayRecipientProfile() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="text-lg text-gray-700 mb-2">Loading...</div>
+          </div>
+        </div>
+      }
+    >
+      <DisplayRecipientProfileContent />
+    </Suspense>
   );
 }

@@ -203,7 +203,7 @@ export default function CardsPage() {
           <SortableHeader
             label="No."
             sorted={column.getIsSorted()}
-            onClick={column.getToggleSortingHandler()}
+            onClick={column.getToggleSortingHandler() ? () => column.getToggleSortingHandler()!({} as React.MouseEvent) : undefined}
           />
         ),
         cell: ({ row }) => (
@@ -217,7 +217,7 @@ export default function CardsPage() {
           <SortableHeader
             label="Allocation Date"
             sorted={column.getIsSorted()}
-            onClick={column.getToggleSortingHandler()}
+            onClick={column.getToggleSortingHandler() ? () => column.getToggleSortingHandler()!({} as React.MouseEvent) : undefined}
           />
         ),
         cell: ({ getValue }) => <span className="text-gray-700">{getValue<string>()}</span>,
@@ -244,7 +244,7 @@ export default function CardsPage() {
           <SortableHeader
             label="Final 7 Digits"
             sorted={column.getIsSorted()}
-            onClick={column.getToggleSortingHandler()}
+            onClick={column.getToggleSortingHandler() ? () => column.getToggleSortingHandler()!({} as React.MouseEvent) : undefined}
           />
         ),
         cell: ({ getValue }) => (
@@ -257,7 +257,7 @@ export default function CardsPage() {
           <SortableHeader
             label="Security Code"
             sorted={column.getIsSorted()}
-            onClick={column.getToggleSortingHandler()}
+            onClick={column.getToggleSortingHandler() ? () => column.getToggleSortingHandler()!({} as React.MouseEvent) : undefined}
           />
         ),
         cell: ({ getValue }) => <span className="text-gray-700">{getValue<string>()}</span>,

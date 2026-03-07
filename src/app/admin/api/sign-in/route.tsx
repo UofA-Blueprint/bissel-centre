@@ -17,7 +17,8 @@ export async function POST(req: NextRequest) {
 
   let decodedToken: { admin?: boolean };
   try {
-    decodedToken = await admin.auth().verifyIdToken(idToken, true);
+    const verified = await admin.auth().verifyIdToken(idToken, true);
+    decodedToken = verified as typeof verified & { admin?: boolean };
   } catch (error) {
     console.error("ID token verification failed:", error);
     return NextResponse.json({ error: "Invalid ID token" }, { status: 401 });

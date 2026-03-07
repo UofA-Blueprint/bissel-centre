@@ -116,6 +116,7 @@ interface OverrideModalProps {
   onConfirm: (reason: string) => void;
   action: string; // 'issue' or 'renew'
   banReason: string;
+  banNotes?: string;
 }
 
 export function OverrideModal({
@@ -124,6 +125,7 @@ export function OverrideModal({
   onConfirm,
   action,
   banReason,
+  banNotes = "",
 }: OverrideModalProps) {
   const [reason, setReason] = useState("");
 
@@ -153,8 +155,15 @@ export function OverrideModal({
 
         <div className="mb-4">
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
-            <p className="text-red-800 font-medium">⚠️ This user is flagged</p>
+            <p className="text-red-800 font-medium">
+              They are banned. Not allowed to issue/renew ARC card to flagged user.
+            </p>
             <p className="text-red-600 text-sm mt-1">Reason: {banReason}</p>
+            {banNotes ? (
+              <p className="text-red-600 text-sm mt-1 whitespace-pre-wrap">
+                Notes: {banNotes}
+              </p>
+            ) : null}
           </div>
 
           <p className="text-gray-600 mb-4">
@@ -355,7 +364,7 @@ export function DeleteModal({
           </div>
 
           <p className="text-gray-600">
-            Are you sure you want to permanently delete {userName}'s account?
+            Are you sure you want to permanently delete {userName}&apos;s account?
             This will remove all associated data including ARC cards, history,
             and personal information.
           </p>
