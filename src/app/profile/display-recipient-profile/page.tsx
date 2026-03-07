@@ -38,6 +38,7 @@ import {
   deleteUser as deleteUserService,
   updateUser,
   updateUserStatus,
+  updateUserWithHistory,
 } from "../../services/userService";
 
 export default function DisplayRecipientProfile() {
@@ -62,6 +63,7 @@ export default function DisplayRecipientProfile() {
   const [overrideAction, setOverrideAction] = useState<"issue" | "renew">(
     "issue"
   );
+  const [viewReasonText, setViewReasonText] = useState<string | null>(null);
 
   // Edit mode states
   const [isEditMode, setIsEditMode] = useState(false);
@@ -358,7 +360,7 @@ export default function DisplayRecipientProfile() {
     if (!user) return;
 
     try {
-      await updateUser(user.id, editedUser);
+      await updateUserWithHistory(user.id, editedUser, "current-admin");
       await loadUserData();
       setIsEditMode(false);
       setEditedUser({});
@@ -908,7 +910,45 @@ export default function DisplayRecipientProfile() {
                         Card Details
                       </h3>
 
-                      <div className="grid grid-cols-3 gap-8">
+                      {(() => {
+                        const issuedAt = new Date(arcCards[0].issuedAt);
+                        const now = new Date();
+                        const durationMs = now.getTime() - issuedAt.getTime();
+                        const durationMonths = Math.floor(
+                          durationMs / (30.44 * 24 * 60 * 60 * 1000)
+                        );
+                        const durationYears = Math.floor(durationMonths / 12);
+                        const remainingMonths = durationMonths % 12;
+                        const durationText =
+                          durationYears > 0
+                            ? `${durationYears} yr${durationYears !== 1 ? "s" : ""}, ${remainingMonths} mo`
+                            : `${durationMonths} mo`;
+                        return (
+                          <div className="grid grid-cols-3 gap-8">
+                            {/* Card held since - issue date */}
+                            <div>
+                              <div className="text-sm text-gray-600 mb-2 font-bold">
+                                Card held since
+                              </div>
+                              <div className="text-sm text-gray-900">
+                                {issuedAt.toLocaleDateString("en-US", {
+                                  month: "long",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Card held for - duration */}
+                            <div>
+                              <div className="text-sm text-gray-600 mb-2 font-bold">
+                                Card held for
+                              </div>
+                              <div className="text-sm text-gray-900">
+                                {durationText}
+                              </div>
+                            </div>
+
                         {/* Status */}
                         <div>
                           <div className="text-sm text-gray-600 mb-2 font-bold">
@@ -943,23 +983,6 @@ export default function DisplayRecipientProfile() {
                           </div>
                         </div>
 
-                        {/* Last Issued */}
-                        <div>
-                          <div className="text-sm text-gray-600 mb-2 font-bold">
-                            Last issued
-                          </div>
-                          <div className="text-sm text-gray-900">
-                            {new Date(arcCards[0].issuedAt).toLocaleDateString(
-                              "en-US",
-                              {
-                                month: "2-digit",
-                                day: "2-digit",
-                                year: "numeric",
-                              }
-                            )}
-                          </div>
-                        </div>
-
                         {/* Last 7 Digits */}
                         <div>
                           <div className="text-sm text-gray-600 mb-2 font-bold">
@@ -982,6 +1005,8 @@ export default function DisplayRecipientProfile() {
                           </div>
                         </div>
                       </div>
+                        );
+                      })()}
                     </div>
                   ) : (
                     <div className="text-center py-12">
@@ -1004,11 +1029,12 @@ export default function DisplayRecipientProfile() {
                     <div className="space-y-3">
                       {/* Table Header */}
                       <div className="bg-[#DCEFF3] px-6 py-4 rounded-xl border border-gray-200">
-                        <div className="grid grid-cols-4 gap-4 text-sm font-semibold text-gray-700">
+                        <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-4 text-sm font-semibold text-gray-700">
                           <div>Date Modified</div>
                           <div>Modified By</div>
                           <div>Status</div>
                           <div>Action Taken</div>
+                          <div>Details</div>
                         </div>
                       </div>
 
@@ -1027,7 +1053,7 @@ export default function DisplayRecipientProfile() {
                                 index % 2 === 0 ? "bg-white" : "bg-gray-50"
                               }`}
                             >
-                              <div className="grid grid-cols-4 gap-4 items-center">
+                              <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] gap-4 items-center">
                                 {/* Date Modified */}
                                 <div className="text-sm text-gray-900">
                                   {new Date(entry.date).toLocaleDateString(
@@ -1113,6 +1139,21 @@ export default function DisplayRecipientProfile() {
                                     ? "ARC Card lost"
                                     : entry.notes || entry.event}
                                 </div>
+
+                                {/* View Reason button for override entries */}
+                                <div>
+                                  {entry.reason ? (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setViewReasonText(entry.reason ?? null)
+                                      }
+                                      className="text-sm font-medium text-primary hover:text-primary/80 underline"
+                                    >
+                                      View Reason
+                                    </button>
+                                  ) : null}
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -1167,6 +1208,27 @@ export default function DisplayRecipientProfile() {
         onConfirm={handleDeleteUser}
         userName={`${user.firstName} ${user.secondName}`}
       />
+
+      {/* View Reason modal for override entries */}
+      {viewReasonText !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">
+              Override Reason
+            </h3>
+            <p className="text-gray-700 mb-6 whitespace-pre-wrap">
+              {viewReasonText}
+            </p>
+            <button
+              type="button"
+              onClick={() => setViewReasonText(null)}
+              className="w-full px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-md text-sm font-medium"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

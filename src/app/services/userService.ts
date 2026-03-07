@@ -215,6 +215,27 @@ export async function updateUser(
   }
 }
 
+// Update user and add "Profile Updated" history entry
+export async function updateUserWithHistory(
+  userId: string,
+  userData: Partial<User>,
+  modifiedBy: string
+): Promise<void> {
+  try {
+    await updateUser(userId, userData);
+    await addDoc(collection(db, "history"), {
+      date: Timestamp.now(),
+      userId,
+      modifiedBy,
+      event: "Profile Updated",
+      notes: "Account information updated",
+    });
+  } catch (error) {
+    console.error("Error updating user with history:", error);
+    throw error;
+  }
+}
+
 // Ban user
 export async function banUser(
   userId: string,
