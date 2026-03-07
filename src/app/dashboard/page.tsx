@@ -342,7 +342,10 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
     const isBanned = user.banned;
     const arcCardStatus = user.arcCardStatus;
     return (
-        <div className="bg-white rounded-lg shadow-md px-6 py-4 w-full flex items-center justify-between">
+        <Link
+            href={`/profile/display-recipient-profile?id=${user.id}`}
+            className="bg-white rounded-lg shadow-md px-6 py-4 w-full flex items-center justify-between block hover:bg-gray-50 transition-colors cursor-pointer"
+        >
             {/* Avatar */}
             <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden flex items-center justify-center mr-4">
                 {user.picture ? (
@@ -415,6 +418,6 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
                     </span>
                 </div>
             </div>
-        </div>
+        </Link>
     );
 };

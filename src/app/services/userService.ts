@@ -240,7 +240,7 @@ export async function banUser(
       date: Timestamp.now(),
       userId,
       modifiedBy: bannedBy,
-      event: "Ban",
+      event: "Account Flagged",
       notes: `User banned: ${banReason}`,
     });
   } catch (error) {
@@ -273,7 +273,7 @@ export async function unbanUser(
       date: Timestamp.now(),
       userId,
       modifiedBy: unbannedBy,
-      event: "Unban",
+      event: "Account Unflagged",
       notes: "User unbanned",
     });
   } catch (error) {
@@ -315,7 +315,7 @@ export async function issueNewArcCard(
       date: Timestamp.now(),
       userId,
       modifiedBy: issuedBy,
-      event: override ? "Override" : "Issue Card",
+      event: "ARC Card Issued",
       notes: eventNote,
       ...(override && { reason: override.reason }),
     });
@@ -349,7 +349,7 @@ export async function renewArcCard(
       date: Timestamp.now(),
       userId,
       modifiedBy: renewedBy,
-      event: override ? "Override" : "Renew Card",
+      event: "ARC Card Renewed",
       notes: eventNote,
       ...(override && { reason: override.reason }),
     });
@@ -374,7 +374,7 @@ export async function updateUserStatus(
       date: Timestamp.now(),
       userId,
       modifiedBy,
-      event: "Status Change",
+      event: "Profile Updated",
       notes: `Account status changed to ${status}`,
     });
   } catch (error) {
