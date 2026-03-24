@@ -1,4 +1,11 @@
-import React, { forwardRef, useImperativeHandle, useState } from "react";
+import React, {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import CustomListbox from "./CustomListbox";
 
 export type AdditionalInfoData = {
@@ -13,6 +20,10 @@ type Props = {
   onSubmit: (data: AdditionalInfoData) => void;
   onError?: (msg: string | null) => void;
   initialData?: Partial<AdditionalInfoData>;
+};
+
+type ArcCardSearchResponse = {
+  cards: string[];
 };
 
 const journeyOptions = [
@@ -58,7 +69,84 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
     const [arcCardDigits, setArcCardDigits] = useState(
       initialData.arcCardDigits ?? "",
     );
+    const [arcCardSuggestions, setArcCardSuggestions] = useState<string[]>([]);
+    const [isSearchingArcCards, setIsSearchingArcCards] = useState(false);
+    const [hasArcCardSearchCompleted, setHasArcCardSearchCompleted] =
+      useState(false);
+    const [arcCardLookupError, setArcCardLookupError] = useState<string | null>(
+      null,
+    );
+    const [showArcCardSuggestions, setShowArcCardSuggestions] = useState(false);
+    const [isArcCardConfirmed, setIsArcCardConfirmed] = useState(
+      Boolean((initialData.arcCardDigits ?? "").trim()),
+    );
     const [notes, setNotes] = useState(initialData.notes ?? "");
+    const latestSearchRequest = useRef(0);
+
+    const normalizedArcCard = useMemo(
+      () => arcCardDigits.replace(/\D/g, ""),
+      [arcCardDigits],
+    );
+
+    useEffect(() => {
+      if (normalizedArcCard.length < 3) {
+        setArcCardSuggestions([]);
+        setArcCardLookupError(null);
+        setIsSearchingArcCards(false);
+        setHasArcCardSearchCompleted(false);
+        return;
+      }
+
+      const requestId = ++latestSearchRequest.current;
+      const abortController = new AbortController();
+      const timeoutId = window.setTimeout(async () => {
+        setIsSearchingArcCards(true);
+        setArcCardLookupError(null);
+        setHasArcCardSearchCompleted(false);
+
+        try {
+          const response = await fetch(
+            `/api/cards/search?query=${encodeURIComponent(normalizedArcCard)}`,
+            {
+              method: "GET",
+              signal: abortController.signal,
+            },
+          );
+
+          if (!response.ok) {
+            throw new Error("Failed to search ARC cards");
+          }
+
+          const data: ArcCardSearchResponse = await response.json();
+
+          if (requestId !== latestSearchRequest.current) {
+            return;
+          }
+
+          setArcCardSuggestions(data.cards ?? []);
+        } catch (error) {
+          if (abortController.signal.aborted) {
+            return;
+          }
+
+          console.error("ARC card search failed:", error);
+          setArcCardSuggestions([]);
+          setArcCardLookupError(
+            "Unable to load ARC card suggestions right now.",
+          );
+        } finally {
+          if (requestId === latestSearchRequest.current) {
+            setIsSearchingArcCards(false);
+            setHasArcCardSearchCompleted(true);
+          }
+        }
+      }, 250);
+
+      return () => {
+        abortController.abort();
+        window.clearTimeout(timeoutId);
+      };
+    }, [normalizedArcCard]);
 
     const collect = (): AdditionalInfoData => ({
       journey,
@@ -78,6 +166,11 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
       ) {
         return "Please fill out all required fields.";
       }
+
+      if (data.arcCardDigits && !isArcCardConfirmed) {
+        return "Please select an ARC card from the search suggestions.";
+      }
+
       return null;
     };
 
@@ -147,18 +240,77 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
           />
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-            <label className="flex flex-col">
-              <span className="text-sm mb-1">
-                Last 7 Digits of the Arc Card
-              </span>
+            <label className="flex flex-col relative">
+              <span className="text-sm mb-1">ARC Card Number</span>
               <input
                 value={arcCardDigits}
-                onChange={(e) => setArcCardDigits(e.target.value)}
+                onChange={(e) => {
+                  const digitsOnlyValue = e.target.value.replace(/\D/g, "");
+                  setArcCardDigits(digitsOnlyValue);
+                  setIsArcCardConfirmed(false);
+                  setShowArcCardSuggestions(true);
+                  setHasArcCardSearchCompleted(false);
+                  if (arcCardLookupError) {
+                    setArcCardLookupError(null);
+                  }
+                }}
+                onFocus={() => setShowArcCardSuggestions(true)}
+                onBlur={() => {
+                  window.setTimeout(() => {
+                    setShowArcCardSuggestions(false);
+                  }, 100);
+                }}
                 type="text"
                 name="arcCardDigits"
-                placeholder="Enter last 7 digits"
+                inputMode="numeric"
+                placeholder="Type at least 3 digits to search"
                 className="mt-1 text-sm font-normal border rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
               />
+              {normalizedArcCard.length > 0 && normalizedArcCard.length < 3 && (
+                <span className="mt-1 text-xs text-gray-500">
+                  Enter at least 3 digits to see matching ARC cards.
+                </span>
+              )}
+              {isSearchingArcCards && (
+                <span className="mt-1 text-xs text-gray-500">
+                  Searching ARC cards...
+                </span>
+              )}
+              {arcCardLookupError && (
+                <span className="mt-1 text-xs text-red-600">
+                  {arcCardLookupError}
+                </span>
+              )}
+              {showArcCardSuggestions &&
+                normalizedArcCard.length >= 3 &&
+                !isSearchingArcCards &&
+                !arcCardLookupError && (
+                  <div className="absolute z-20 mt-[78px] w-full rounded-lg border bg-white shadow-lg max-h-52 overflow-y-auto">
+                    {arcCardSuggestions.length === 0 &&
+                    hasArcCardSearchCompleted ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        No matching ARC cards found.
+                      </div>
+                    ) : (
+                      arcCardSuggestions.map((cardNumber) => (
+                        <button
+                          key={cardNumber}
+                          type="button"
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setArcCardDigits(cardNumber);
+                            setIsArcCardConfirmed(true);
+                            setShowArcCardSuggestions(false);
+                            setArcCardLookupError(null);
+                          }}
+                        >
+                          {cardNumber}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
             </label>
             <label className="flex flex-col">
               <span className="text-sm mb-1">Other/Notes</span>

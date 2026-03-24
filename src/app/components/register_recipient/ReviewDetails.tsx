@@ -140,7 +140,7 @@ const ReviewDetails: React.FC<Props> = ({
             value={additionalInfo?.housingOption}
           />
           <DetailItem
-            label="Last 7 Digits of the Arc Card"
+            label="ARC Card Number"
             value={additionalInfo?.arcCardDigits}
           />
           <DetailItem label="Other/Notes" value={additionalInfo?.notes} />
