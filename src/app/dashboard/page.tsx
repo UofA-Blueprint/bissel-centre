@@ -64,6 +64,7 @@ export default function DashboardPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -258,7 +259,10 @@ export default function DashboardPage() {
 
           {/* Button row inside gray container */}
           <div className="flex justify-between items-center text-white text-sm">
-            <button className="flex items-center gap-1">
+            <button
+              className="flex items-center gap-1"
+              onClick={() => setIsModalOpen(true)}
+            >
               <span className="text-xl">＋</span> New Recipient
             </button>
             <div className="flex items-center gap-4">
@@ -300,6 +304,10 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+      <RegisterRecipientModal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+      />
     </main>
   );
 }
