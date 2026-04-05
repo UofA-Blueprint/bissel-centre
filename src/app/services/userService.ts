@@ -303,42 +303,58 @@ export async function unbanUser(
   }
 }
 
-// Issue new ARC card
+// Issue an existing (unattributed) ARC card to a user
 export async function issueNewArcCard(
   userId: string,
-  arcCardNumber: string,
-  department: string,
+  selectedCardId: string,
   issuedBy: string,
+  months: number,
+  previousCardNumber?: string,
   override?: { reason: string }
 ): Promise<void> {
   try {
-    // Add new ARC card
-    await addDoc(collection(db, "arc_cards"), {
+    // Get the selected card's details
+    const cardRef = doc(db, "arc_cards", selectedCardId);
+    const cardSnap = await getDoc(cardRef);
+    if (!cardSnap.exists()) throw new Error("Selected ARC card not found");
+    const cardData = cardSnap.data();
+    const newCardNumber: string = cardData.arcCardNumber;
+
+    // Assign card to user
+    await updateDoc(cardRef, {
       userId,
-      allocationDate: new Date().toISOString().split("T")[0],
-      department,
-      arcCardNumber,
-      securityCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
       status: "Active",
-      monthsRemaining: 3,
+      monthsRemaining: months,
       issuedAt: Timestamp.now(),
     });
 
     // Update user's arcCardNumber
-    await updateUser(userId, { arcCardNumber });
+    await updateUser(userId, { arcCardNumber: newCardNumber });
 
-    // Add to history
-    const eventNote = override
-      ? `New ARC card issued (Override: ${override.reason})`
-      : "New ARC card issued";
+    // Write Override history first if applicable
+    if (override) {
+      await addDoc(collection(db, "history"), {
+        date: Timestamp.now(),
+        userId,
+        modifiedBy: issuedBy,
+        event: "Override",
+        notes: `Override applied: ${override.reason}`,
+        reason: override.reason,
+      });
+    }
+
+    // Write issue/replace history
+    const event = previousCardNumber ? "ARC Card Replaced" : "ARC Card Issued";
+    const notes = previousCardNumber
+      ? `ARC card ...${previousCardNumber.slice(-7)} replaced by ...${newCardNumber.slice(-7)}`
+      : "ARC card issued";
 
     await addDoc(collection(db, "history"), {
       date: Timestamp.now(),
       userId,
       modifiedBy: issuedBy,
-      event: "ARC Card Issued",
-      notes: eventNote,
-      ...(override && { reason: override.reason }),
+      event,
+      notes,
     });
   } catch (error) {
     console.error("Error issuing new ARC card:", error);
@@ -351,28 +367,36 @@ export async function renewArcCard(
   userId: string,
   arcCardId: string,
   renewedBy: string,
+  months: number,
   override?: { reason: string }
 ): Promise<void> {
   try {
-    // Update ARC card months
+    // Update ARC card
     const arcCardRef = doc(db, "arc_cards", arcCardId);
     await updateDoc(arcCardRef, {
-      monthsRemaining: 3,
+      monthsRemaining: months,
       status: "Active",
     });
 
-    // Add to history
-    const eventNote = override
-      ? `ARC card renewed (Override: ${override.reason})`
-      : "ARC card renewed";
+    // Write Override history first if applicable
+    if (override) {
+      await addDoc(collection(db, "history"), {
+        date: Timestamp.now(),
+        userId,
+        modifiedBy: renewedBy,
+        event: "Override",
+        notes: `Override applied: ${override.reason}`,
+        reason: override.reason,
+      });
+    }
 
+    // Write renewal history
     await addDoc(collection(db, "history"), {
       date: Timestamp.now(),
       userId,
       modifiedBy: renewedBy,
       event: "ARC Card Renewed",
-      notes: eventNote,
-      ...(override && { reason: override.reason }),
+      notes: "ARC card renewed",
     });
   } catch (error) {
     console.error("Error renewing ARC card:", error);

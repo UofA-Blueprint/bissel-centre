@@ -65,6 +65,28 @@ export async function getArcCardsByUserId(userId: string): Promise<ArcCard[]> {
   }
 }
 
+// Get available (unattributed) ARC cards that can be issued to a user
+export async function getAvailableArcCards(): Promise<ArcCard[]> {
+  try {
+    const q = query(
+      collection(db, "arc_cards"),
+      where("status", "==", "Unattributed")
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        issuedAt: data.issuedAt?.toDate?.() || data.issuedAt || null,
+      } as ArcCard;
+    });
+  } catch (err) {
+    console.error("Error retrieving available ARC cards:", err);
+    throw err;
+  }
+}
+
 // Get ALL ARC Cards in the system
 export async function getAllArcCards(): Promise<ArcCard[]> {
   try {

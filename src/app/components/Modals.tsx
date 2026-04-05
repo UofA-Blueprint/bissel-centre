@@ -1,7 +1,189 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X } from "lucide-react";
+import { ArcCard as AvailableArcCard } from "../services/arcCardService";
+
+interface IssueCardModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (cardId: string, months: number) => void;
+  availableCards: AvailableArcCard[];
+}
+
+export function IssueCardModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  availableCards,
+}: IssueCardModalProps) {
+  const [selectedCardId, setSelectedCardId] = useState("");
+  const [months, setMonths] = useState(3);
+
+  useEffect(() => {
+    if (availableCards.length > 0) setSelectedCardId(availableCards[0].id);
+  }, [availableCards]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCardId) return;
+    onConfirm(selectedCardId, months);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Issue ARC Card</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          {availableCards.length === 0 ? (
+            <p className="text-gray-500 mb-4">
+              No available ARC cards in the system. Please add cards to the
+              master list first.
+            </p>
+          ) : (
+            <>
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select ARC Card
+                </label>
+                <select
+                  value={selectedCardId}
+                  onChange={(e) => setSelectedCardId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {availableCards.map((card) => (
+                    <option key={card.id} value={card.id}>
+                      {card.arcCardNumber.slice(-7)} — {card.department}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Duration
+                </label>
+                <select
+                  value={months}
+                  onChange={(e) => setMonths(Number(e.target.value))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                    <option key={m} value={m}>
+                      {m} month{m !== 1 ? "s" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </>
+          )}
+
+          <div className="flex space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={availableCards.length === 0}
+              className="flex-1 px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Issue Card
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+interface RenewCardModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: (months: number) => void;
+  cardNumber: string;
+}
+
+export function RenewCardModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  cardNumber,
+}: RenewCardModalProps) {
+  const [months, setMonths] = useState(3);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    onConfirm(months);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-md">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold">Renew ARC Card</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit}>
+          {cardNumber && (
+            <p className="text-gray-600 mb-4 text-sm">
+              Card: ...{cardNumber.slice(-7)}
+            </p>
+          )}
+
+          <div className="mb-4">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Renewal Duration
+            </label>
+            <select
+              value={months}
+              onChange={(e) => setMonths(Number(e.target.value))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                <option key={m} value={m}>
+                  {m} month{m !== 1 ? "s" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex space-x-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 px-4 py-2 bg-primary hover:bg-primary/80 text-white rounded-md"
+            >
+              Renew Card
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
 
 interface BanModalProps {
   isOpen: boolean;

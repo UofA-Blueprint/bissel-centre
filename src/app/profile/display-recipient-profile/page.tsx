@@ -19,8 +19,10 @@ import {
   OverrideModal,
   DeleteModal,
   AccountStatusModal,
+  IssueCardModal,
+  RenewCardModal,
 } from "../../components/Modals";
-import { storage } from "../../services/firebase";
+import { storage, auth } from "../../services/firebase";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import {
   User,
@@ -40,6 +42,11 @@ import {
   updateUserStatus,
   updateUserWithHistory,
 } from "../../services/userService";
+import {
+  ArcCard as AvailableArcCard,
+  getAvailableArcCards,
+} from "../../services/arcCardService";
+import { encryptPhone, decryptPhone } from "@/utils/phoneEncryption";
 
 function DisplayRecipientProfileContent() {
   const router = useRouter();
@@ -50,45 +57,72 @@ function DisplayRecipientProfileContent() {
   const [arcCards, setArcCards] = useState<ArcCard[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [bannedInfo, setBannedInfo] = useState<BannedUser | null>(null);
-  const [activeTab, setActiveTab] = useState<
-    "overview" | "arcCard" | "history"
-  >("overview");
+  const [availableCards, setAvailableCards] = useState<AvailableArcCard[]>([]);
+  const [activeTab, setActiveTab] = useState<"overview" | "arcCard" | "history">("overview");
   const [loading, setLoading] = useState(true);
   const [loadingStep, setLoadingStep] = useState("Initializing...");
-  const [showManagePopover, setShowManagePopover] = useState(false); // Modal states
+  const [showManagePopover, setShowManagePopover] = useState(false);
+
+  // Modal states
   const [showBanModal, setShowBanModal] = useState(false);
   const [showOverrideModal, setShowOverrideModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showAccountStatusModal, setShowAccountStatusModal] = useState(false);
-  const [overrideAction, setOverrideAction] = useState<"issue" | "renew">(
-    "issue"
-  );
+  const [showIssueModal, setShowIssueModal] = useState(false);
+  const [showRenewModal, setShowRenewModal] = useState(false);
+  const [overrideAction, setOverrideAction] = useState<"issue" | "renew">("issue");
   const [viewReasonText, setViewReasonText] = useState<string | null>(null);
+
+  // Pending values carried through the override flow
+  const [pendingIssueCardId, setPendingIssueCardId] = useState<string>("");
+  const [pendingIssueMonths, setPendingIssueMonths] = useState<number>(3);
+  const [pendingRenewMonths, setPendingRenewMonths] = useState<number>(3);
 
   // Edit mode states
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedUser, setEditedUser] = useState<Partial<User>>({});
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [displayPhone, setDisplayPhone] = useState<string>("");
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null); // Close image upload menu when clicking outside
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Close popovers when clicking outside
   useEffect(() => {
     const handleClickOutside = () => {
-      if (showImageUpload) {
-        setShowImageUpload(false);
-      }
-      if (showManagePopover) {
-        setShowManagePopover(false);
-      }
+      if (showImageUpload) setShowImageUpload(false);
+      if (showManagePopover) setShowManagePopover(false);
     };
-
     if (showImageUpload || showManagePopover) {
       document.addEventListener("click", handleClickOutside);
     }
-
     return () => {
       document.removeEventListener("click", handleClickOutside);
     };
   }, [showImageUpload, showManagePopover]);
+
+  // Decrypt phone number for display in view mode
+  useEffect(() => {
+    if (!user?.phoneNumber) {
+      setDisplayPhone("");
+      return;
+    }
+    if (user.phoneNumber.startsWith("ENC:")) {
+      decryptPhone(user.phoneNumber.slice(4))
+        .then(setDisplayPhone)
+        .catch(() => setDisplayPhone(""));
+    } else {
+      setDisplayPhone(user.phoneNumber);
+    }
+  }, [user?.phoneNumber]);
+
+  // Load available arc cards (cards with status "Unattributed")
+  useEffect(() => {
+    getAvailableArcCards()
+      .then(setAvailableCards)
+      .catch((err) => console.error("Error loading available cards:", err));
+  }, []);
+
   const loadUserData = useCallback(async () => {
     if (!userId) {
       console.log("No userId provided");
@@ -101,10 +135,8 @@ function DisplayRecipientProfileContent() {
       setLoading(true);
       setLoadingStep("Connecting to database...");
 
-      // Test Firebase connection first
       setLoadingStep("Testing Firebase connection...");
 
-      // Load data from Firebase with timeout
       const timeout = new Promise((_, reject) =>
         setTimeout(
           () => reject(new Error("Request timeout after 10 seconds")),
@@ -156,7 +188,6 @@ function DisplayRecipientProfileContent() {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
       setLoadingStep(`Error: ${errorMessage}`);
-      // Keep the loading state with error message
     } finally {
       setLoading(false);
     }
@@ -170,39 +201,72 @@ function DisplayRecipientProfileContent() {
     loadUserData();
   }, [userId, loadUserData]);
 
-  // Handle action functions
-  const handleIssueCard = async () => {
+  const reloadAvailableCards = async () => {
+    try {
+      const cards = await getAvailableArcCards();
+      setAvailableCards(cards);
+    } catch (err) {
+      console.error("Error reloading available cards:", err);
+    }
+  };
+
+  const getStaffId = () => auth.currentUser?.uid ?? "unknown";
+
+  // Issue card — opens IssueCardModal
+  const handleIssueCard = () => {
+    setShowIssueModal(true);
+  };
+
+  // Called when staff selects card + months in IssueCardModal
+  const handleIssueModalConfirm = async (cardId: string, months: number) => {
     if (!user) return;
     if (user.banned) {
+      setPendingIssueCardId(cardId);
+      setPendingIssueMonths(months);
+      setShowIssueModal(false);
       setOverrideAction("issue");
       setShowOverrideModal(true);
       return;
     }
-
     try {
-      const cardNumber = Math.random().toString().substring(2, 9);
+      setShowIssueModal(false);
+      const previousCardNumber =
+        arcCards.length > 0 ? arcCards[0].arcCardNumber : undefined;
       await issueNewArcCard(
         user.id,
-        cardNumber,
-        "Transit Department",
-        "current-admin"
+        cardId,
+        getStaffId(),
+        months,
+        previousCardNumber
       );
       await loadUserData();
+      await reloadAvailableCards();
     } catch (error) {
       console.error("Error issuing card:", error);
     }
   };
-  const handleRenewCard = async () => {
+
+  // Renew card — opens RenewCardModal
+  const handleRenewCard = () => {
     if (!user || arcCards.length === 0) return;
+    setShowRenewModal(true);
+  };
+
+  // Called when staff selects months in RenewCardModal
+  const handleRenewModalConfirm = async (months: number) => {
+    if (!user) return;
     if (user.banned) {
+      setPendingRenewMonths(months);
+      setShowRenewModal(false);
       setOverrideAction("renew");
       setShowOverrideModal(true);
       return;
     }
     try {
+      setShowRenewModal(false);
       const activeCard = arcCards.find((card) => card.status === "Active");
       if (activeCard) {
-        await renewArcCard(user.id, activeCard.id, "current-admin");
+        await renewArcCard(user.id, activeCard.id, getStaffId(), months);
         await loadUserData();
       }
     } catch (error) {
@@ -212,12 +276,11 @@ function DisplayRecipientProfileContent() {
 
   const handleBanUser = async (reason: string, notes: string) => {
     if (!user) return;
-
     try {
       if (user.banned) {
-        await unbanUser(user.id, "current-admin");
+        await unbanUser(user.id, getStaffId());
       } else {
-        await banUser(user.id, reason, "current-admin", notes);
+        await banUser(user.id, reason, getStaffId(), notes);
       }
       await loadUserData();
       setShowBanModal(false);
@@ -228,23 +291,29 @@ function DisplayRecipientProfileContent() {
 
   const handleOverrideConfirm = async (reason: string) => {
     if (!user) return;
-
     try {
       if (overrideAction === "issue") {
-        const cardNumber = Math.random().toString().substring(2, 9);
+        const previousCardNumber =
+          arcCards.length > 0 ? arcCards[0].arcCardNumber : undefined;
         await issueNewArcCard(
           user.id,
-          cardNumber,
-          "Transit Department",
-          "current-admin",
+          pendingIssueCardId,
+          getStaffId(),
+          pendingIssueMonths,
+          previousCardNumber,
           { reason }
         );
+        await reloadAvailableCards();
       } else {
         const activeCard = arcCards.find((card) => card.status === "Active");
         if (activeCard) {
-          await renewArcCard(user.id, activeCard.id, "current-admin", {
-            reason,
-          });
+          await renewArcCard(
+            user.id,
+            activeCard.id,
+            getStaffId(),
+            pendingRenewMonths,
+            { reason }
+          );
         }
       }
       await loadUserData();
@@ -256,25 +325,66 @@ function DisplayRecipientProfileContent() {
 
   const handleDeleteUser = async () => {
     if (!user) return;
-
     try {
       await deleteUserService(user.id);
       setShowDeleteModal(false);
-      router.push("/admin/dashboard");
+      router.push("/dashboard");
     } catch (error) {
       console.error("Error deleting user:", error);
     }
   };
-  // Edit mode handlers
-  const handleEditToggle = () => {
-    if (!user) return;
 
+  // Form validation for the edit form
+  const validateEditForm = (): Record<string, string> => {
+    const errors: Record<string, string> = {};
+    const first = (editedUser.firstName ?? user?.firstName ?? "").trim();
+    const last = (editedUser.secondName ?? user?.secondName ?? "").trim();
+    const email = (editedUser.email ?? user?.email ?? "").trim();
+    const phone = (editedUser.phoneNumber ?? "").trim();
+    const address = (editedUser.address ?? user?.address ?? "").trim();
+    const postal = (editedUser.postalCode ?? user?.postalCode ?? "").trim();
+
+    if (!first) errors.firstName = "First name is required";
+    else if (!/^[a-zA-Z\s'\-]+$/.test(first)) errors.firstName = "Letters only";
+
+    if (!last) errors.secondName = "Last name is required";
+    else if (!/^[a-zA-Z\s'\-]+$/.test(last)) errors.secondName = "Letters only";
+
+    if (!address) errors.address = "Address is required";
+
+    if (!postal) errors.postalCode = "Postal code is required";
+    else if (!/^[A-Za-z]\d[A-Za-z][ -]?\d[A-Za-z]\d$/.test(postal))
+      errors.postalCode = "Invalid postal code (e.g. T5J 2R1)";
+
+    if (!email && !phone)
+      errors.contact = "At least one of email or phone number is required";
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      errors.email = "Invalid email address";
+
+    if (phone && !/^[\d\s\-\+\(\)\.]{7,}$/.test(phone))
+      errors.phoneNumber = "Invalid phone number";
+
+    return errors;
+  };
+
+  // Edit mode handlers
+  const handleEditToggle = async () => {
+    if (!user) return;
     if (isEditMode) {
-      // Save changes
-      handleSaveChanges();
+      await handleSaveChanges();
     } else {
-      // Enter edit mode
+      // Decrypt phone before showing in edit input
+      let phoneToEdit = user.phoneNumber || "";
+      if (phoneToEdit.startsWith("ENC:")) {
+        try {
+          phoneToEdit = await decryptPhone(phoneToEdit.slice(4));
+        } catch {
+          phoneToEdit = "";
+        }
+      }
       setIsEditMode(true);
+      setFormErrors({});
       setEditedUser({
         firstName: user.firstName,
         secondName: user.secondName,
@@ -282,7 +392,7 @@ function DisplayRecipientProfileContent() {
         address: user.address,
         postalCode: user.postalCode,
         email: user.email || "",
-        phoneNumber: user.phoneNumber || "",
+        phoneNumber: phoneToEdit,
         aliases: user.aliases,
         notes: user.notes || "",
       });
@@ -292,8 +402,19 @@ function DisplayRecipientProfileContent() {
   const handleSaveChanges = async () => {
     if (!user) return;
 
+    const errors = validateEditForm();
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    setFormErrors({});
+
     try {
-      await updateUserWithHistory(user.id, editedUser, "current-admin");
+      const dataToSave = { ...editedUser };
+      if (dataToSave.phoneNumber) {
+        dataToSave.phoneNumber = "ENC:" + (await encryptPhone(dataToSave.phoneNumber));
+      }
+      await updateUserWithHistory(user.id, dataToSave, getStaffId());
       await loadUserData();
       setIsEditMode(false);
       setEditedUser({});
@@ -305,6 +426,7 @@ function DisplayRecipientProfileContent() {
   const handleCancelEdit = () => {
     setIsEditMode(false);
     setEditedUser({});
+    setFormErrors({});
   };
 
   // Profile picture handlers
@@ -316,33 +438,19 @@ function DisplayRecipientProfileContent() {
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const file = event.target.files?.[0];
-    if (!file || !user) return; // Validate file type
-    if (!file.type.startsWith("image/")) {
-      return;
-    }
-
-    // Validate file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      return;
-    }
+    if (!file || !user) return;
+    if (!file.type.startsWith("image/")) return;
+    if (file.size > 5 * 1024 * 1024) return;
 
     try {
       setUploadingImage(true);
-
-      // Create a reference to the file location
       const imageRef = ref(
         storage,
         `profile-pictures/${user.id}/${Date.now()}_${file.name}`
       );
-
-      // Upload the file
       await uploadBytes(imageRef, file);
-
-      // Get the download URL
       const downloadURL = await getDownloadURL(imageRef);
-
-      // Update user profile with the new image URL
-      await updateUser(user.id, { picture: downloadURL }); // Reload user data to show the new image
+      await updateUser(user.id, { picture: downloadURL });
       await loadUserData();
     } catch (error) {
       console.error("Error uploading image:", error);
@@ -353,7 +461,6 @@ function DisplayRecipientProfileContent() {
 
   const handleRemoveImage = async () => {
     if (!user) return;
-
     try {
       setUploadingImage(true);
       await updateUser(user.id, { picture: "" });
@@ -364,10 +471,11 @@ function DisplayRecipientProfileContent() {
       setUploadingImage(false);
     }
   };
+
   const handleAccountStatusChange = async (status: "Active" | "Inactive") => {
     if (!user) return;
     try {
-      await updateUserStatus(user.id, status, "current-admin");
+      await updateUserStatus(user.id, status, getStaffId());
       await loadUserData();
     } catch (error) {
       console.error("Error updating account status:", error);
@@ -410,6 +518,78 @@ function DisplayRecipientProfileContent() {
     </>
   );
 
+  // History helpers
+  const getHistoryActionLabel = (entry: HistoryEntry): string => {
+    switch (entry.event) {
+      case "ARC Card Issued":
+        return entry.notes || "ARC Card issued";
+      case "ARC Card Replaced":
+        return entry.notes || "ARC Card replaced";
+      case "ARC Card Renewed":
+        return "ARC Card renewed";
+      case "Account Flagged":
+        return entry.notes || "Account flagged";
+      case "Account Unflagged":
+        return "Account unflagged";
+      case "Override":
+        return "Override applied";
+      case "Profile Updated":
+        return "Account information updated";
+      case "Account Created":
+        return "Account created";
+      case "ARC Card Lost":
+        return "ARC Card lost";
+      case "Status Change":
+        return entry.notes || "Account status changed";
+      default:
+        return entry.notes || entry.event;
+    }
+  };
+
+  const getHistoryStatusBadge = (entry: HistoryEntry) => {
+    const ev = entry.event.toLowerCase();
+    if (
+      ev.includes("unflagged") ||
+      ev.includes("renewed") ||
+      ev.includes("issued") ||
+      ev.includes("replaced") ||
+      ev.includes("active") ||
+      ev.includes("created")
+    ) {
+      return (
+        <span className="inline-flex px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+          Active
+        </span>
+      );
+    }
+    if (ev.includes("flagged") || ev.includes("banned")) {
+      return (
+        <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+          Flagged
+        </span>
+      );
+    }
+    if (ev.includes("expired")) {
+      return (
+        <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+          Expired
+        </span>
+      );
+    }
+    if (ev.includes("lost")) {
+      return (
+        <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
+          Lost
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
+        Active
+      </span>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <Header
@@ -432,19 +612,19 @@ function DisplayRecipientProfileContent() {
             }
             onEditProfile={() => {
               handleEditToggle();
-              setShowManagePopover(false); // Close the popover when edit is clicked
+              setShowManagePopover(false);
             }}
             onAccountStatus={() => {
               setShowAccountStatusModal(true);
-              setShowManagePopover(false); // Close the popover
+              setShowManagePopover(false);
             }}
             onDeleteAccount={() => {
               setShowDeleteModal(true);
-              setShowManagePopover(false); // Close the popover
+              setShowManagePopover(false);
             }}
             onToggleBan={() => {
               setShowBanModal(true);
-              setShowManagePopover(false); // Close the popover
+              setShowManagePopover(false);
             }}
             isBanned={user.banned}
             userStatus={user.status || "Active"}
@@ -453,7 +633,7 @@ function DisplayRecipientProfileContent() {
           {/* Main Content */}
           <div className="flex-1 ml-4">
             <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-              {/* Profile Header */}{" "}
+              {/* Profile Header */}
               <div className="p-6 flex flex-col items-center">
                 <div className="relative mb-4">
                   <div className="w-24 h-24 bg-purple-200 rounded-full overflow-hidden flex items-center justify-center">
@@ -472,7 +652,6 @@ function DisplayRecipientProfileContent() {
 
                   {/* Profile Picture Edit Menu */}
                   <div className="absolute top-1 right-1">
-                    {" "}
                     <button
                       className="bg-white p-1 rounded-full border border-gray-200 hover:bg-gray-50"
                       onClick={(e) => {
@@ -535,11 +714,11 @@ function DisplayRecipientProfileContent() {
                   </div>
                 </div>
               </div>
+
               {/* Tab Content */}
               {activeTab === "overview" && (
                 <div className="p-6">
                   <div className="bg-gray-50 rounded-lg p-6 shadow-sm">
-                    {" "}
                     <div className="flex items-center mb-6">
                       <h3 className="text-lg font-semibold text-gray-800">
                         Personal Details
@@ -566,52 +745,84 @@ function DisplayRecipientProfileContent() {
                           Cancel
                         </button>
                       )}
-                    </div>{" "}
+                    </div>
+
+                    {/* Contact-level error spanning email + phone */}
+                    {formErrors.contact && (
+                      <p className="text-red-500 text-xs mb-4">
+                        {formErrors.contact}
+                      </p>
+                    )}
+
                     <div className="grid grid-cols-3 gap-x-8 gap-y-6">
+                      {/* First Name */}
                       <div>
-                        {" "}
                         <label className="block text-sm font-bold text-gray-900 mb-1">
                           First Name
                         </label>
                         {isEditMode ? (
-                          <input
-                            type="text"
-                            value={editedUser.firstName || user.firstName}
-                            onChange={(e) =>
-                              setEditedUser({
-                                ...editedUser,
-                                firstName: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                          />
+                          <>
+                            <input
+                              type="text"
+                              value={editedUser.firstName || user.firstName}
+                              onChange={(e) =>
+                                setEditedUser({
+                                  ...editedUser,
+                                  firstName: e.target.value,
+                                })
+                              }
+                              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${
+                                formErrors.firstName
+                                  ? "border-red-500"
+                                  : "border-gray-300"
+                              }`}
+                            />
+                            {formErrors.firstName && (
+                              <p className="text-red-500 text-xs mt-1">
+                                {formErrors.firstName}
+                              </p>
+                            )}
+                          </>
                         ) : (
                           <div className="text-gray-500">{user.firstName}</div>
                         )}
                       </div>
+
+                      {/* Last Name */}
                       <div>
-                        {" "}
                         <label className="block text-sm font-bold text-gray-900 mb-1">
                           Last Name
                         </label>
                         {isEditMode ? (
-                          <input
-                            type="text"
-                            value={editedUser.secondName || user.secondName}
-                            onChange={(e) =>
-                              setEditedUser({
-                                ...editedUser,
-                                secondName: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                          />
+                          <>
+                            <input
+                              type="text"
+                              value={editedUser.secondName || user.secondName}
+                              onChange={(e) =>
+                                setEditedUser({
+                                  ...editedUser,
+                                  secondName: e.target.value,
+                                })
+                              }
+                              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${
+                                formErrors.secondName
+                                  ? "border-red-500"
+                                  : "border-gray-300"
+                              }`}
+                            />
+                            {formErrors.secondName && (
+                              <p className="text-red-500 text-xs mt-1">
+                                {formErrors.secondName}
+                              </p>
+                            )}
+                          </>
                         ) : (
                           <div className="text-gray-500">{user.secondName}</div>
                         )}
                       </div>
+
+                      {/* Alias */}
                       <div>
-                        {" "}
                         <label className="block text-sm font-bold text-gray-900 mb-1">
                           Alias
                         </label>
@@ -625,8 +836,8 @@ function DisplayRecipientProfileContent() {
                             onChange={(e) => {
                               const aliases = e.target.value
                                 .split(",")
-                                .map((alias) => alias.trim())
-                                .filter((alias) => alias);
+                                .map((a) => a.trim())
+                                .filter((a) => a);
                               setEditedUser({ ...editedUser, aliases });
                             }}
                             placeholder="Enter aliases separated by commas"
@@ -638,8 +849,9 @@ function DisplayRecipientProfileContent() {
                           </div>
                         )}
                       </div>
+
+                      {/* Gender Identity */}
                       <div>
-                        {" "}
                         <label className="block text-sm font-bold text-gray-900 mb-1">
                           Gender Identity
                         </label>
@@ -670,112 +882,160 @@ function DisplayRecipientProfileContent() {
                             {user.genderIdentity}
                           </div>
                         )}
-                      </div>{" "}
+                      </div>
+
+                      {/* Date of Birth (read-only) */}
                       <div>
-                        {" "}
                         <label className="block text-sm font-bold text-gray-900 mb-1">
                           Date of Birth
                         </label>
                         <div className="text-gray-500">{user.dateOfBirth}</div>
                       </div>
                       <div></div>
+
+                      {/* Email */}
                       <div>
-                        {" "}
                         <label className="block text-sm font-bold text-gray-900 mb-1">
                           Email
                         </label>
                         {isEditMode ? (
-                          <input
-                            type="email"
-                            value={editedUser.email || user.email || ""}
-                            onChange={(e) =>
-                              setEditedUser({
-                                ...editedUser,
-                                email: e.target.value,
-                              })
-                            }
-                            placeholder="Enter email address"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                          />
+                          <>
+                            <input
+                              type="email"
+                              value={editedUser.email ?? user.email ?? ""}
+                              onChange={(e) =>
+                                setEditedUser({
+                                  ...editedUser,
+                                  email: e.target.value,
+                                })
+                              }
+                              placeholder="Enter email address"
+                              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${
+                                formErrors.email
+                                  ? "border-red-500"
+                                  : "border-gray-300"
+                              }`}
+                            />
+                            {formErrors.email && (
+                              <p className="text-red-500 text-xs mt-1">
+                                {formErrors.email}
+                              </p>
+                            )}
+                          </>
                         ) : (
                           <div className="text-gray-500">
                             {user.email || "N/A"}
                           </div>
                         )}
                       </div>
+
+                      {/* Phone Number */}
                       <div>
-                        {" "}
                         <label className="block text-sm font-bold text-gray-900 mb-1">
                           Phone Number
                         </label>
                         {isEditMode ? (
-                          <input
-                            type="tel"
-                            value={
-                              editedUser.phoneNumber || user.phoneNumber || ""
-                            }
-                            onChange={(e) =>
-                              setEditedUser({
-                                ...editedUser,
-                                phoneNumber: e.target.value,
-                              })
-                            }
-                            placeholder="Enter phone number"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                          />
+                          <>
+                            <input
+                              type="tel"
+                              value={editedUser.phoneNumber ?? ""}
+                              onChange={(e) =>
+                                setEditedUser({
+                                  ...editedUser,
+                                  phoneNumber: e.target.value,
+                                })
+                              }
+                              placeholder="Enter phone number"
+                              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${
+                                formErrors.phoneNumber
+                                  ? "border-red-500"
+                                  : "border-gray-300"
+                              }`}
+                            />
+                            {formErrors.phoneNumber && (
+                              <p className="text-red-500 text-xs mt-1">
+                                {formErrors.phoneNumber}
+                              </p>
+                            )}
+                          </>
                         ) : (
                           <div className="text-gray-500">
-                            {user.phoneNumber || "N/A"}
+                            {displayPhone || "N/A"}
                           </div>
                         )}
                       </div>
                       <div></div>
+
+                      {/* Address */}
                       <div>
-                        {" "}
                         <label className="block text-sm font-bold text-gray-900 mb-1">
                           Address
                         </label>
                         {isEditMode ? (
-                          <input
-                            type="text"
-                            value={editedUser.address || user.address}
-                            onChange={(e) =>
-                              setEditedUser({
-                                ...editedUser,
-                                address: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                          />
+                          <>
+                            <input
+                              type="text"
+                              value={editedUser.address || user.address}
+                              onChange={(e) =>
+                                setEditedUser({
+                                  ...editedUser,
+                                  address: e.target.value,
+                                })
+                              }
+                              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${
+                                formErrors.address
+                                  ? "border-red-500"
+                                  : "border-gray-300"
+                              }`}
+                            />
+                            {formErrors.address && (
+                              <p className="text-red-500 text-xs mt-1">
+                                {formErrors.address}
+                              </p>
+                            )}
+                          </>
                         ) : (
                           <div className="text-gray-500">{user.address}</div>
                         )}
                       </div>
+
+                      {/* Postal Code */}
                       <div>
-                        {" "}
                         <label className="block text-sm font-bold text-gray-900 mb-1">
                           Postal Code: In what area did the recipient stay last
                           night?
                           <span className="text-red-500">*</span>
                         </label>
                         {isEditMode ? (
-                          <input
-                            type="text"
-                            value={editedUser.postalCode || user.postalCode}
-                            onChange={(e) =>
-                              setEditedUser({
-                                ...editedUser,
-                                postalCode: e.target.value,
-                              })
-                            }
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
-                          />
+                          <>
+                            <input
+                              type="text"
+                              value={editedUser.postalCode || user.postalCode}
+                              onChange={(e) =>
+                                setEditedUser({
+                                  ...editedUser,
+                                  postalCode: e.target.value,
+                                })
+                              }
+                              className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary ${
+                                formErrors.postalCode
+                                  ? "border-red-500"
+                                  : "border-gray-300"
+                              }`}
+                            />
+                            {formErrors.postalCode && (
+                              <p className="text-red-500 text-xs mt-1">
+                                {formErrors.postalCode}
+                              </p>
+                            )}
+                          </>
                         ) : (
                           <div className="text-gray-500">{user.postalCode}</div>
                         )}
                       </div>
                     </div>
-                  </div>{" "}
+                  </div>
+
                   {(user.notes || isEditMode) && (
                     <div className="mt-8 bg-gray-50 rounded-lg p-6 shadow-sm">
                       <h3 className="text-lg font-semibold text-gray-800 mb-4">
@@ -799,6 +1059,7 @@ function DisplayRecipientProfileContent() {
                       )}
                     </div>
                   )}
+
                   {user.banned && bannedInfo && (
                     <div className="mt-8 bg-red-50 border border-red-200 rounded-lg p-6">
                       <h3 className="text-lg font-semibold text-red-800 mb-4 flex items-center">
@@ -821,10 +1082,11 @@ function DisplayRecipientProfileContent() {
                     </div>
                   )}
                 </div>
-              )}{" "}
+              )}
+
               {activeTab === "arcCard" && (
                 <div className="p-6">
-                  {/* ARC Card Image at the top */}
+                  {/* ARC Card Image */}
                   <div className="flex mb-8">
                     <div className="bg-white rounded-lg border border-gray-200 p-6 shadow-sm">
                       <Image
@@ -858,7 +1120,6 @@ function DisplayRecipientProfileContent() {
                             : `${durationMonths} mo`;
                         return (
                           <div className="grid grid-cols-3 gap-8">
-                            {/* Card held since - issue date */}
                             <div>
                               <div className="text-sm text-gray-600 mb-2 font-bold">
                                 Card held since
@@ -872,7 +1133,6 @@ function DisplayRecipientProfileContent() {
                               </div>
                             </div>
 
-                            {/* Card held for - duration */}
                             <div>
                               <div className="text-sm text-gray-600 mb-2 font-bold">
                                 Card held for
@@ -882,62 +1142,58 @@ function DisplayRecipientProfileContent() {
                               </div>
                             </div>
 
-                        {/* Status */}
-                        <div>
-                          <div className="text-sm text-gray-600 mb-2 font-bold">
-                            Status
-                          </div>
-                          <div
-                            className={`text-sm font-medium ${
-                              arcCards[0].status === "Active"
-                                ? "text-green-600"
-                                : arcCards[0].status === "Expired"
-                                ? "text-red-600"
-                                : "text-gray-600"
-                            }`}
-                          >
-                            {arcCards[0].status}
-                          </div>
-                        </div>
+                            <div>
+                              <div className="text-sm text-gray-600 mb-2 font-bold">
+                                Status
+                              </div>
+                              <div
+                                className={`text-sm font-medium ${
+                                  arcCards[0].status === "Active"
+                                    ? "text-green-600"
+                                    : arcCards[0].status === "Expired"
+                                    ? "text-red-600"
+                                    : "text-gray-600"
+                                }`}
+                              >
+                                {arcCards[0].status}
+                              </div>
+                            </div>
 
-                        {/* Remaining Months */}
-                        <div>
-                          <div className="text-sm text-gray-600 mb-2 font-bold">
-                            Remaining Months
-                          </div>
-                          <div
-                            className={`text-sm font-medium ${
-                              arcCards[0].monthsRemaining <= 1
-                                ? "text-red-600"
-                                : "text-gray-900"
-                            }`}
-                          >
-                            {arcCards[0].monthsRemaining}/3
-                          </div>
-                        </div>
+                            <div>
+                              <div className="text-sm text-gray-600 mb-2 font-bold">
+                                Remaining Months
+                              </div>
+                              <div
+                                className={`text-sm font-medium ${
+                                  arcCards[0].monthsRemaining <= 1
+                                    ? "text-red-600"
+                                    : "text-gray-900"
+                                }`}
+                              >
+                                {arcCards[0].monthsRemaining}
+                              </div>
+                            </div>
 
-                        {/* Last 7 Digits */}
-                        <div>
-                          <div className="text-sm text-gray-600 mb-2 font-bold">
-                            Last 7 Digits
-                          </div>
-                          <div className="text-sm text-gray-500">
-                            {arcCards[0].arcCardNumber
-                              ? `***${arcCards[0].arcCardNumber.slice(-4)}`
-                              : "Placeholder"}
-                          </div>
-                        </div>
+                            <div>
+                              <div className="text-sm text-gray-600 mb-2 font-bold">
+                                Last 7 Digits
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {arcCards[0].arcCardNumber
+                                  ? `***${arcCards[0].arcCardNumber.slice(-4)}`
+                                  : "Placeholder"}
+                              </div>
+                            </div>
 
-                        {/* Security Code */}
-                        <div>
-                          <div className="text-sm text-gray-600 mb-2 font-bold">
-                            Security Code
+                            <div>
+                              <div className="text-sm text-gray-600 mb-2 font-bold">
+                                Security Code
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {arcCards[0].securityCode || "Placeholder"}
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-sm text-gray-500">
-                            {arcCards[0].securityCode || "Placeholder"}
-                          </div>
-                        </div>
-                      </div>
                         );
                       })()}
                     </div>
@@ -949,13 +1205,17 @@ function DisplayRecipientProfileContent() {
                       <p className="text-gray-500 mb-4">
                         This recipient doesn&apos;t have an ARC card yet.
                       </p>
-                      <button className="bg-primary hover:bg-primary/80 text-white px-4 py-2 rounded-md text-sm">
+                      <button
+                        onClick={handleIssueCard}
+                        className="bg-primary hover:bg-primary/80 text-white px-4 py-2 rounded-md text-sm"
+                      >
                         Issue New Card
                       </button>
                     </div>
                   )}
                 </div>
-              )}{" "}
+              )}
+
               {activeTab === "history" && (
                 <div className="p-6">
                   {history.length > 0 ? (
@@ -1004,75 +1264,12 @@ function DisplayRecipientProfileContent() {
                                   {entry.modifiedBy}
                                 </div>
 
-                                {/* Status */}
-                                <div>
-                                  {(() => {
-                                    const status = entry.event.toLowerCase();
-                                    if (
-                                      status.includes("active") ||
-                                      status.includes("created") ||
-                                      status.includes("renewed") ||
-                                      status.includes("issued") ||
-                                      status.includes("unflagged")
-                                    ) {
-                                      return (
-                                        <span className="inline-flex px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
-                                          Active
-                                        </span>
-                                      );
-                                    } else if (status.includes("expired")) {
-                                      return (
-                                        <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
-                                          Expired
-                                        </span>
-                                      );
-                                    } else if (
-                                      status.includes("flagged") ||
-                                      status.includes("banned")
-                                    ) {
-                                      return (
-                                        <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
-                                          Flagged
-                                        </span>
-                                      );
-                                    } else if (status.includes("lost")) {
-                                      return (
-                                        <span className="inline-flex px-3 py-1 text-xs font-medium bg-red-100 text-red-700 rounded-full">
-                                          Lost
-                                        </span>
-                                      );
-                                    } else {
-                                      return (
-                                        <span className="inline-flex px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full">
-                                          Active
-                                        </span>
-                                      );
-                                    }
-                                  })()}
-                                </div>
+                                {/* Status Badge */}
+                                <div>{getHistoryStatusBadge(entry)}</div>
 
                                 {/* Action Taken */}
                                 <div className="text-sm text-gray-700">
-                                  {entry.event === "ARC Card Issued" &&
-                                  entry.notes
-                                    ? `ARC Card issued (${
-                                        entry.notes.match(/\d+/)?.[0] || "ID"
-                                      })`
-                                    : entry.event === "Account Flagged"
-                                    ? "Account flagged"
-                                    : entry.event === "Account Unflagged"
-                                    ? "Account unflagged"
-                                    : entry.event === "ARC Card Renewed"
-                                    ? "ARC Card renewed"
-                                    : entry.event === "Profile Updated"
-                                    ? "Account information updated"
-                                    : entry.event === "Account Created"
-                                    ? "Account created"
-                                    : entry.event === "ARC Card Lost"
-                                    ? "ARC Card lost"
-                                    : entry.event === "Status Change"
-                                    ? entry.notes || "Account status changed"
-                                    : entry.notes || entry.event}
+                                  {getHistoryActionLabel(entry)}
                                 </div>
 
                                 {/* View Reason button for override entries */}
@@ -1113,6 +1310,20 @@ function DisplayRecipientProfileContent() {
       </div>
 
       {/* Modals */}
+      <IssueCardModal
+        isOpen={showIssueModal}
+        onClose={() => setShowIssueModal(false)}
+        onConfirm={handleIssueModalConfirm}
+        availableCards={availableCards}
+      />
+
+      <RenewCardModal
+        isOpen={showRenewModal}
+        onClose={() => setShowRenewModal(false)}
+        onConfirm={handleRenewModalConfirm}
+        cardNumber={arcCards[0]?.arcCardNumber ?? ""}
+      />
+
       <BanModal
         isOpen={showBanModal}
         onClose={() => setShowBanModal(false)}
