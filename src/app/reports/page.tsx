@@ -17,20 +17,21 @@ import {
   ChevronDown,
   ChevronRight,
   ChevronUp,
+  CreditCard,
   Download,
   Filter,
+  History,
   Search,
   ShieldAlert,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import type {
   UserReportRow,
   CardHistoryEntry,
   ActivityEntry,
 } from "./types";
-import { STATUS_OPTIONS, DEPARTMENT_OPTIONS } from "@/app/cards/types";
-import type { CardStatus, CardDepartment } from "@/app/cards/types";
+import * as XLSX from "xlsx";
 
 // --- API ---
 
@@ -73,6 +74,18 @@ function formatDateTime(dateStr: string): string {
   } catch {
     return dateStr;
   }
+}
+
+function autoFitColumns(ws: XLSX.WorkSheet, data: Record<string, string | number>[]) {
+  if (data.length === 0) return;
+  const keys = Object.keys(data[0]);
+  ws["!cols"] = keys.map((key) => {
+    const maxLen = Math.max(
+      key.length,
+      ...data.map((row) => String(row[key] ?? "").length)
+    );
+    return { wch: Math.min(maxLen + 2, 50) };
+  });
 }
 
 // --- Sub-components ---
@@ -334,20 +347,11 @@ export default function ReportsPage() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [flagFilter, setFlagFilter] = useState<"all" | "flagged" | "not_flagged">("all");
   const [statusFilter, setStatusFilter] = useState<("Active" | "Inactive")[]>([]);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const filterRef = useRef<HTMLDivElement>(null);
 
-  // Export state
-  const [exporting, setExporting] = useState(false);
-  const [exportStartDate, setExportStartDate] = useState(() => {
-    const d = new Date(Date.now() - 30 * 86400000);
-    return d.toISOString().split("T")[0];
-  });
-  const [exportEndDate, setExportEndDate] = useState(() => {
-    return new Date().toISOString().split("T")[0];
-  });
-  const [showExportPanel, setShowExportPanel] = useState(false);
-  const [exportStatuses, setExportStatuses] = useState<CardStatus[]>([]);
-  const [exportDepartments, setExportDepartments] = useState<CardDepartment[]>([]);
+  const [exporting, setExporting] = useState<"all" | "cards" | "activity" | null>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -396,15 +400,38 @@ export default function ReportsPage() {
       result = result.filter((u) => statusFilter.includes(u.status as "Active" | "Inactive"));
     }
 
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      result = result.filter((u) => {
+        if (!u.createdAt) return false;
+        return new Date(u.createdAt) >= from;
+      });
+    }
+
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      result = result.filter((u) => {
+        if (!u.createdAt) return false;
+        return new Date(u.createdAt) <= to;
+      });
+    }
+
     return result;
-  }, [data, searchQuery, flagFilter, statusFilter]);
+  }, [data, searchQuery, flagFilter, statusFilter, dateFrom, dateTo]);
 
   const activeFilterCount =
-    (flagFilter !== "all" ? 1 : 0) + statusFilter.length;
+    (flagFilter !== "all" ? 1 : 0) +
+    statusFilter.length +
+    (dateFrom ? 1 : 0) +
+    (dateTo ? 1 : 0);
 
   const clearAllFilters = () => {
     setFlagFilter("all");
     setStatusFilter([]);
+    setDateFrom("");
+    setDateTo("");
     setSearchQuery("");
   };
 
@@ -414,37 +441,123 @@ export default function ReportsPage() {
     );
   };
 
-  // Export handler
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      const res = await fetch("/api/reports/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          startDate: exportStartDate,
-          endDate: exportEndDate,
-          filters: {
-            ...(exportStatuses.length && { statuses: exportStatuses }),
-            ...(exportDepartments.length && { departments: exportDepartments }),
-          },
-        }),
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error || "Export failed");
+  const buildUserSheet = (wb: XLSX.WorkBook) => {
+    const userRows = filteredData.map((u, i) => ({
+      "#": i + 1,
+      "First Name": u.firstName,
+      "Last Name": u.lastName,
+      Email: u.email || "",
+      Phone: u.phoneNumber || "",
+      Status: u.status,
+      Flagged: u.banned ? "Yes" : "No",
+      "Flagged Date": u.bannedAt ? formatDate(u.bannedAt) : "",
+      "Flag Reason": u.banReason || "",
+      Gender: u.genderIdentity || "",
+      "Date of Birth": u.dateOfBirth || "",
+      Address: u.address || "",
+      "Postal Code": u.postalCode || "",
+      "Total Cards": u.totalCardsIssued,
+      "Activity Events": u.activityHistory.length,
+      Notes: u.notes || "",
+      Registered: u.createdAt ? formatDate(u.createdAt) : "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(userRows);
+    autoFitColumns(ws, userRows);
+    XLSX.utils.book_append_sheet(wb, ws, "Users");
+  };
+
+  const buildCardSheet = (wb: XLSX.WorkBook) => {
+    const cardRows: Record<string, string | number>[] = [];
+    for (const u of filteredData) {
+      for (const c of u.cardHistory) {
+        cardRows.push({
+          "First Name": u.firstName,
+          "Last Name": u.lastName,
+          "Card Number": c.cardNumber,
+          Department: c.department,
+          "Card Status": c.status,
+          "Allocation Date": c.allocationDate,
+          "Security Code": c.securityCode,
+          "Issue Dates": c.issueDates.join(", "),
+        });
       }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `arc-cards-export-${exportStartDate}-to-${exportEndDate}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Export failed");
+    }
+    const ws = XLSX.utils.json_to_sheet(
+      cardRows.length > 0
+        ? cardRows
+        : [{ Info: "No card history for the current filter" }]
+    );
+    if (cardRows.length > 0) autoFitColumns(ws, cardRows);
+    XLSX.utils.book_append_sheet(wb, ws, "Card History");
+  };
+
+  const buildActivitySheet = (wb: XLSX.WorkBook) => {
+    const activityRows: Record<string, string>[] = [];
+    for (const u of filteredData) {
+      for (const entry of u.activityHistory) {
+        activityRows.push({
+          "First Name": u.firstName,
+          "Last Name": u.lastName,
+          Date: entry.date ? formatDateTime(entry.date) : "",
+          Event: entry.event,
+          Details: entry.notes,
+          Reason: entry.reason || "",
+          "Modified By": entry.modifiedBy || "",
+        });
+      }
+    }
+    const ws = XLSX.utils.json_to_sheet(
+      activityRows.length > 0
+        ? activityRows
+        : [{ Info: "No activity history for the current filter" }]
+    );
+    if (activityRows.length > 0) autoFitColumns(ws, activityRows);
+    XLSX.utils.book_append_sheet(wb, ws, "Activity Log");
+  };
+
+  const downloadWorkbook = (wb: XLSX.WorkBook, suffix: string) => {
+    const today = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(wb, `user-reports-${suffix}-${today}.xlsx`);
+  };
+
+  const handleExportAll = () => {
+    setExporting("all");
+    try {
+      const wb = XLSX.utils.book_new();
+      buildUserSheet(wb);
+      buildCardSheet(wb);
+      buildActivitySheet(wb);
+      downloadWorkbook(wb, "all");
+    } catch {
+      alert("Failed to generate export");
     } finally {
-      setExporting(false);
+      setExporting(null);
+    }
+  };
+
+  const handleExportCards = () => {
+    setExporting("cards");
+    try {
+      const wb = XLSX.utils.book_new();
+      buildCardSheet(wb);
+      downloadWorkbook(wb, "cards");
+    } catch {
+      alert("Failed to generate export");
+    } finally {
+      setExporting(null);
+    }
+  };
+
+  const handleExportActivity = () => {
+    setExporting("activity");
+    try {
+      const wb = XLSX.utils.book_new();
+      buildActivitySheet(wb);
+      downloadWorkbook(wb, "activity");
+    } catch {
+      alert("Failed to generate export");
+    } finally {
+      setExporting(null);
     }
   };
 
@@ -708,7 +821,7 @@ export default function ReportsPage() {
             </button>
 
             {showFilterDropdown && (
-              <div className="absolute right-0 top-full mt-2 w-72 rounded-lg border border-gray-200 bg-white shadow-lg z-50">
+              <div className="absolute right-0 top-full mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-gray-200 bg-white shadow-lg z-50">
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-semibold text-gray-900">Filters</h3>
@@ -720,6 +833,28 @@ export default function ReportsPage() {
                         Clear all
                       </button>
                     )}
+                  </div>
+
+                  {/* Date range filter */}
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">
+                      Registered Between
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                        className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                      <span className="text-gray-400 text-xs">to</span>
+                      <input
+                        type="date"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                        className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      />
+                    </div>
                   </div>
 
                   {/* Flagged filter */}
@@ -776,113 +911,39 @@ export default function ReportsPage() {
             )}
           </div>
 
-          {/* Export toggle */}
-          <button
-            onClick={() => setShowExportPanel(!showExportPanel)}
-            className="flex items-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors"
-          >
-            <Download className="h-4 w-4" />
-            Export
-          </button>
-        </div>
-      </header>
-
-      {/* Export Panel */}
-      {showExportPanel && (
-        <div className="rounded-lg border border-gray-200 bg-white shadow-sm p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900">Export ARC Card Data (.xlsx)</h3>
+          {/* Export buttons */}
+          <div className="flex items-center rounded-md shadow-sm overflow-hidden">
             <button
-              onClick={() => setShowExportPanel(false)}
-              className="text-gray-400 hover:text-gray-600"
+              onClick={handleExportAll}
+              disabled={!!exporting}
+              className="flex items-center gap-1.5 bg-[#00BDD6] px-3.5 py-2 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50 transition-colors"
             >
-              <X size={18} />
+              <Download className="h-4 w-4" />
+              {exporting === "all" ? "Exporting..." : "Export All"}
+            </button>
+            <div className="w-px bg-cyan-400/50 self-stretch" />
+            <button
+              onClick={handleExportCards}
+              disabled={!!exporting}
+              className="flex items-center gap-1.5 bg-[#00BDD6] px-3 py-2 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50 transition-colors"
+              title="Download Card History sheet"
+            >
+              <CreditCard className="h-3.5 w-3.5" />
+              {exporting === "cards" ? "..." : "Cards"}
+            </button>
+            <div className="w-px bg-cyan-400/50 self-stretch" />
+            <button
+              onClick={handleExportActivity}
+              disabled={!!exporting}
+              className="flex items-center gap-1.5 bg-[#00BDD6] px-3 py-2 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50 transition-colors rounded-r-md"
+              title="Download Activity Log sheet"
+            >
+              <History className="h-3.5 w-3.5" />
+              {exporting === "activity" ? "..." : "Activity"}
             </button>
           </div>
-          <div className="flex flex-wrap gap-4 items-end">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                Start Date
-              </label>
-              <input
-                type="date"
-                value={exportStartDate}
-                onChange={(e) => setExportStartDate(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
-              />
-            </div>
-            <span className="text-gray-400 pb-1.5">to</span>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">
-                End Date
-              </label>
-              <input
-                type="date"
-                value={exportEndDate}
-                onChange={(e) => setExportEndDate(e.target.value)}
-                className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
-              />
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-6">
-            <div>
-              <p className="text-xs font-medium text-gray-600 mb-1.5">Card Status</p>
-              <div className="flex flex-wrap gap-1.5">
-                {STATUS_OPTIONS.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() =>
-                      setExportStatuses((prev) =>
-                        prev.includes(s)
-                          ? prev.filter((x) => x !== s)
-                          : [...prev, s]
-                      )
-                    }
-                    className={`px-2.5 py-1 rounded-full text-xs border ${
-                      exportStatuses.includes(s)
-                        ? "bg-cyan-500 text-white border-cyan-500"
-                        : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-600 mb-1.5">Department</p>
-              <div className="flex flex-wrap gap-1.5">
-                {DEPARTMENT_OPTIONS.map((d) => (
-                  <button
-                    key={d}
-                    onClick={() =>
-                      setExportDepartments((prev) =>
-                        prev.includes(d)
-                          ? prev.filter((x) => x !== d)
-                          : [...prev, d]
-                      )
-                    }
-                    className={`px-2.5 py-1 rounded-full text-xs border ${
-                      exportDepartments.includes(d)
-                        ? "bg-cyan-500 text-white border-cyan-500"
-                        : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
-                    }`}
-                  >
-                    {d}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-          <button
-            onClick={handleExport}
-            disabled={exporting}
-            className="bg-[#00BDD6] text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-cyan-600 disabled:opacity-50"
-          >
-            {exporting ? "Exporting..." : "Download Export"}
-          </button>
         </div>
-      )}
+      </header>
 
       {/* Summary stats bar */}
       <div className="flex gap-4">
@@ -940,9 +1001,8 @@ export default function ReportsPage() {
             </thead>
             <tbody className="divide-y divide-gray-200">
               {rows.map((row, index) => (
-                <>
+                <Fragment key={row.id}>
                   <tr
-                    key={row.id}
                     className={`transition-colors hover:bg-blue-50/50 cursor-pointer ${
                       row.getIsExpanded()
                         ? "bg-cyan-50/40"
@@ -959,13 +1019,13 @@ export default function ReportsPage() {
                     ))}
                   </tr>
                   {row.getIsExpanded() && (
-                    <tr key={`${row.id}-expanded`}>
+                    <tr>
                       <td colSpan={columns.length} className="p-0">
                         <ExpandedRowContent row={row} />
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               ))}
               {rows.length === 0 && (
                 <tr>
