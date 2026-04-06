@@ -355,7 +355,7 @@ export function DeleteModal({
           </div>
 
           <p className="text-gray-600">
-            Are you sure you want to permanently delete {userName}'s account?
+            Are you sure you want to permanently delete {userName}&apos;s account?
             This will remove all associated data including ARC cards, history,
             and personal information.
           </p>

@@ -1,3 +1,4 @@
+/* eslint-disable  @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { createAdmin, checkAdmin } from "@/app/admin/actions";
 import { initAdmin } from "@/app/services/firebaseAdmin";

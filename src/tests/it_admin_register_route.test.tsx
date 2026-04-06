@@ -1,3 +1,4 @@
+/* eslint-disable  @typescript-eslint/no-explicit-any */
 import { POST } from "@/app/admin/api/create-admin/route";
 import * as adminActions from "@/app/admin/actions";
 import { NextRequest } from "next/server";
@@ -35,6 +36,22 @@ jest.mock("firebase-admin", () => ({
 jest.mock("@/app/services/firebaseAdmin", () => ({
   initAdmin: jest.fn().mockResolvedValue(true),
 }));
+
+jest.mock("@/app/services/firebaseAdmin", () => ({
+  initAdmin: jest.fn(async () => ({})),
+}));
+jest.mock("firebase-admin", () => {
+  const set = jest.fn(async () => undefined);
+  const doc = jest.fn(() => ({ set }));
+  const collection = jest.fn(() => ({ doc }));
+  const firestore = Object.assign(jest.fn(() => ({ collection })), {
+    FieldValue: { serverTimestamp: jest.fn(() => "mock-ts") },
+  });
+  return {
+    __esModule: true,
+    default: { firestore },
+  };
+});
 
 // mock NextRequest
 const mockNextRequest = <T = unknown,>(body: T): NextRequest => {
