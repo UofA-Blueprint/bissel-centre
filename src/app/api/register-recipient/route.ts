@@ -100,7 +100,6 @@ export async function POST(request: NextRequest) {
       passesIssued: [],
       banned: false,
       banReason: null,
-      notes: additionalInfo?.notes || null,
       createdAt: new Date().toISOString(),
       createdBy: createdByUid,
       updatedAt: new Date().toISOString(),
@@ -121,10 +120,11 @@ export async function POST(request: NextRequest) {
     if (arcCardDigits) {
       if (
         !Number.isInteger(arcCardDurationMonths) ||
-        arcCardDurationMonths < 1
+        arcCardDurationMonths < 1 ||
+        arcCardDurationMonths > 12
       ) {
         return NextResponse.json(
-          { error: "ARC card issue duration is required" },
+          { error: "ARC card issue duration must be between 1 and 12 months" },
           { status: 400 },
         );
       }
@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
         createdAt: issueTimestamp,
         issueDate: issueTimestamp,
         issuedBy: createdByUid,
-        notes: "",
+        notes: additionalInfo?.notes || "",
         returnedAt: null,
         expiresAt: Timestamp.fromDate(expiresAtDate),
         userId: userRef.id,

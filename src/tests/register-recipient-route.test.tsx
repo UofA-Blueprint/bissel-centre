@@ -205,7 +205,6 @@ describe("POST /api/register-recipient", () => {
         passesIssued: [],
         banned: false,
         banReason: null,
-        notes: "Test notes",
         createdBy: "test-admin-uid",
         phone: "encrypted_555-1234",
         email: "john@example.com",
@@ -224,7 +223,7 @@ describe("POST /api/register-recipient", () => {
         cardId: mockCardRef.id,
         userId: "test-user-id",
         issuedBy: "test-admin-uid",
-        notes: "",
+        notes: "Test notes",
         returnedAt: null,
         createdAt: expect.any(Object),
         issueDate: expect.any(Object),
@@ -384,7 +383,6 @@ describe("POST /api/register-recipient", () => {
         dateOfBirth: null,
         address: null,
         postalCode: null,
-        notes: null,
         journey: null,
         mostCommonReason: null,
         secondMostCommonReason: null,
@@ -414,7 +412,61 @@ describe("POST /api/register-recipient", () => {
     const data = await response.json();
 
     expect(response.status).toBe(400);
-    expect(data.error).toBe("ARC card issue duration is required");
+    expect(data.error).toBe(
+      "ARC card issue duration must be between 1 and 12 months",
+    );
+    expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when ARC card issue duration is less than 1", async () => {
+    const requestBody = {
+      personalDetails: {
+        firstName: "Jane",
+        lastName: "Smith",
+      },
+      additionalInfo: {
+        arcCardDigits: "1234567",
+        arcCardDurationMonths: "0",
+      },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
+      },
+    };
+
+    const req = createMockRequest(requestBody);
+    const response = await POST(req);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe(
+      "ARC card issue duration must be between 1 and 12 months",
+    );
+    expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when ARC card issue duration exceeds 12 months", async () => {
+    const requestBody = {
+      personalDetails: {
+        firstName: "Jane",
+        lastName: "Smith",
+      },
+      additionalInfo: {
+        arcCardDigits: "1234567",
+        arcCardDurationMonths: "13",
+      },
+      photoUpload: {
+        imageUrl: "data:image/jpeg;base64,test-image-data",
+      },
+    };
+
+    const req = createMockRequest(requestBody);
+    const response = await POST(req);
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.error).toBe(
+      "ARC card issue duration must be between 1 and 12 months",
+    );
     expect(mockBatchCommit).not.toHaveBeenCalled();
   });
 

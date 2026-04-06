@@ -172,16 +172,25 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
         return "Please fill out all required fields.";
       }
 
-      if (data.arcCardDigits && !isArcCardConfirmed) {
+      if (!data.arcCardDigits) {
+        return "ARC Card Number is required.";
+      }
+
+      if (!isArcCardConfirmed) {
         return "Please select an ARC card from the search suggestions.";
       }
 
-      if (data.arcCardDigits && !data.arcCardDurationMonths) {
-        return "Please choose how long the ARC card should be issued for.";
+      if (!data.arcCardDurationMonths) {
+        return "ARC Card Issue Duration is required.";
       }
 
-      if (!data.arcCardDigits && data.arcCardDurationMonths) {
-        return "Please select an ARC card before choosing an issue duration.";
+      const durationNum = Number(data.arcCardDurationMonths);
+      if (
+        !Number.isInteger(durationNum) ||
+        durationNum < 1 ||
+        durationNum > 12
+      ) {
+        return "ARC Card Issue Duration must be an integer between 1 and 12 months.";
       }
 
       return null;
@@ -254,7 +263,9 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
             <label className="flex flex-col relative">
-              <span className="text-sm mb-1">ARC Card Number</span>
+              <span className="text-sm mb-1">
+                ARC Card Number <span className="text-red-500">*</span>
+              </span>
               <input
                 value={arcCardDigits}
                 onChange={(e) => {
@@ -329,17 +340,23 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
               <span className="text-sm mb-1">
                 ARC Card Issue Duration <span className="text-red-500">*</span>
               </span>
-              <select
+              <input
                 value={arcCardDurationMonths}
-                onChange={(e) => setArcCardDurationMonths(e.target.value)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setArcCardDurationMonths(value);
+                }}
+                type="number"
                 name="arcCardDurationMonths"
-                className="mt-1 text-sm font-normal border rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-              >
-                <option value="">Select duration</option>
-                <option value="1">1 month</option>
-                <option value="2">2 months</option>
-                <option value="3">3 months</option>
-              </select>
+                inputMode="numeric"
+                min="1"
+                max="12"
+                placeholder="Enter 1-12 months"
+                className="mt-1 text-sm font-normal border rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <span className="mt-1 text-xs text-gray-500">
+                Enter a number between 1 and 12 months
+              </span>
             </label>
             <label className="flex flex-col">
               <span className="text-sm mb-1">Other/Notes</span>
