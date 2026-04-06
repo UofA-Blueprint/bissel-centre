@@ -1,3 +1,4 @@
+/* eslint-disable  @typescript-eslint/no-explicit-any */
 import { POST } from "@/app/admin/api/create-admin/route";
 import * as adminActions from "@/app/admin/actions";
 import { NextRequest } from "next/server";
@@ -16,6 +17,22 @@ jest.mock("next/server", () => ({
 // mock the admin actions module
 jest.mock("@/app/admin/actions");
 
+jest.mock("@/app/services/firebaseAdmin", () => ({
+  initAdmin: jest.fn(async () => ({})),
+}));
+jest.mock("firebase-admin", () => {
+  const set = jest.fn(async () => undefined);
+  const doc = jest.fn(() => ({ set }));
+  const collection = jest.fn(() => ({ doc }));
+  const firestore = Object.assign(jest.fn(() => ({ collection })), {
+    FieldValue: { serverTimestamp: jest.fn(() => "mock-ts") },
+  });
+  return {
+    __esModule: true,
+    default: { firestore },
+  };
+});
+
 // mock NextRequest
 const mockNextRequest = (body: any): NextRequest => {
   return {
@@ -33,7 +50,7 @@ const mockCheckAdmin = adminActions.checkAdmin as jest.MockedFunction<
 
 describe("POST /admin/api/create-admin", () => {
   afterEach(() => {
-    jest.resetAllMocks();
+    jest.clearAllMocks();
   });
 
   test("returns 400 when required fields missing", async () => {

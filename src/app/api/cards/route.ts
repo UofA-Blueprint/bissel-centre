@@ -195,9 +195,6 @@ export async function POST(request: NextRequest) {
       : [body];
 
     // Check if migration has been run
-    const migrationDoc = await db.collection("_migrations").doc("issues_v1").get();
-    const isMigrated = migrationDoc.exists;
-
     const createdCards: ArcCard[] = [];
 
     for (const cardInput of cardsToCreate) {

@@ -90,7 +90,7 @@ function SortableHeader({
   sorted,
 }: {
   label: string;
-  onClick?: () => void;
+  onClick?: (event: unknown) => void;
   sorted: false | "asc" | "desc";
 }) {
   return (
