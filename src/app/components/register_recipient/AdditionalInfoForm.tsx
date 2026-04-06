@@ -14,6 +14,7 @@ export type AdditionalInfoData = {
   secondMostCommonReason: string;
   housingOption: string;
   arcCardDigits?: string;
+  arcCardDurationMonths?: string;
   notes?: string;
 };
 type Props = {
@@ -68,6 +69,9 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
     );
     const [arcCardDigits, setArcCardDigits] = useState(
       initialData.arcCardDigits ?? "",
+    );
+    const [arcCardDurationMonths, setArcCardDurationMonths] = useState(
+      initialData.arcCardDurationMonths ?? "",
     );
     const [arcCardSuggestions, setArcCardSuggestions] = useState<string[]>([]);
     const [isSearchingArcCards, setIsSearchingArcCards] = useState(false);
@@ -154,6 +158,7 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
       secondMostCommonReason,
       housingOption,
       arcCardDigits: arcCardDigits.trim(),
+      arcCardDurationMonths: arcCardDurationMonths.trim(),
       notes: notes.trim(),
     });
 
@@ -169,6 +174,14 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
 
       if (data.arcCardDigits && !isArcCardConfirmed) {
         return "Please select an ARC card from the search suggestions.";
+      }
+
+      if (data.arcCardDigits && !data.arcCardDurationMonths) {
+        return "Please choose how long the ARC card should be issued for.";
+      }
+
+      if (!data.arcCardDigits && data.arcCardDurationMonths) {
+        return "Please select an ARC card before choosing an issue duration.";
       }
 
       return null;
@@ -311,6 +324,22 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
                     )}
                   </div>
                 )}
+            </label>
+            <label className="flex flex-col">
+              <span className="text-sm mb-1">
+                ARC Card Issue Duration <span className="text-red-500">*</span>
+              </span>
+              <select
+                value={arcCardDurationMonths}
+                onChange={(e) => setArcCardDurationMonths(e.target.value)}
+                name="arcCardDurationMonths"
+                className="mt-1 text-sm font-normal border rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+              >
+                <option value="">Select duration</option>
+                <option value="1">1 month</option>
+                <option value="2">2 months</option>
+                <option value="3">3 months</option>
+              </select>
             </label>
             <label className="flex flex-col">
               <span className="text-sm mb-1">Other/Notes</span>

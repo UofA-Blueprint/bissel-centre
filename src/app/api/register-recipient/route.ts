@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
-import { getFirestore } from "firebase-admin/firestore";
+import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { cookies } from "next/headers";
 import { encryptPhone } from "@/utils/phoneEncryption";
 
@@ -24,7 +24,31 @@ export async function POST(request: NextRequest) {
     const createdByUid = decodedClaims.uid;
 
     const body = await request.json();
-    const { personalDetails, additionalInfo, photoUpload } = body;
+    const { personalDetails, additionalInfo, photoUpload } = body as {
+      personalDetails?: {
+        firstName?: string;
+        lastName?: string;
+        alias?: string;
+        gender?: string;
+        phone?: string;
+        email?: string;
+        dob?: string;
+        address?: string;
+        postalCode?: string;
+      };
+      additionalInfo?: {
+        journey?: string;
+        mostCommonReason?: string;
+        secondMostCommonReason?: string;
+        housingOption?: string;
+        arcCardDigits?: string;
+        arcCardDurationMonths?: string;
+        notes?: string;
+      };
+      photoUpload?: {
+        imageUrl?: string;
+      };
+    };
 
     // Validate required fields
     if (!personalDetails) {
@@ -54,6 +78,10 @@ export async function POST(request: NextRequest) {
     }
 
     const db = getFirestore();
+    const arcCardDigits = String(additionalInfo?.arcCardDigits || "")
+      .replace(/\D/g, "")
+      .trim();
+    const arcCardDurationMonths = Number(additionalInfo?.arcCardDurationMonths);
 
     // Encrypt phone number before storing
     const encryptedPhone = encryptPhone(personalDetails.phone || null);
@@ -67,7 +95,6 @@ export async function POST(request: NextRequest) {
       genderIdentity: personalDetails.gender || null,
       aliases: personalDetails.alias ? [personalDetails.alias] : [],
       dateOfBirth: personalDetails.dob || null,
-      arcCardNumber: additionalInfo?.arcCardDigits || null,
       address: personalDetails.address || null,
       postalCode: personalDetails.postalCode || null,
       passesIssued: [],
@@ -87,8 +114,59 @@ export async function POST(request: NextRequest) {
       housingOption: additionalInfo?.housingOption || null,
     };
 
-    // Store user in Firestore
-    const userRef = await db.collection("users").add(userData);
+    const userRef = db.collection("users").doc();
+    const batch = db.batch();
+    batch.set(userRef, userData);
+
+    if (arcCardDigits) {
+      if (
+        !Number.isInteger(arcCardDurationMonths) ||
+        arcCardDurationMonths < 1
+      ) {
+        return NextResponse.json(
+          { error: "ARC card issue duration is required" },
+          { status: 400 },
+        );
+      }
+
+      const cardSnapshot = await db
+        .collection("arc_cards")
+        .where("arcCardNumber", "==", arcCardDigits)
+        .where("currentUserId", "==", null)
+        .limit(1)
+        .get();
+
+      if (cardSnapshot.empty) {
+        return NextResponse.json(
+          { error: "Selected ARC card is not available" },
+          { status: 400 },
+        );
+      }
+
+      const cardDoc = cardSnapshot.docs[0];
+      const issueTimestamp = Timestamp.now();
+      const expiresAtDate = new Date(issueTimestamp.toDate());
+      expiresAtDate.setMonth(expiresAtDate.getMonth() + arcCardDurationMonths);
+
+      const issueRef = db.collection("issues").doc();
+
+      batch.update(cardDoc.ref, {
+        currentUserId: userRef.id,
+      });
+
+      batch.set(issueRef, {
+        cardId: cardDoc.id,
+        createdAt: issueTimestamp,
+        issueDate: issueTimestamp,
+        issuedBy: createdByUid,
+        notes: "",
+        returnedAt: null,
+        expiresAt: Timestamp.fromDate(expiresAtDate),
+        userId: userRef.id,
+      });
+    }
+
+    await batch.commit();
 
     return NextResponse.json(
       {

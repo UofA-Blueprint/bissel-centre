@@ -4,7 +4,6 @@ import { initAdmin } from "@/app/services/firebaseAdmin";
 import { getFirestore } from "firebase-admin/firestore";
 import { cookies } from "next/headers";
 
-// Mock Next.js modules
 jest.mock("next/server", () => ({
   NextRequest: jest.fn(),
   NextResponse: {
@@ -25,22 +24,61 @@ jest.mock("@/app/services/firebaseAdmin", () => ({
 
 jest.mock("firebase-admin/firestore", () => ({
   getFirestore: jest.fn(),
+  Timestamp: {
+    now: jest.fn(() => ({
+      toDate: () => new Date("2026-01-01T00:00:00.000Z"),
+    })),
+    fromDate: jest.fn((date: Date) => ({ date })),
+  },
 }));
 
 jest.mock("@/utils/phoneEncryption", () => ({
   encryptPhone: jest.fn((phone) => {
-    // Mock encryption returns a base64-like string if phone is provided
     return phone ? `encrypted_${phone}` : null;
   }),
 }));
 
-// Mock Firestore
-const mockAdd = jest.fn();
-const mockCollection = jest.fn(() => ({
-  add: mockAdd,
+const mockBatchSet = jest.fn();
+const mockBatchUpdate = jest.fn();
+const mockBatchCommit = jest.fn();
+const mockBatch = jest.fn(() => ({
+  set: mockBatchSet,
+  update: mockBatchUpdate,
+  commit: mockBatchCommit,
 }));
 
-// Mock Firebase Admin Auth
+const mockCardQueryGet = jest.fn();
+const mockArcCardsQuery = {
+  where: jest.fn().mockReturnThis(),
+  limit: jest.fn().mockReturnThis(),
+  get: mockCardQueryGet,
+};
+
+const mockUsersCollection = {
+  doc: jest.fn(),
+};
+
+const mockIssuesCollection = {
+  doc: jest.fn(),
+};
+
+const mockArcCardsCollection = jest.fn(() => mockArcCardsQuery);
+const mockCollection = jest.fn((name: string) => {
+  if (name === "users") {
+    return mockUsersCollection;
+  }
+
+  if (name === "issues") {
+    return mockIssuesCollection;
+  }
+
+  if (name === "arc_cards") {
+    return mockArcCardsCollection();
+  }
+
+  return {};
+});
+
 const mockVerifySessionCookie = jest.fn();
 const mockAuth = jest.fn(() => ({
   verifySessionCookie: mockVerifySessionCookie,
@@ -49,6 +87,31 @@ const mockAuth = jest.fn(() => ({
 describe("POST /api/register-recipient", () => {
   const mockCookieStore = {
     get: jest.fn(),
+  };
+
+  const mockUserRef = {
+    id: "test-user-id",
+  };
+
+  const mockIssueRef = {
+    id: "test-issue-id",
+  };
+
+  const mockCardRef = {
+    id: "test-card-doc-id",
+  };
+
+  const mockCardSnapshot = {
+    empty: false,
+    docs: [
+      {
+        id: mockCardRef.id,
+        ref: mockCardRef,
+        data: () => ({
+          arcCardNumber: "1234567",
+        }),
+      },
+    ],
   };
 
   const createMockRequest = (body: unknown): NextRequest => {
@@ -60,20 +123,15 @@ describe("POST /api/register-recipient", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    // Mock cookies
     (cookies as jest.Mock).mockResolvedValue(mockCookieStore);
-
-    // Mock admin initialization
     (initAdmin as jest.Mock).mockResolvedValue({
       auth: mockAuth,
     });
-
-    // Mock Firestore
     (getFirestore as jest.Mock).mockReturnValue({
       collection: mockCollection,
+      batch: mockBatch,
     });
 
-    // Mock session cookie verification
     mockCookieStore.get.mockReturnValue({
       value: "valid-session-cookie",
     });
@@ -81,13 +139,12 @@ describe("POST /api/register-recipient", () => {
       uid: "test-admin-uid",
     });
 
-    // Mock Firestore add
-    mockAdd.mockResolvedValue({
-      id: "test-user-id",
-    });
+    mockUsersCollection.doc.mockReturnValue(mockUserRef);
+    mockIssuesCollection.doc.mockReturnValue(mockIssueRef);
+    mockCardQueryGet.mockResolvedValue(mockCardSnapshot);
   });
 
-  it("successfully creates a new recipient with valid data", async () => {
+  it("successfully creates a new recipient, issues a card, and records the issue", async () => {
     const requestBody = {
       personalDetails: {
         firstName: "John",
@@ -106,6 +163,7 @@ describe("POST /api/register-recipient", () => {
         secondMostCommonReason: "Food Security",
         housingOption: "Emergency Sheltered",
         arcCardDigits: "1234567",
+        arcCardDurationMonths: "3",
         notes: "Test notes",
       },
       photoUpload: {
@@ -121,7 +179,20 @@ describe("POST /api/register-recipient", () => {
     expect(data.success).toBe(true);
     expect(data.userId).toBe("test-user-id");
     expect(mockCollection).toHaveBeenCalledWith("users");
-    expect(mockAdd).toHaveBeenCalledWith(
+    expect(mockCollection).toHaveBeenCalledWith("arc_cards");
+    expect(mockCollection).toHaveBeenCalledWith("issues");
+    expect(mockArcCardsQuery.where).toHaveBeenCalledWith(
+      "arcCardNumber",
+      "==",
+      "1234567",
+    );
+    expect(mockArcCardsQuery.where).toHaveBeenCalledWith(
+      "currentUserId",
+      "==",
+      null,
+    );
+    expect(mockBatchSet).toHaveBeenCalledWith(
+      mockUserRef,
       expect.objectContaining({
         firstName: "John",
         secondName: "Doe",
@@ -129,7 +200,6 @@ describe("POST /api/register-recipient", () => {
         genderIdentity: "Male",
         aliases: ["Johnny"],
         dateOfBirth: "1990-01-01",
-        arcCardNumber: "1234567",
         address: "123 Main St",
         postalCode: "12345",
         passesIssued: [],
@@ -137,7 +207,7 @@ describe("POST /api/register-recipient", () => {
         banReason: null,
         notes: "Test notes",
         createdBy: "test-admin-uid",
-        phone: "encrypted_555-1234", // Phone should be encrypted
+        phone: "encrypted_555-1234",
         email: "john@example.com",
         journey: "Applied for the Ride Transit/LAP programs",
         mostCommonReason: "Health and Wellness",
@@ -145,6 +215,25 @@ describe("POST /api/register-recipient", () => {
         housingOption: "Emergency Sheltered",
       }),
     );
+    expect(mockBatchUpdate).toHaveBeenCalledWith(mockCardRef, {
+      currentUserId: "test-user-id",
+    });
+    expect(mockBatchSet).toHaveBeenCalledWith(
+      mockIssueRef,
+      expect.objectContaining({
+        cardId: mockCardRef.id,
+        userId: "test-user-id",
+        issuedBy: "test-admin-uid",
+        notes: "",
+        returnedAt: null,
+        createdAt: expect.any(Object),
+        issueDate: expect.any(Object),
+        expiresAt: expect.objectContaining({
+          date: expect.any(Date),
+        }),
+      }),
+    );
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
   });
 
   it("returns 401 when no session cookie is present", async () => {
@@ -166,10 +255,10 @@ describe("POST /api/register-recipient", () => {
 
     expect(response.status).toBe(401);
     expect(data.error).toBe("Unauthorized - No session found");
-    expect(mockAdd).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
   });
 
-  it("returns 401 when session verification fails", async () => {
+  it("returns 500 when session verification fails", async () => {
     mockVerifySessionCookie.mockRejectedValue(new Error("Invalid session"));
 
     const requestBody = {
@@ -188,7 +277,7 @@ describe("POST /api/register-recipient", () => {
 
     expect(response.status).toBe(500);
     expect(data.error).toBeTruthy();
-    expect(mockAdd).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
   });
 
   it("returns 400 when personalDetails is missing", async () => {
@@ -207,7 +296,7 @@ describe("POST /api/register-recipient", () => {
 
     expect(response.status).toBe(400);
     expect(data.error).toBe("Personal details are required");
-    expect(mockAdd).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
   });
 
   it("returns 400 when photoUpload is missing", async () => {
@@ -224,7 +313,7 @@ describe("POST /api/register-recipient", () => {
 
     expect(response.status).toBe(400);
     expect(data.error).toBe("Recipient photo is required");
-    expect(mockAdd).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
   });
 
   it("returns 400 when firstName is missing", async () => {
@@ -243,7 +332,7 @@ describe("POST /api/register-recipient", () => {
 
     expect(response.status).toBe(400);
     expect(data.error).toBe("firstName is required");
-    expect(mockAdd).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
   });
 
   it("returns 400 when lastName is missing", async () => {
@@ -262,10 +351,10 @@ describe("POST /api/register-recipient", () => {
 
     expect(response.status).toBe(400);
     expect(data.error).toBe("lastName is required");
-    expect(mockAdd).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
   });
 
-  it("handles optional fields correctly", async () => {
+  it("creates only the user record when no ARC card is selected", async () => {
     const requestBody = {
       personalDetails: {
         firstName: "Jane",
@@ -281,7 +370,9 @@ describe("POST /api/register-recipient", () => {
     const data = await response.json();
 
     expect(response.status).toBe(201);
-    expect(mockAdd).toHaveBeenCalledWith(
+    expect(data.userId).toBe("test-user-id");
+    expect(mockBatchSet).toHaveBeenCalledWith(
+      mockUserRef,
       expect.objectContaining({
         firstName: "Jane",
         secondName: "Smith",
@@ -293,7 +384,6 @@ describe("POST /api/register-recipient", () => {
         dateOfBirth: null,
         address: null,
         postalCode: null,
-        arcCardNumber: null,
         notes: null,
         journey: null,
         mostCommonReason: null,
@@ -301,14 +391,18 @@ describe("POST /api/register-recipient", () => {
         housingOption: null,
       }),
     );
+    expect(mockBatchUpdate).not.toHaveBeenCalled();
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
   });
 
-  it("converts single alias to array format", async () => {
+  it("returns 400 when an ARC card is selected without an issue duration", async () => {
     const requestBody = {
       personalDetails: {
-        firstName: "John",
-        lastName: "Doe",
-        alias: "Johnny",
+        firstName: "Jane",
+        lastName: "Smith",
+      },
+      additionalInfo: {
+        arcCardDigits: "1234567",
       },
       photoUpload: {
         imageUrl: "data:image/jpeg;base64,test-image-data",
@@ -317,20 +411,27 @@ describe("POST /api/register-recipient", () => {
 
     const req = createMockRequest(requestBody);
     const response = await POST(req);
+    const data = await response.json();
 
-    expect(response.status).toBe(201);
-    expect(mockAdd).toHaveBeenCalledWith(
-      expect.objectContaining({
-        aliases: ["Johnny"],
-      }),
-    );
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("ARC card issue duration is required");
+    expect(mockBatchCommit).not.toHaveBeenCalled();
   });
 
-  it("sets empty array for aliases when no alias provided", async () => {
+  it("returns 400 when the selected ARC card is not available", async () => {
+    mockCardQueryGet.mockResolvedValueOnce({
+      empty: true,
+      docs: [],
+    });
+
     const requestBody = {
       personalDetails: {
-        firstName: "John",
-        lastName: "Doe",
+        firstName: "Jane",
+        lastName: "Smith",
+      },
+      additionalInfo: {
+        arcCardDigits: "1234567",
+        arcCardDurationMonths: "2",
       },
       photoUpload: {
         imageUrl: "data:image/jpeg;base64,test-image-data",
@@ -339,45 +440,15 @@ describe("POST /api/register-recipient", () => {
 
     const req = createMockRequest(requestBody);
     const response = await POST(req);
+    const data = await response.json();
 
-    expect(response.status).toBe(201);
-    expect(mockAdd).toHaveBeenCalledWith(
-      expect.objectContaining({
-        aliases: [],
-      }),
-    );
-  });
-
-  it("sets correct default values for required schema fields", async () => {
-    const requestBody = {
-      personalDetails: {
-        firstName: "John",
-        lastName: "Doe",
-      },
-      photoUpload: {
-        imageUrl: "data:image/jpeg;base64,test-image-data",
-      },
-    };
-
-    const req = createMockRequest(requestBody);
-    const response = await POST(req);
-
-    expect(response.status).toBe(201);
-    expect(mockAdd).toHaveBeenCalledWith(
-      expect.objectContaining({
-        picture: "data:image/jpeg;base64,test-image-data",
-        passesIssued: [],
-        banned: false,
-        banReason: null,
-        createdBy: "test-admin-uid",
-        createdAt: expect.any(String),
-        updatedAt: expect.any(String),
-      }),
-    );
+    expect(response.status).toBe(400);
+    expect(data.error).toBe("Selected ARC card is not available");
+    expect(mockBatchCommit).not.toHaveBeenCalled();
   });
 
   it("handles Firestore errors gracefully", async () => {
-    mockAdd.mockRejectedValue(new Error("Firestore error"));
+    mockBatchCommit.mockRejectedValue(new Error("Firestore error"));
 
     const requestBody = {
       personalDetails: {
