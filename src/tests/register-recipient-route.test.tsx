@@ -226,7 +226,7 @@ describe("POST /api/register-recipient", () => {
         notes: "Test notes",
         returnedAt: null,
         createdAt: expect.any(Object),
-        issueDate: expect.any(Object),
+        issueDate: expect.any(String),
         expiresAt: expect.objectContaining({
           date: expect.any(Date),
         }),

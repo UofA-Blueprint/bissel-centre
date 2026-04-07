@@ -145,6 +145,8 @@ export async function POST(request: NextRequest) {
 
       const cardDoc = cardSnapshot.docs[0];
       const issueTimestamp = Timestamp.now();
+      const issueDate = issueTimestamp.toDate();
+      const issueDateString = `${issueDate.getMonth() + 1}/${issueDate.getDate()}/${issueDate.getFullYear()}`;
       const expiresAtDate = new Date(issueTimestamp.toDate());
       expiresAtDate.setMonth(expiresAtDate.getMonth() + arcCardDurationMonths);
 
@@ -157,7 +159,7 @@ export async function POST(request: NextRequest) {
       batch.set(issueRef, {
         cardId: cardDoc.id,
         createdAt: issueTimestamp,
-        issueDate: issueTimestamp,
+        issueDate: issueDateString,
         issuedBy: createdByUid,
         notes: additionalInfo?.notes || "",
         returnedAt: null,
