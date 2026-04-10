@@ -1,3 +1,4 @@
+/* eslint-disable  @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { hashITIDNumber } from "@/utils/hashITIDNumber";
 import { initAdmin } from "@/app/services/firebaseAdmin";
@@ -29,6 +30,8 @@ export async function POST(request: NextRequest) {
     const adminDb = admin.firestore(app);
     const adminAuth = admin.auth(app);
 
+    console.log("Initialized admin database and authentication successfully");
+
     // 2. Verify the IT Admin Identification Number using checkAdmin()
     const isAdmin = await checkAdmin(identificationNumber);
     if (!isAdmin) {
@@ -38,7 +41,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    console.log("Verified IT Admin Identification Number successfully");
+
     const hashedID = hashITIDNumber(identificationNumber);
+
+    console.log("Hashed IT Admin Identification Number successfully");
 
     // 3. Create the user in Firebase Auth
     const userRecord = await adminAuth.createUser({
@@ -47,6 +54,7 @@ export async function POST(request: NextRequest) {
       displayName: `${firstName} ${lastName}`,
     });
 
+    console.log("Created user in Firebase Auth successfully");
     // 4. Create the user profile in Firestore
     await adminDb.collection(ADMIN_STAFF_COLLECTION).doc(userRecord.uid).set({
       firstName,
@@ -55,6 +63,8 @@ export async function POST(request: NextRequest) {
       createdBy: hashedID, // store the admin uid (hashed ID) who created this staff user
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+
+    console.log("Created user profile in Firestore successfully");
 
     return NextResponse.json({
       success: true,

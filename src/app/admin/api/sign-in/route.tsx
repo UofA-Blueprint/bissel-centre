@@ -15,6 +15,21 @@ export async function POST(req: NextRequest) {
 
   const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
 
+  let decodedToken;
+  try {
+    decodedToken = await admin.auth().verifyIdToken(idToken, true);
+  } catch (error) {
+    console.error("ID token verification failed:", error);
+    return NextResponse.json({ error: "Invalid ID token" }, { status: 401 });
+  }
+
+  if (decodedToken.admin !== true) {
+    return NextResponse.json(
+      { error: "Forbidden: IT admin access required" },
+      { status: 403 }
+    );
+  }
+
   try {
     const sessionCookie = await admin.auth().createSessionCookie(idToken, {
       expiresIn,
@@ -26,6 +41,7 @@ export async function POST(req: NextRequest) {
       maxAge: expiresIn / 1000,
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
       path: "/",
     });
 
