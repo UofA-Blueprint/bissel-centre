@@ -119,13 +119,13 @@ function SortableHeader({
 }
 
 function FlagBadge({ banned, bannedAt }: { banned: boolean; bannedAt: string | null }) {
-  if (!banned) return <span className="text-green-600 text-xs font-medium">No</span>;
+  if (!banned) return <span className="text-gray-500 text-xs font-semibold">No</span>;
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-bold text-red-700">
+    <span className="inline-flex items-center gap-1 rounded-full bg-red-200 border border-red-300 px-2.5 py-0.5 text-xs font-bold text-red-800">
       <ShieldAlert className="h-3 w-3" />
       Flagged
       {bannedAt && (
-        <span className="font-normal text-red-500 ml-0.5">
+        <span className="font-semibold text-red-700 ml-0.5">
           ({formatDate(bannedAt)})
         </span>
       )}
@@ -135,13 +135,13 @@ function FlagBadge({ banned, bannedAt }: { banned: boolean; bannedAt: string | n
 
 function StatusChip({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    Active: "bg-green-100 text-green-700",
-    Inactive: "bg-gray-200 text-gray-600",
-    Unknown: "bg-yellow-100 text-yellow-700",
+    Active: "bg-emerald-200 text-emerald-900 border-emerald-300",
+    Inactive: "bg-gray-300 text-gray-800 border-gray-400",
+    Unknown: "bg-amber-200 text-amber-900 border-amber-300",
   };
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-xs font-bold shadow-sm min-w-[70px] text-center ${styles[status] || styles.Unknown}`}
+      className={`inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-bold min-w-[70px] text-center ${styles[status] || styles.Unknown}`}
     >
       {status}
     </span>
@@ -150,15 +150,15 @@ function StatusChip({ status }: { status: string }) {
 
 function CardStatusChip({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    Active: "bg-green-100 text-green-700",
-    Unattributed: "bg-yellow-100 text-yellow-800",
-    Expired: "bg-red-100 text-red-700",
-    Unloaded: "bg-gray-200 text-gray-700",
-    Cancelled: "bg-red-100 text-red-700",
+    Active: "bg-emerald-200 text-emerald-900 border-emerald-300",
+    Unattributed: "bg-amber-200 text-amber-900 border-amber-300",
+    Expired: "bg-red-200 text-red-800 border-red-300",
+    Unloaded: "bg-gray-300 text-gray-800 border-gray-400",
+    Cancelled: "bg-red-200 text-red-800 border-red-300",
   };
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${styles[status] || "bg-gray-100 text-gray-600"}`}
+      className={`inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${styles[status] || "bg-gray-200 text-gray-700 border-gray-300"}`}
     >
       {status}
     </span>
@@ -172,24 +172,24 @@ function CardHistoryTable({ cards }: { cards: CardHistoryEntry[] }) {
   return (
     <table className="w-full text-xs border-collapse">
       <thead>
-        <tr className="bg-cyan-50 text-left">
-          <th className="px-3 py-2 font-semibold text-gray-700">Card #</th>
-          <th className="px-3 py-2 font-semibold text-gray-700">Department</th>
-          <th className="px-3 py-2 font-semibold text-gray-700">Status</th>
-          <th className="px-3 py-2 font-semibold text-gray-700">Allocated</th>
-          <th className="px-3 py-2 font-semibold text-gray-700">Issue Dates</th>
+        <tr className="bg-cyan-100 text-left">
+          <th className="px-3 py-2 font-bold text-gray-900">Card #</th>
+          <th className="px-3 py-2 font-bold text-gray-900">Department</th>
+          <th className="px-3 py-2 font-bold text-gray-900">Status</th>
+          <th className="px-3 py-2 font-bold text-gray-900">Allocated</th>
+          <th className="px-3 py-2 font-bold text-gray-900">Issue Dates</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-100">
         {cards.map((card, idx) => (
           <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-            <td className="px-3 py-2 font-mono text-gray-800">{card.cardNumber || "—"}</td>
-            <td className="px-3 py-2 text-gray-600">{card.department}</td>
+            <td className="px-3 py-2 font-mono font-semibold text-gray-900">{card.cardNumber || "—"}</td>
+            <td className="px-3 py-2 text-gray-800">{card.department}</td>
             <td className="px-3 py-2">
               <CardStatusChip status={card.status} />
             </td>
-            <td className="px-3 py-2 text-gray-600">{card.allocationDate || "—"}</td>
-            <td className="px-3 py-2 text-gray-600">
+            <td className="px-3 py-2 text-gray-800">{card.allocationDate || "—"}</td>
+            <td className="px-3 py-2 text-gray-800">
               {card.issueDates.length > 0 ? card.issueDates.join(", ") : "—"}
             </td>
           </tr>
@@ -206,29 +206,29 @@ function ActivityHistoryTable({ entries }: { entries: ActivityEntry[] }) {
   return (
     <table className="w-full text-xs border-collapse">
       <thead>
-        <tr className="bg-amber-50 text-left">
-          <th className="px-3 py-2 font-semibold text-gray-700">Date</th>
-          <th className="px-3 py-2 font-semibold text-gray-700">Event</th>
-          <th className="px-3 py-2 font-semibold text-gray-700">Details</th>
-          <th className="px-3 py-2 font-semibold text-gray-700">Modified By</th>
+        <tr className="bg-amber-100 text-left">
+          <th className="px-3 py-2 font-bold text-gray-900">Date</th>
+          <th className="px-3 py-2 font-bold text-gray-900">Event</th>
+          <th className="px-3 py-2 font-bold text-gray-900">Details</th>
+          <th className="px-3 py-2 font-bold text-gray-900">Modified By</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-gray-100">
         {entries.map((entry, idx) => (
           <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-            <td className="px-3 py-2 text-gray-600 whitespace-nowrap">
+            <td className="px-3 py-2 text-gray-800 whitespace-nowrap">
               {formatDateTime(entry.date)}
             </td>
             <td className="px-3 py-2">
               <EventBadge event={entry.event} />
             </td>
-            <td className="px-3 py-2 text-gray-600">
+            <td className="px-3 py-2 text-gray-800">
               {entry.notes}
               {entry.reason && (
-                <span className="ml-1 text-orange-600 italic">({entry.reason})</span>
+                <span className="ml-1 text-orange-700 font-medium italic">({entry.reason})</span>
               )}
             </td>
-            <td className="px-3 py-2 text-gray-500">{entry.modifiedBy || "—"}</td>
+            <td className="px-3 py-2 text-gray-700">{entry.modifiedBy || "—"}</td>
           </tr>
         ))}
       </tbody>
@@ -238,16 +238,16 @@ function ActivityHistoryTable({ entries }: { entries: ActivityEntry[] }) {
 
 function EventBadge({ event }: { event: string }) {
   const styles: Record<string, string> = {
-    Ban: "bg-red-100 text-red-700",
-    Unban: "bg-green-100 text-green-700",
-    Override: "bg-orange-100 text-orange-700",
-    "Issue Card": "bg-blue-100 text-blue-700",
-    "Renew Card": "bg-cyan-100 text-cyan-700",
-    "Status Change": "bg-purple-100 text-purple-700",
+    Ban: "bg-red-200 text-red-900 border-red-300",
+    Unban: "bg-emerald-200 text-emerald-900 border-emerald-300",
+    Override: "bg-orange-200 text-orange-900 border-orange-300",
+    "Issue Card": "bg-blue-200 text-blue-900 border-blue-300",
+    "Renew Card": "bg-cyan-200 text-cyan-900 border-cyan-300",
+    "Status Change": "bg-purple-200 text-purple-900 border-purple-300",
   };
   return (
     <span
-      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${styles[event] || "bg-gray-100 text-gray-600"}`}
+      className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-bold ${styles[event] || "bg-gray-200 text-gray-700 border-gray-300"}`}
     >
       {event}
     </span>
@@ -573,9 +573,9 @@ export default function ReportsPage() {
             className="p-1 rounded hover:bg-gray-200 transition-colors"
           >
             {row.getIsExpanded() ? (
-              <ChevronDown className="h-4 w-4 text-gray-600" />
+              <ChevronDown className="h-4 w-4 text-gray-800" />
             ) : (
-              <ChevronRight className="h-4 w-4 text-gray-400" />
+              <ChevronRight className="h-4 w-4 text-gray-600" />
             )}
           </button>
         ),
@@ -591,7 +591,7 @@ export default function ReportsPage() {
           />
         ),
         cell: ({ row }) => (
-          <span className="text-gray-500 font-medium">{row.index + 1}</span>
+          <span className="text-gray-700 font-semibold">{row.index + 1}</span>
         ),
         size: 50,
       },
@@ -631,7 +631,7 @@ export default function ReportsPage() {
           />
         ),
         cell: ({ getValue }) => (
-          <span className="text-gray-600 text-xs">{getValue<string>() || "—"}</span>
+          <span className="text-gray-800 text-xs">{getValue<string>() || "—"}</span>
         ),
       },
       {
@@ -640,7 +640,7 @@ export default function ReportsPage() {
           <span className="text-xs font-bold text-gray-900">Phone</span>
         ),
         cell: ({ getValue }) => (
-          <span className="text-gray-600">{getValue<string>() || "—"}</span>
+          <span className="text-gray-800">{getValue<string>() || "—"}</span>
         ),
       },
       {
@@ -681,8 +681,8 @@ export default function ReportsPage() {
           const count = getValue<number>();
           return (
             <span
-              className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-bold ${
-                count > 0 ? "bg-cyan-100 text-cyan-700" : "bg-gray-100 text-gray-500"
+              className={`inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${
+                count > 0 ? "bg-cyan-200 text-cyan-900 border-cyan-300" : "bg-gray-200 text-gray-600 border-gray-300"
               }`}
             >
               {count}
@@ -699,7 +699,7 @@ export default function ReportsPage() {
         cell: ({ row }) => {
           const count = row.original.activityHistory.length;
           return (
-            <span className="text-gray-500 text-xs">
+            <span className="text-gray-700 text-xs font-medium">
               {count} event{count !== 1 ? "s" : ""}
             </span>
           );
@@ -947,35 +947,35 @@ export default function ReportsPage() {
 
       {/* Summary stats bar */}
       <div className="flex gap-4">
-        <div className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-3 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-cyan-100 flex items-center justify-center">
-            <span className="text-cyan-700 font-bold text-sm">{totalUsers}</span>
+        <div className="flex-1 rounded-lg border border-cyan-200 bg-white px-4 py-3 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-cyan-200 flex items-center justify-center">
+            <span className="text-cyan-900 font-extrabold text-sm">{totalUsers}</span>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Total Recipients</p>
-            <p className="text-sm font-semibold text-gray-800">
+            <p className="text-xs font-medium text-gray-600">Total Recipients</p>
+            <p className="text-sm font-bold text-gray-900">
               {filteredData.length !== data.length
                 ? `${totalUsers} of ${data.length}`
                 : `${totalUsers}`}
             </p>
           </div>
         </div>
-        <div className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-3 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-red-100 flex items-center justify-center">
-            <ShieldAlert className="h-4 w-4 text-red-600" />
+        <div className="flex-1 rounded-lg border border-red-200 bg-white px-4 py-3 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-red-200 flex items-center justify-center">
+            <ShieldAlert className="h-4.5 w-4.5 text-red-700" />
           </div>
           <div>
-            <p className="text-xs text-gray-500">Flagged Users</p>
-            <p className="text-sm font-semibold text-gray-800">{flaggedCount}</p>
+            <p className="text-xs font-medium text-gray-600">Flagged Users</p>
+            <p className="text-sm font-bold text-gray-900">{flaggedCount}</p>
           </div>
         </div>
-        <div className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-3 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-blue-100 flex items-center justify-center">
-            <span className="text-blue-700 font-bold text-sm">{totalCards}</span>
+        <div className="flex-1 rounded-lg border border-blue-200 bg-white px-4 py-3 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-blue-200 flex items-center justify-center">
+            <span className="text-blue-900 font-extrabold text-sm">{totalCards}</span>
           </div>
           <div>
-            <p className="text-xs text-gray-500">Total Cards Issued</p>
-            <p className="text-sm font-semibold text-gray-800">{totalCards}</p>
+            <p className="text-xs font-medium text-gray-600">Total Cards Issued</p>
+            <p className="text-sm font-bold text-gray-900">{totalCards}</p>
           </div>
         </div>
       </div>
@@ -985,7 +985,7 @@ export default function ReportsPage() {
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-sm">
             <thead>
-              <tr className="bg-[#E0F7FA] border-b border-gray-200">
+              <tr className="bg-[#B2EBF2] border-b border-cyan-200">
                 {table.getFlatHeaders().map((header) => (
                   <th
                     key={header.id}
