@@ -13,6 +13,16 @@ export default {
         foreground: "var(--foreground)",
         primary: "#1BC0D6",
       },
+      keyframes: {
+        shake: {
+          "0%, 100%": { transform: "translateX(0)" },
+          "10%, 50%, 90%": { transform: "translateX(-3px)" },
+          "30%, 70%": { transform: "translateX(3px)" },
+        },
+      },
+      animation: {
+        shake: "shake 0.4s ease-in-out",
+      },
     },
   },
   plugins: [],

@@ -74,7 +74,7 @@ export interface ArcCard {
   allocationDate: string;
   status: CardStatus;
   department: CardDepartment;
-  arcCardNumber: string; // final7Digits in UI
+  arcCardNumber: string;
   securityCode: string;
   notes: string;
   createdAt?: unknown;
