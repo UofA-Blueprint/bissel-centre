@@ -53,10 +53,11 @@ export async function POST(req: NextRequest) {
       uid: result.user.uid,
       rawId: result.rawId,
     });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("create-admin route error:", err);
-    const message = err?.message ?? "Unexpected error creating admin user";
-    const status = err?.code === "auth/email-already-exists" ? 409 : 500;
+    const e = err as { message?: string; code?: string };
+    const message = e?.message ?? "Unexpected error creating admin user";
+    const status = e?.code === "auth/email-already-exists" ? 409 : 500;
     return NextResponse.json({ error: message }, { status });
   }
 }

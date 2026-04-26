@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
 
-  let decodedToken;
+  let decodedToken: Record<string, unknown>;
   try {
     decodedToken = await admin.auth().verifyIdToken(idToken, true);
   } catch (error) {
