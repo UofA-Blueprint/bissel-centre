@@ -70,15 +70,16 @@ export async function POST(request: NextRequest) {
       success: true,
       uid: userRecord.uid,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Registration Error:", error);
     let errorMessage = "An unexpected error occurred.";
     let statusCode = 500;
+    const err = error as { code?: string; message?: string };
 
-    if (error.code === "auth/email-already-exists") {
+    if (err.code === "auth/email-already-exists") {
       errorMessage = "Email is already in use.";
       statusCode = 409; // Conflict
-    } else if (error.code === "auth/invalid-password") {
+    } else if (err.code === "auth/invalid-password") {
       errorMessage = "Password must be at least 6 characters long.";
       statusCode = 400;
     }

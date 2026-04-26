@@ -5,7 +5,6 @@ import { initAdmin } from "@/app/services/firebaseAdmin";
 import { cookies } from "next/headers";
 import * as XLSX from "xlsx";
 import type { ExportRequest, ExportRow } from "@/app/reports/types";
-import type { CardStatus, CardDepartment } from "@/app/cards/types";
 
 async function verifyStaffAccess() {
   const cookieStore = await cookies();

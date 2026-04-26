@@ -6,7 +6,7 @@ import * as adminActions from "@/app/admin/actions";
 jest.mock("next/server", () => ({
   NextRequest: jest.fn(),
   NextResponse: {
-    json: (data: any, init?: ResponseInit) => ({
+    json: (data: unknown, init?: ResponseInit) => ({
       json: async () => data,
       status: init?.status || 200,
     }),
@@ -17,7 +17,7 @@ jest.mock("next/server", () => ({
 jest.mock("@/app/admin/actions");
 
 // helper to create a mock Request-like object with json()
-const mockNextRequest = (body: any): Request => {
+const mockNextRequest = (body: Record<string, unknown>): Request => {
   return {
     json: async () => body,
   } as unknown as Request;
