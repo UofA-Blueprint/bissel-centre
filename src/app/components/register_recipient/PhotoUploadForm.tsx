@@ -99,7 +99,7 @@ const WebcamCapture = ({
 const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
   ({ onSubmit, onError, initialData = {} }, ref) => {
     const [view, setView] = useState<"initial" | "preview" | "webcam">(
-      "initial",
+      initialData.imageUrl ? "preview" : "initial",
     );
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(
@@ -117,12 +117,6 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
         }
       };
     }, [previewUrl]);
-
-    useEffect(() => {
-      if (initialData.imageUrl) {
-        setView("preview");
-      }
-    }, [initialData.imageUrl]);
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
