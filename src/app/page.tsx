@@ -8,8 +8,8 @@ export default function Home() {
   const router = useRouter();
 
   return (
-    <div className="flex flex-col items-center justify-between min-h-screen p-4 md:p-8 lg:p-12">
-      <div className="w-full flex justify-center">
+    <div className="flex flex-col items-center justify-center min-h-screen gap-20 p-4 md:p-8 lg:p-12">
+      <div className="w-full flex flex-col items-center justify-center">
         <Image
           src="/BissellLogo_Blue 1.svg"
           alt="Bissell Logo"
@@ -17,6 +17,9 @@ export default function Home() {
           height={100}
           className="max-w-xs"
         />
+        <p className="text-base md:text-sm text-center mt-2">
+            Building A Community Without Poverty
+          </p>
       </div>
 
       <div className="w-full max-w-md px-4 text-center">
@@ -27,12 +30,10 @@ export default function Home() {
             </h1>
           ) : (
             <h1 className="text-3xl md:text-4xl font-bold tracking-tight mb-4 text-center">
-              Welcome!
+              Welcome Staff!
             </h1>
           )}
-          <p className="text-base md:text-lg text-center mb-8">
-            **Opening Statement**
-          </p>
+          
         </div>
 
         <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4 w-full">
