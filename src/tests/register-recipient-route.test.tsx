@@ -214,9 +214,13 @@ describe("POST /api/register-recipient", () => {
         housingOption: "Emergency Sheltered",
       }),
     );
-    expect(mockBatchUpdate).toHaveBeenCalledWith(mockCardRef, {
-      currentUserId: "test-user-id",
-    });
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      mockCardRef,
+      expect.objectContaining({
+        currentUserId: "test-user-id",
+        status: "Active",
+      }),
+    );
     expect(mockBatchSet).toHaveBeenCalledWith(
       mockIssueRef,
       expect.objectContaining({
