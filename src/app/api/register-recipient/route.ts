@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate required personal details fields
-    const requiredFields = ["firstName", "lastName"];
+    const requiredFields = ["firstName", "lastName"] as const;
     for (const field of requiredFields) {
       if (!personalDetails[field]) {
         return NextResponse.json(
