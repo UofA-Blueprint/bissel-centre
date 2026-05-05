@@ -46,7 +46,7 @@ export async function getArcCardsByUserId(userId: string): Promise<ArcCard[]> {
   try {
     const q = query(
       collection(db, "arc_cards"),
-      where("userId", "==", userId)
+      where("currentUserId", "==", userId),
     );
 
     const snapshot = await getDocs(q);
