@@ -2,15 +2,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { auth, db } from "../services/firebase";
+import { auth } from "../services/firebase";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Fuse from "fuse.js";
-import { collection, getDocs } from "firebase/firestore";
 import { signOut } from "firebase/auth";
-import { getAllUsers } from "@/app/services/userService";
-import { getAllArcCards } from "@/app/services/arcCardService";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
 
 interface StatCardProps {
@@ -27,7 +24,6 @@ interface User {
   genderIdentity: string;
   aliases: string[];
   dateOfBirth: string;
-  arcCardNumber?: string;
   address: string;
   postalCode: string;
   passesIssued: string[];
@@ -47,6 +43,11 @@ interface User {
 interface SessionUser {
   name?: string;
   email: string;
+}
+
+interface DashboardSummaryResponse {
+  stats: StatCardProps[];
+  users: User[];
 }
 
 export default function DashboardPage() {
@@ -87,85 +88,23 @@ export default function DashboardPage() {
           email: sessionData.email,
         });
 
-        // Fetch ARC Cards
-        const arcCards = await getAllArcCards();
-
-        const availableCards = arcCards.length;
-        const activeCards = arcCards.filter(
-          (c) => c.status === "Active",
-        ).length;
-        const expiredCards = arcCards.filter(
-          (c) => c.status === "Expired",
-        ).length;
-
-        // Create lookup: cardNumber → card object
-        const arcCardMap = Object.fromEntries(
-          arcCards.map((card) => [card.arcCardNumber, card]),
-        );
-
-        // Fetch banned users count
-        const bannedSnapshot = await getDocs(collection(db, "banned_users"));
-        const flaggedUsers = bannedSnapshot.size;
-
-        //f etch users
-        const users = await getAllUsers();
-
-        // Attach computed fields: lastIssued + arcCardStatus
-        const usersData = users.map((user) => {
-          const card = user.arcCardNumber
-            ? arcCardMap[user.arcCardNumber]
-            : null;
-
-          // ARC Card Status
-          const arcCardStatus = card?.status ?? undefined;
-
-          // Last issued pass date (mm/dd/yy)
-          let lastIssued = "N/A";
-          if (card?.issuedAt instanceof Date) {
-            const mm = String(card.issuedAt.getMonth() + 1).padStart(2, "0");
-            const dd = String(card.issuedAt.getDate()).padStart(2, "0");
-            const yy = String(card.issuedAt.getFullYear()).slice(-2);
-            lastIssued = `${mm}/${dd}/${yy}`;
-          }
-
-          return {
-            ...user,
-            // id: user.id,
-            // firstName: user.firstName,
-            // secondName: user.secondName,
-            // picture: user.picture,
-            // banned: user.banned,
-            arcCardStatus,
-            lastIssued,
-          };
+        const dashboardResponse = await fetch("/api/dashboard/summary", {
+          cache: "no-store",
         });
 
-        // Update Dashboard Stats
-        setStats([
-          {
-            icon: "/card.svg",
-            number: availableCards,
-            label: "Available Cards",
-          },
-          {
-            icon: "/checkmark.svg",
-            number: activeCards,
-            label: "Active Cards",
-          },
-          {
-            icon: "/caution.svg",
-            number: expiredCards,
-            label: "Expired Cards",
-          },
-          {
-            icon: "/flag.svg",
-            number: flaggedUsers,
-            label: "Flagged Users",
-          },
-        ]);
+        if (!dashboardResponse.ok) {
+          if (dashboardResponse.status === 401) {
+            router.replace("/login");
+            return;
+          }
+          throw new Error("Failed to load dashboard summary");
+        }
 
-        // Update Users Table
-        setUsers(usersData);
+        const summary =
+          (await dashboardResponse.json()) as DashboardSummaryResponse;
+
+        setStats(summary.stats);
+        setUsers(summary.users);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       }
@@ -341,7 +280,7 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
             alt={`${user.firstName} ${user.secondName}`}
             width={40}
             height={40}
-            className="rounded-full object-cover"
+            className="rounded-full object-cover w-[40px] h-[40px]"
             onError={(e) => {
               (e.currentTarget as HTMLImageElement).style.display = "none";
             }}

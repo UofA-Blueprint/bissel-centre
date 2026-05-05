@@ -154,6 +154,7 @@ export async function POST(request: NextRequest) {
 
       batch.update(cardDoc.ref, {
         currentUserId: userRef.id,
+        status: "Active",
       });
 
       batch.set(issueRef, {
