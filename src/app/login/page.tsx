@@ -3,15 +3,22 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { auth } from "../services/firebase";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import {
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
+} from "firebase/auth";
 import Image from "next/image";
 
-export default function StaffLoginPage() {
+export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMeState] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotStatus, setForgotStatus] = useState<string | null>(null);
+  const [forgotLoading, setForgotLoading] = useState(false);
   const router = useRouter();
   useEffect(() => {
     // Check if email is remembered in localStorage
@@ -28,13 +35,12 @@ export default function StaffLoginPage() {
     setError("");
 
     try {
-
       const normalizedEmail = email.trim().toLowerCase();
       // Authenticate with Firebase Auth
       const userCredential = await signInWithEmailAndPassword(
         auth,
         normalizedEmail,
-        password
+        password,
       );
 
       // Get the ID token
@@ -95,11 +101,11 @@ export default function StaffLoginPage() {
           err.message.includes("Staff member not found in administrative staff")
         ) {
           setError(
-            "Access denied. This login is for administrative staff only."
+            "Access denied. This login is for administrative staff only.",
           );
         } else if (err.message.includes("Staff authorization failed")) {
           setError(
-            "Access denied. Please contact IT Admin if you need assistance."
+            "Access denied. Please contact IT Admin if you need assistance.",
           );
         } else {
           setError("Invalid email or password. Please try again.");
@@ -113,13 +119,82 @@ export default function StaffLoginPage() {
   };
 
   const handleForgotPassword = () => {
-    alert(
-      "Please contact your IT Administrator for password reset assistance."
-    );
+    setForgotEmail("");
+    setForgotStatus(null);
+    setShowForgotModal(true);
+  };
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotStatus(null);
+    setForgotLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, forgotEmail.trim().toLowerCase());
+      setForgotStatus(
+        "A password reset email has been sent if the address exists in our system.",
+      );
+    } catch (err: any) {
+      if (err.code === "auth/user-not-found") {
+        setForgotStatus("No account found with that email address.");
+      } else if (err.code === "auth/invalid-email") {
+        setForgotStatus("Please enter a valid email address.");
+      } else {
+        setForgotStatus("Failed to send reset email. Please try again later.");
+      }
+    } finally {
+      setForgotLoading(false);
+    }
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col py-12 px-4 sm:px-6 lg:px-8">
+      {/* Forgot Password Modal */}
+      {showForgotModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md relative">
+            <button
+              className="absolute top-2 right-2 text-gray-400 hover:text-gray-600"
+              onClick={() => setShowForgotModal(false)}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <h3 className="text-lg font-semibold mb-4">Reset Password</h3>
+            <form onSubmit={handleForgotSubmit} className="space-y-4">
+              <div>
+                <label
+                  htmlFor="forgotEmail"
+                  className="block text-sm font-medium text-gray-700"
+                >
+                  Enter your email address
+                </label>
+                <input
+                  id="forgotEmail"
+                  type="email"
+                  value={forgotEmail}
+                  onChange={(e) => setForgotEmail(e.target.value)}
+                  required
+                  className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE] focus:border-transparent"
+                  placeholder="your@email.com"
+                  disabled={forgotLoading}
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2 px-4 rounded-lg bg-[#2CC0DE] text-white font-semibold hover:bg-teal-500 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE]"
+                disabled={forgotLoading}
+              >
+                {forgotLoading ? "Sending..." : "Send Reset Email"}
+              </button>
+            </form>
+            {forgotStatus && (
+              <div className="mt-4 text-center text-sm text-gray-700">
+                {forgotStatus}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       <div className="flex justify-center items-center pt-8 pb-4 mb-20">
         <Image
           src="/BissellLogo_Blue 1.svg"
@@ -204,6 +279,7 @@ export default function StaffLoginPage() {
                 onClick={handleForgotPassword}
                 disabled={loading}
                 className="text-sm font-medium text-[#2CC0DE] hover:underline"
+                aria-label="Forgot Password"
               >
                 Forgot Password?
               </button>

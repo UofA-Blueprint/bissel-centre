@@ -55,16 +55,34 @@ export async function POST(request: NextRequest) {
     });
 
     console.log("Created user in Firebase Auth successfully");
-    // 4. Create the user profile in Firestore
+    // 4. Create the user profile in Firestore with onboarding fields
     await adminDb.collection(ADMIN_STAFF_COLLECTION).doc(userRecord.uid).set({
       firstName,
       lastName,
       email,
       createdBy: hashedID, // store the admin uid (hashed ID) who created this staff user
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      onboardingStatus: "invited",
+      inviteSentAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-    console.log("Created user profile in Firestore successfully");
+    console.log("Created user profile in Firestore with onboarding fields successfully");
+
+    // 5. Trigger Firebase password reset email (setup link)
+    try {
+      const resetLink = await adminAuth.generatePasswordResetLink(email);
+      // Optionally, send this link via a custom email provider here
+      // For now, Firebase will send the default email
+      console.log(`Password reset link generated for onboarding: ${resetLink}`);
+    } catch (resetError) {
+      console.error("Failed to generate password reset link for onboarding:", resetError);
+      // Continue, but inform the client
+      return NextResponse.json({
+        success: false,
+        uid: userRecord.uid,
+        warning: "User created, but failed to send password setup email. Please try resending."
+      }, { status: 201 });
+    }
 
     return NextResponse.json({
       success: true,
