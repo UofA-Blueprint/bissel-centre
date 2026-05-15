@@ -164,18 +164,18 @@ export default function DashboardPage() {
         </div>
 
         {/* Search Bar */}
-        <div className="bg-[#979793] rounded-xl shadow-md max-w-7xl mx-auto mb-6 px-2 py-2">
+        <div className="bg-[#A8A29E] rounded-2xl shadow-md max-w-7xl mx-auto mb-6 px-4 pt-4 pb-3">
           {/* Search input row */}
-          <div className="flex items-center bg-white rounded-lg px-4 py-2 mb-3">
+          <div className="flex items-center bg-white rounded-xl px-5 py-3 mb-4">
             <input
               type="text"
               placeholder="Search recipients..."
-              className="flex-1 outline-none text-gray-700 text-base bg-white"
+              className="flex-1 outline-none text-gray-700 text-lg bg-white"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             <button
-              className="p-2 bg-cyan-500 hover:bg-cyan-600 rounded-full"
+              className="p-2.5 bg-cyan-500 hover:bg-cyan-600 rounded-full"
               // onClick={handleSearch}
             >
               <Image
@@ -188,9 +188,9 @@ export default function DashboardPage() {
           </div>
 
           {/* Button row inside gray container */}
-          <div className="flex justify-between items-center text-white text-sm">
+          <div className="flex justify-between items-center text-white text-sm px-1">
             <button
-              className="flex items-center gap-1"
+              className="flex items-center gap-1 hover:opacity-75 transition-opacity"
               onClick={() => setIsModalOpen(true)}
             >
               <span className="text-xl">＋</span> New Recipient
@@ -202,12 +202,18 @@ export default function DashboardPage() {
                   e.preventDefault();
                   handleGoToCards();
                 }}
-                className="flex items-center gap-2 rounded-lg border border-white/40 px-3 py-1.5 hover:bg-white/10 transition-colors"
+                className="flex items-center gap-2 rounded-lg bg-primary text-white font-medium px-3 py-1.5 hover:bg-cyan-600 transition-colors"
               >
-                <Image src="/card.svg" alt="ARC Cards" width={16} height={16} />
+                <Image
+                  src="/card.svg"
+                  alt="ARC Cards"
+                  width={16}
+                  height={16}
+                  className="brightness-0 invert"
+                />
                 ARC Cards
               </Link>
-              <button className="flex items-center gap-2">
+              <button className="flex items-center gap-2 rounded-lg px-3 py-1.5 hover:bg-white/10 transition-colors">
                 <Image src="/filter.svg" alt="Filter" width={16} height={16} />
                 Filters
               </button>
