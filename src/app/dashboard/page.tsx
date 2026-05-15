@@ -70,7 +70,7 @@ export default function DashboardPage() {
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLoadingStats, setIsLoadingStats] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -101,11 +101,7 @@ export default function DashboardPage() {
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       } finally {
-<<<<<<< HEAD
-        setIsInitialLoading(false);
-=======
-        setIsLoadingStats(false);
->>>>>>> aa82d99 (UI improvement: addes a loading state to the cards)
+        setIsLoading(false);
       }
     };
 
@@ -142,7 +138,7 @@ export default function DashboardPage() {
     }
   };
 
-  if (isInitialLoading) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center">
         <div className="h-14 w-14 rounded-full border-4 border-cyan-100 border-t-cyan-500 animate-spin" />
@@ -155,14 +151,14 @@ export default function DashboardPage() {
       <Header title="" />
       <div className="p-6 bg-gray-100 min-h-screen px-24">
         {/* Stats Section */}
-        <div className="flex flex-wrap gap-4 mb-6 px-6 sm:px-12 lg:px-24 justify-center max-w-7xl mx-auto">
+        <div className="grid grid-cols-4 gap-4 mb-6 max-w-7xl mx-auto">
           {stats.map((stat, index) => (
             <StatCard
               key={index}
               icon={stat.icon}
               number={stat.number}
               label={stat.label}
-              isLoading={isLoadingStats}
+              isLoading={isLoading}
             />
           ))}
         </div>
@@ -220,22 +216,32 @@ export default function DashboardPage() {
         </div>
 
         {/* Search Results */}
-        <div className="flex flex-wrap gap-4 justify-center max-w-7xl mx-auto">
-          {searchResults.map((user) => (
-            <UserCard key={user.id} user={user} />
-          ))}
-        </div>
-
-        {/* Placeholder for Illustration - only show if no user cards */}
-        {searchResults.length === 0 && (
-          <div className="flex justify-center items-center p-10 rounded-lg">
-            <Image
-              src="/no-results.svg"
-              alt="Illustration"
-              width={370}
-              height={370}
-            />
+        {isLoading ? (
+          <div className="flex flex-col gap-4 max-w-7xl mx-auto">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <UserCardSkeleton key={i} />
+            ))}
           </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-4 justify-center max-w-7xl mx-auto">
+              {searchResults.map((user) => (
+                <UserCard key={user.id} user={user} />
+              ))}
+            </div>
+
+            {/* Placeholder for Illustration - only show if no user cards */}
+            {searchResults.length === 0 && (
+              <div className="flex justify-center items-center p-10 rounded-lg">
+                <Image
+                  src="/no-results.svg"
+                  alt="Illustration"
+                  width={370}
+                  height={370}
+                />
+              </div>
+            )}
+          </>
         )}
       </div>
       <RegisterRecipientModal
@@ -254,12 +260,12 @@ const StatCard: React.FC<StatCardComponentProps> = ({
 }) => {
   if (isLoading) {
     return (
-      <div className="bg-gray-200 rounded-xl shadow-sm w-[180px] h-[96px] animate-pulse" />
+      <div className="bg-gray-200 rounded-xl shadow-sm w-full h-[120px] animate-pulse" />
     );
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm px-5 py-4 w-[180px] h-[96px] flex flex-col items-center justify-center text-center">
+    <div className="bg-white rounded-xl shadow-sm px-5 py-4 w-full h-[120px] flex flex-col items-center justify-center text-center">
       {/* Icon + Number */}
       <div className="flex items-center gap-2">
         <Image src={icon} alt={label} width={24} height={24} />
@@ -268,6 +274,23 @@ const StatCard: React.FC<StatCardComponentProps> = ({
 
       {/* Label */}
       <p className="text-gray-600 text-sm mt-2 font-medium">{label}</p>
+    </div>
+  );
+};
+
+const UserCardSkeleton: React.FC = () => {
+  return (
+    <div className="bg-white rounded-lg shadow-md px-6 py-4 w-full flex items-center justify-between animate-pulse">
+      {/* Avatar */}
+      <div className="w-10 h-10 bg-gray-200 rounded-full mr-4" />
+      {/* Name + status placeholders */}
+      <div className="flex-1 flex items-center justify-between">
+        <div className="h-5 w-40 bg-gray-200 rounded" />
+        <div className="flex items-center gap-4">
+          <div className="h-4 w-16 bg-gray-200 rounded" />
+          <div className="h-4 w-32 bg-gray-200 rounded" />
+        </div>
+      </div>
     </div>
   );
 };
