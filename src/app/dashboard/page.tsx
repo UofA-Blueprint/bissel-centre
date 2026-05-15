@@ -147,11 +147,11 @@ export default function DashboardPage() {
   }
 
   return (
-    <main>
+    <main className="lg:h-screen lg:flex lg:flex-col">
       <Header title="" />
-      <div className="p-6 bg-gray-100 min-h-screen px-24">
+      <div className="p-6 bg-gray-100 min-h-screen px-4 sm:px-8 md:px-16 lg:px-24 lg:min-h-0 lg:flex-1 lg:flex lg:flex-col lg:overflow-hidden">
         {/* Stats Section */}
-        <div className="grid grid-cols-4 gap-4 mb-6 max-w-7xl mx-auto">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 max-w-7xl mx-auto w-full lg:shrink-0">
           {stats.map((stat, index) => (
             <StatCard
               key={index}
@@ -164,7 +164,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Search Bar */}
-        <div className="bg-[#A8A29E] rounded-2xl shadow-md max-w-7xl mx-auto mb-6 px-4 pt-4 pb-3">
+        <div className="bg-[#A8A29E] rounded-2xl shadow-md max-w-7xl mx-auto w-full mb-6 px-4 pt-4 pb-3 lg:shrink-0">
           {/* Search input row */}
           <div className="flex items-center bg-white rounded-xl px-5 py-3 mb-4">
             <input
@@ -221,34 +221,36 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Search Results */}
-        {isLoading ? (
-          <div className="flex flex-col gap-4 max-w-7xl mx-auto">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <UserCardSkeleton key={i} />
-            ))}
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-wrap gap-4 justify-center max-w-7xl mx-auto">
-              {searchResults.map((user) => (
-                <UserCard key={user.id} user={user} />
+        {/* Search Results - scrollable region on lg+ */}
+        <div className="max-w-7xl mx-auto w-full lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+          {isLoading ? (
+            <div className="flex flex-col gap-4">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <UserCardSkeleton key={i} />
               ))}
             </div>
-
-            {/* Placeholder for Illustration - only show if no user cards */}
-            {searchResults.length === 0 && (
-              <div className="flex justify-center items-center p-10 rounded-lg">
-                <Image
-                  src="/no-results.svg"
-                  alt="Illustration"
-                  width={370}
-                  height={370}
-                />
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-4 justify-center">
+                {searchResults.map((user) => (
+                  <UserCard key={user.id} user={user} />
+                ))}
               </div>
-            )}
-          </>
-        )}
+
+              {/* Placeholder for Illustration - only show if no user cards */}
+              {searchResults.length === 0 && (
+                <div className="flex justify-center items-center p-10 rounded-lg">
+                  <Image
+                    src="/no-results.svg"
+                    alt="Illustration"
+                    width={370}
+                    height={370}
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
       <RegisterRecipientModal
         open={isModalOpen}
