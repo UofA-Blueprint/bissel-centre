@@ -15,6 +15,10 @@ interface StatCardProps {
   label: string;
 }
 
+interface StatCardComponentProps extends StatCardProps {
+  isLoading?: boolean;
+}
+
 interface User {
   id: string;
   firstName: string;
@@ -66,7 +70,7 @@ export default function DashboardPage() {
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isLoadingStats, setIsLoadingStats] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -97,7 +101,11 @@ export default function DashboardPage() {
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
       } finally {
+<<<<<<< HEAD
         setIsInitialLoading(false);
+=======
+        setIsLoadingStats(false);
+>>>>>>> aa82d99 (UI improvement: addes a loading state to the cards)
       }
     };
 
@@ -154,6 +162,7 @@ export default function DashboardPage() {
               icon={stat.icon}
               number={stat.number}
               label={stat.label}
+              isLoading={isLoadingStats}
             />
           ))}
         </div>
@@ -237,17 +246,28 @@ export default function DashboardPage() {
   );
 }
 
-const StatCard: React.FC<StatCardProps> = ({ icon, number, label }) => {
+const StatCard: React.FC<StatCardComponentProps> = ({
+  icon,
+  number,
+  label,
+  isLoading,
+}) => {
+  if (isLoading) {
+    return (
+      <div className="bg-gray-200 rounded-xl shadow-sm w-[180px] h-[96px] animate-pulse" />
+    );
+  }
+
   return (
-    <div className="bg-white rounded-xl shadow-md px-6 py-5 w-[220px] h-[110px] flex flex-col items-center justify-center text-center">
+    <div className="bg-white rounded-xl shadow-sm px-5 py-4 w-[180px] h-[96px] flex flex-col items-center justify-center text-center">
       {/* Icon + Number */}
       <div className="flex items-center gap-2">
-        <Image src={icon} alt={label} width={28} height={28} />
+        <Image src={icon} alt={label} width={24} height={24} />
         <h2 className="text-2xl font-bold">{number}</h2>
       </div>
 
       {/* Label */}
-      <p className="text-gray-600 text-base mt-2 font-medium">{label}</p>
+      <p className="text-gray-600 text-sm mt-2 font-medium">{label}</p>
     </div>
   );
 };
