@@ -294,7 +294,7 @@ const StatCard: React.FC<StatCardComponentProps> = ({
 
 const UserCardSkeleton: React.FC = () => {
   return (
-    <div className="bg-white rounded-lg shadow-md px-6 py-4 w-full flex items-center justify-between animate-pulse">
+    <div className="bg-white rounded-lg shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)] px-6 py-4 w-full flex items-center justify-between animate-pulse">
       {/* Avatar */}
       <div className="w-10 h-10 bg-gray-200 rounded-full mr-4" />
       {/* Name + status placeholders */}
@@ -312,25 +312,24 @@ const UserCardSkeleton: React.FC = () => {
 const UserCard: React.FC<{ user: User }> = ({ user }) => {
   const isBanned = user.banned;
   const arcCardStatus = user.arcCardStatus;
+  const [imgError, setImgError] = useState(false);
+  const initial = user.firstName?.trim().charAt(0).toUpperCase() || "?";
+  const showImage = user.picture && !imgError;
   return (
-    <div className="bg-white rounded-lg shadow-md px-6 py-4 w-full flex items-center justify-between">
+    <div className="bg-white rounded-lg shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)] px-6 py-4 w-full flex items-center justify-between">
       {/* Avatar */}
-      <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden flex items-center justify-center mr-4">
-        {user.picture ? (
+      <div className="w-12 h-12 shrink-0 bg-gray-200 rounded-full overflow-hidden flex items-center justify-center mr-4">
+        {showImage ? (
           <Image
-            src={user.picture}
+            src={user.picture as string}
             alt={`${user.firstName} ${user.secondName}`}
-            width={40}
-            height={40}
-            className="rounded-full object-cover w-[40px] h-[40px]"
-            onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
-            }}
+            width={48}
+            height={48}
+            className="rounded-full object-cover w-12 h-12"
+            onError={() => setImgError(true)}
           />
         ) : (
-          <span className="text-lg font-bold text-gray-700">
-            {user.firstName}
-          </span>
+          <span className="text-xl font-bold text-gray-700">{initial}</span>
         )}
       </div>
       {/* Name and Info Row */}
