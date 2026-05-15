@@ -3,6 +3,7 @@ import { initAdmin } from "@/app/services/firebaseAdmin";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { cookies } from "next/headers";
 import { encryptPhone } from "@/utils/phoneEncryption";
+import admin from "firebase-admin";
 
 export async function POST(request: NextRequest) {
   try {
@@ -114,10 +115,12 @@ export async function POST(request: NextRequest) {
     };
 
     const userRef = db.collection("users").doc();
-    const batch = db.batch();
-    batch.set(userRef, userData);
+    // const batch = db.batch();
+    // batch.set(userRef, userData);
 
-    if (arcCardDigits) {
+    if (!arcCardDigits){
+      await userRef.set(userData)
+    }else{
       if (
         !Number.isInteger(arcCardDurationMonths) ||
         arcCardDurationMonths < 1 ||
@@ -129,47 +132,72 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const cardSnapshot = await db
-        .collection("arc_cards")
-        .where("arcCardNumber", "==", arcCardDigits)
-        .where("currentUserId", "==", null)
-        .limit(1)
-        .get();
+      try {
+        await db.runTransaction(async(tx) => {
+          const cardQuery = db
+          .collection("arc_cards")
+          .where("arcCardNumber", "==", arcCardDigits)
+          .limit(1);
 
-      if (cardSnapshot.empty) {
-        return NextResponse.json(
-          { error: "Selected ARC card is not available" },
-          { status: 400 },
-        );
-      }
+          const cardSnapshot = await tx.get(cardQuery);
 
-      const cardDoc = cardSnapshot.docs[0];
-      const issueTimestamp = Timestamp.now();
-      const issueDate = issueTimestamp.toDate();
-      const issueDateString = `${issueDate.getMonth() + 1}/${issueDate.getDate()}/${issueDate.getFullYear()}`;
-      const expiresAtDate = new Date(issueTimestamp.toDate());
-      expiresAtDate.setMonth(expiresAtDate.getMonth() + arcCardDurationMonths);
+          if (cardSnapshot.empty){
+            throw new Error("Selected ARC Card does not exist")
+          }
 
-      const issueRef = db.collection("issues").doc();
+          const cardDoc = cardSnapshot.docs[0];
+          const cardData = cardDoc.data() as {
+            currentUserId?: string | null;
+            status?: string
+          }
 
-      batch.update(cardDoc.ref, {
-        currentUserId: userRef.id,
-        status: "Active",
-      });
+          // Rule 1: card must not already be assigned
+          if (cardData.currentUserId){
+            throw new Error("Selected ARC Card is already assigned")
+          }
 
-      batch.set(issueRef, {
-        cardId: cardDoc.id,
-        createdAt: issueTimestamp,
-        issueDate: issueDateString,
-        issuedBy: createdByUid,
-        notes: additionalInfo?.notes || "",
-        returnedAt: null,
-        expiresAt: Timestamp.fromDate(expiresAtDate),
-        userId: userRef.id,
-      });
-    }
+          if (cardData.status !== "Unattributed"){
+            throw new Error(
+              "Selected ARC Card must be Unattributed before assignment"
+            )
+          }
 
-    await batch.commit();
+  
+          const issueTimestamp = Timestamp.now();
+          const issueDate = issueTimestamp.toDate();
+          const issueDateString = `${issueDate.getMonth() + 1}/${issueDate.getDate()}/${issueDate.getFullYear()}`;
+          const expiresAtDate = new Date(issueDate);
+          expiresAtDate.setMonth(expiresAtDate.getMonth() + arcCardDurationMonths);
+
+          const issueRef = db.collection("issues").doc();
+
+          tx.set(userRef, {
+            ...userData,
+            arcCardNumber: arcCardDigits
+          })
+
+          // Rule 3: once assigned, card becomes Active
+          tx.update(cardDoc.ref,{
+            currentUserId: userRef.id,
+            status: "Active",
+            updatedAt: new Date().toISOString(),
+          })
+
+          tx.set(issueRef, {
+            cardId: cardDoc.id,
+            createdAt: issueTimestamp,
+            issueDate: issueDateString,
+            issuedBy: createdByUid,
+            notes: additionalInfo?.notes || "",
+            returnedAt: null,
+            expiresAt: Timestamp.fromDate(expiresAtDate),
+            userId: userRef.id,
+          });
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to assign ARC card";
+        return NextResponse.json({ error: message }, { status: 400 });
+      }}
 
     return NextResponse.json(
       {

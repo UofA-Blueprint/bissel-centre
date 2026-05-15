@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     const cardsSnapshot = await db
       .collection("arc_cards")
       .where("currentUserId", "==", null)
+      .where("status", "==", "Unattributed")
       .orderBy("arcCardNumber")
       .startAt(queryValue)
       .endAt(`${queryValue}\uf8ff`)
