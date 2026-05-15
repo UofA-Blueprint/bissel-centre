@@ -258,14 +258,22 @@ const StatCard: React.FC<StatCardComponentProps> = ({
   label,
   isLoading,
 }) => {
+  const cardShadow =
+    "shadow-[13px_3px_29px_0_rgba(0,0,0,0.04),52px_14px_53px_0_rgba(0,0,0,0.03)]";
+  const cardBorder = "border-[0.5px] border-[#9C9C98]/25";
+
   if (isLoading) {
     return (
-      <div className="bg-gray-200 rounded-xl shadow-sm w-full h-[120px] animate-pulse" />
+      <div
+        className={`bg-gray-200 rounded-xl ${cardBorder} ${cardShadow} w-full h-[120px] animate-pulse`}
+      />
     );
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-sm px-5 py-4 w-full h-[120px] flex flex-col items-center justify-center text-center">
+    <div
+      className={`bg-white rounded-xl ${cardBorder} ${cardShadow} px-5 py-4 w-full h-[120px] flex flex-col items-center justify-center text-center`}
+    >
       {/* Icon + Number */}
       <div className="flex items-center gap-2">
         <Image src={icon} alt={label} width={24} height={24} />
