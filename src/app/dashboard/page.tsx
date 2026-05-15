@@ -2,13 +2,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { auth } from "../services/firebase";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Fuse from "fuse.js";
-import { signOut } from "firebase/auth";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
+import Header from "@/app/components/Header";
 
 interface StatCardProps {
   icon: string;
@@ -40,11 +39,6 @@ interface User {
   lastIssued: string;
 }
 
-interface SessionUser {
-  name?: string;
-  email: string;
-}
-
 interface DashboardSummaryResponse {
   viewer: {
     uid: string;
@@ -58,7 +52,6 @@ interface DashboardSummaryResponse {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [sessionUser, setSessionUser] = useState<SessionUser | null>(null);
   const [stats, setStats] = useState([
     { icon: "/card.svg", number: 0, label: "Available Cards" },
     { icon: "/checkmark.svg", number: 0, label: "Active Cards" },
@@ -151,21 +144,7 @@ export default function DashboardPage() {
 
   return (
     <main>
-      <div className="bg-white shadow mb-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <h1 className="text-2xl font-bold text-gray-900">
-              Welcome, {sessionUser?.name || sessionUser?.email || "Staff"}
-            </h1>
-            <button
-              onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </div>
+      <Header title="" />
       <div className="p-6 bg-gray-100 min-h-screen px-24">
         {/* Stats Section */}
         <div className="flex flex-wrap gap-4 mb-6 px-6 sm:px-12 lg:px-24 justify-center max-w-7xl mx-auto">
