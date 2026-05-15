@@ -337,50 +337,47 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
         <span className="text-xl font-bold text-gray-900 truncate">
           {user.firstName} {user.secondName}
         </span>
-        <div className="sm:ml-auto flex flex-row sm:flex-row flex-wrap items-center sm:items-center text-right min-w-[180px] gap-2 sm:gap-4 mt-2 sm:mt-0 w-full sm:w-auto">
-          {/* Status and Banned Flag */}
-          <span
-            className={`flex items-center text-base font-medium ${
-              arcCardStatus === "Expired"
-                ? "text-red-500"
-                : arcCardStatus === "Active"
-                  ? "text-gray-500"
-                  : "text-gray-500"
-            }`}
-          >
+        <div className="sm:ml-auto flex items-center gap-6 mt-2 sm:mt-0">
+          {/* Flag column - always reserves space */}
+          <div className="w-4 flex justify-center shrink-0">
             {isBanned && (
               <Image
                 src="/flag.svg"
                 alt="Flagged"
                 width={15}
                 height={15}
-                className="mr-2"
               />
             )}
-            {arcCardStatus === "Expired" ? (
-              <>
-                <Image
-                  src="/caution.svg"
-                  alt="Expired"
-                  width={18}
-                  height={18}
-                  className="mr-1"
-                />
-                <span>Expired</span>
-              </>
-            ) : arcCardStatus === "Active" ? (
-              <span>Active</span>
-            ) : (
-              <span>N/A</span>
+          </div>
+          {/* Status column - right-aligned, fixed min-width */}
+          <div
+            className={`flex items-center justify-end gap-1 min-w-[80px] text-base font-medium ${
+              arcCardStatus === "Expired" ? "text-red-500" : "text-gray-500"
+            }`}
+          >
+            {arcCardStatus === "Expired" && (
+              <Image
+                src="/caution.svg"
+                alt="Expired"
+                width={18}
+                height={18}
+              />
             )}
-          </span>
-          {/* Last Issued Date */}
-          <span className="text-base text-gray-500 font-normal whitespace-nowrap">
+            <span>
+              {arcCardStatus === "Expired"
+                ? "Expired"
+                : arcCardStatus === "Active"
+                  ? "Active"
+                  : "N/A"}
+            </span>
+          </div>
+          {/* Last Issued column - right-aligned, fixed min-width */}
+          <div className="min-w-[170px] text-right text-base text-gray-500 font-normal whitespace-nowrap">
             Last issued:{" "}
             <span className="text-gray-800 font-medium">
               {user.lastIssued || "N/A"}
             </span>
-          </span>
+          </div>
         </div>
       </div>
     </div>
