@@ -112,7 +112,7 @@ export default function Header({
             <div className="flex-1 flex justify-center">
               <nav className="flex h-full">
                 <a
-                  href="/admin/dashboard"
+                  href="/dashboard"
                   className="px-5 flex items-center border-b-2 border-primary text-gray-900 font-medium"
                 >
                   Dashboard
@@ -172,7 +172,9 @@ export default function Header({
                       )}
 
                       <span className="text-sm text-gray-800 font-medium">
-                        {user.name || user.email || "User"}
+                        {user.name
+                          ? user.name.replace(/\s+User$/, "")
+                          : user.email}
                       </span>
 
                       <ChevronDown

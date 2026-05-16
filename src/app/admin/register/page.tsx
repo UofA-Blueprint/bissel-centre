@@ -1,7 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import Image from "next/image";
-import { Dialog, DialogTitle, Description } from "@headlessui/react";
+import { Dialog, DialogPanel, DialogTitle, Description } from "@headlessui/react";
 import {
   userFormFields,
   validateRegistrationForm,
@@ -81,7 +81,6 @@ const AdminRegisterPage: React.FC = () => {
         return;
       }
 
-      // server returns { uid, rawId }
       setGeneratedUserId(data.rawId ?? "");
       setFormData(initialFormData);
       setDialogOpen(true);
@@ -170,11 +169,11 @@ const AdminRegisterPage: React.FC = () => {
       <Dialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
-        className="fixed z-10 inset-0 overflow-y-auto"
+        className="fixed inset-0 z-50 overflow-y-auto"
       >
         <div className="flex items-center justify-center min-h-screen">
           <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-          <div className="bg-white z-10 rounded-lg p-6 mx-auto max-w-sm">
+          <DialogPanel className="bg-white z-10 rounded-lg p-6 mx-auto max-w-sm">
             <DialogTitle className="text-lg font-bold">Success</DialogTitle>
             <Description className="mt-2 text-sm text-gray-500">
               Admin registration successful!
@@ -208,13 +207,13 @@ const AdminRegisterPage: React.FC = () => {
               </div>
             ) : (
               <button
-                className="mt-4 p-2 bg-blue-500 text-white rounded"
+                className="mt-4 p-2 bg-blue-500 text-white rounded w-full"
                 onClick={() => setDialogOpen(false)}
               >
                 Close
               </button>
             )}
-          </div>
+          </DialogPanel>
         </div>
       </Dialog>
     </div>

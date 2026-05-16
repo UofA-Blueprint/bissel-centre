@@ -10,17 +10,16 @@ import {
 
 export interface ArcCard {
   id: string;
-  userId: string | null; // null = Unattributed card
+  currentUserId?: string | null;
   allocationDate: string;
   department: string;
   arcCardNumber: string;
   securityCode: string;
-  status: "Active" | "Unattributed" | "Expired" | "Unloaded";
-  monthsRemaining: number;
+  status: "Active" | "Unattributed" | "Expired" | "Unloaded" | "Cancelled";
+  monthsRemaining?: number;
   issuedAt?: Date | string | null;
 }
 
-// Get a single ARC Card by ID
 export async function getArcCardById(id: string): Promise<ArcCard | null> {
   try {
     const ref = doc(db, "arc_cards", id);
@@ -41,12 +40,11 @@ export async function getArcCardById(id: string): Promise<ArcCard | null> {
   }
 }
 
-// Get ARC Cards belonging to a specific user
 export async function getArcCardsByUserId(userId: string): Promise<ArcCard[]> {
   try {
     const q = query(
       collection(db, "arc_cards"),
-      where("userId", "==", userId)
+      where("currentUserId", "==", userId),
     );
 
     const snapshot = await getDocs(q);
@@ -65,7 +63,28 @@ export async function getArcCardsByUserId(userId: string): Promise<ArcCard[]> {
   }
 }
 
-// Get ALL ARC Cards in the system
+export async function getAvailableArcCards(): Promise<ArcCard[]> {
+  try {
+    const q = query(
+      collection(db, "arc_cards"),
+      where("status", "==", "Unattributed"),
+      where("currentUserId", "==", null),
+    );
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        issuedAt: data.issuedAt?.toDate?.() || data.issuedAt || null,
+      } as ArcCard;
+    });
+  } catch (err) {
+    console.error("Error retrieving available ARC cards:", err);
+    throw err;
+  }
+}
+
 export async function getAllArcCards(): Promise<ArcCard[]> {
   try {
     const ref = collection(db, "arc_cards");
