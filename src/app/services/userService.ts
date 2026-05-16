@@ -10,6 +10,7 @@ import {
   deleteDoc,
   addDoc,
   Timestamp,
+  runTransaction,
 } from "firebase/firestore";
 
 export interface User {
@@ -37,14 +38,14 @@ export interface User {
 
 export interface ArcCard {
   id: string;
-  userId: string;
+  currentUserId?: string | null;
   allocationDate: string;
   department: string;
   arcCardNumber: string;
   securityCode: string;
-  status: "Active" | "Unattributed" | "Expired" | "Unloaded";
-  monthsRemaining: number;
-  issuedAt: Date;
+  status: "Active" | "Unattributed" | "Expired" | "Unloaded" | "Cancelled";
+  monthsRemaining?: number;
+  issuedAt?: Date;
 }
 
 export interface HistoryEntry {
@@ -140,7 +141,10 @@ export async function getArcCardsByUserId(userId: string): Promise<ArcCard[]> {
   try {
     // Temporarily removed orderBy to avoid index requirement
     // TODO: Create Firebase composite index, then restore: orderBy("issuedAt", "desc")
-    const q = query(collection(db, "arc_cards"), where("userId", "==", userId));
+    const q = query(
+      collection(db, "arc_cards"),
+      where("currentUserId", "==", userId)
+    );
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
@@ -303,7 +307,7 @@ export async function unbanUser(
   }
 }
 
-// Issue an existing (unattributed) ARC card to a user
+// Issue an existing (unattributed, unassigned) ARC card to a user
 export async function issueNewArcCard(
   userId: string,
   selectedCardId: string,
@@ -313,25 +317,65 @@ export async function issueNewArcCard(
   override?: { reason: string }
 ): Promise<void> {
   try {
-    // Get the selected card's details
     const cardRef = doc(db, "arc_cards", selectedCardId);
-    const cardSnap = await getDoc(cardRef);
-    if (!cardSnap.exists()) throw new Error("Selected ARC card not found");
-    const cardData = cardSnap.data();
-    const newCardNumber: string = cardData.arcCardNumber;
+    const userRef = doc(db, "users", userId);
+    let newCardNumber = "";
 
-    // Assign card to user
-    await updateDoc(cardRef, {
-      userId,
-      status: "Active",
-      monthsRemaining: months,
-      issuedAt: Timestamp.now(),
+    await runTransaction(db, async (transaction) => {
+      const cardSnap = await transaction.get(cardRef);
+      if (!cardSnap.exists()) {
+        throw new Error("Selected ARC card not found");
+      }
+
+      const cardData = cardSnap.data() as {
+        arcCardNumber?: string;
+        currentUserId?: string | null;
+        status?: string;
+      };
+
+      if (cardData.currentUserId) {
+        throw new Error("Selected ARC Card is already assigned");
+      }
+      if (cardData.status !== "Unattributed") {
+        throw new Error(
+          "Selected ARC Card must be Unattributed before assignment"
+        );
+      }
+
+      newCardNumber = String(cardData.arcCardNumber || "");
+      const issueTimestamp = Timestamp.now();
+      const issueDate = issueTimestamp.toDate();
+      const issueDateString = `${issueDate.getMonth() + 1}/${issueDate.getDate()}/${issueDate.getFullYear()}`;
+      const expiresAtDate = new Date(issueDate);
+      expiresAtDate.setMonth(expiresAtDate.getMonth() + months);
+
+      const issueRef = doc(collection(db, "issues"));
+
+      transaction.update(cardRef, {
+        currentUserId: userId,
+        status: "Active",
+        monthsRemaining: months,
+        issuedAt: issueTimestamp,
+        updatedAt: new Date().toISOString(),
+      });
+
+      transaction.update(userRef, {
+        arcCardNumber: newCardNumber,
+        updatedAt: issueTimestamp,
+      });
+
+      transaction.set(issueRef, {
+        cardId: selectedCardId,
+        createdAt: issueTimestamp,
+        issueDate: issueDateString,
+        issuedBy,
+        notes: "",
+        returnedAt: null,
+        expiresAt: Timestamp.fromDate(expiresAtDate),
+        userId,
+      });
     });
 
-    // Update user's arcCardNumber
-    await updateUser(userId, { arcCardNumber: newCardNumber });
-
-    // Write Override history first if applicable
     if (override) {
       await addDoc(collection(db, "history"), {
         date: Timestamp.now(),
@@ -343,7 +387,6 @@ export async function issueNewArcCard(
       });
     }
 
-    // Write issue/replace history
     const event = previousCardNumber ? "ARC Card Replaced" : "ARC Card Issued";
     const notes = previousCardNumber
       ? `ARC card ...${previousCardNumber.slice(-7)} replaced by ...${newCardNumber.slice(-7)}`
@@ -371,12 +414,30 @@ export async function renewArcCard(
   override?: { reason: string }
 ): Promise<void> {
   try {
-    // Update ARC card
     const arcCardRef = doc(db, "arc_cards", arcCardId);
+    const expiresAtDate = new Date();
+    expiresAtDate.setMonth(expiresAtDate.getMonth() + months);
+
     await updateDoc(arcCardRef, {
       monthsRemaining: months,
       status: "Active",
+      updatedAt: new Date().toISOString(),
     });
+
+    const activeIssuesQuery = query(
+      collection(db, "issues"),
+      where("userId", "==", userId),
+      where("cardId", "==", arcCardId)
+    );
+    const activeIssues = await getDocs(activeIssuesQuery);
+    const openIssue = activeIssues.docs.find(
+      (issueDoc) => issueDoc.data().returnedAt == null
+    );
+    if (openIssue) {
+      await updateDoc(openIssue.ref, {
+        expiresAt: Timestamp.fromDate(expiresAtDate),
+      });
+    }
 
     // Write Override history first if applicable
     if (override) {
@@ -437,7 +498,7 @@ export async function deleteUser(userId: string): Promise<void> {
     // Clean up related documents
     const arcCardsQuery = query(
       collection(db, "arc_cards"),
-      where("userId", "==", userId)
+      where("currentUserId", "==", userId)
     );
     const bannedUsersQuery = query(
       collection(db, "banned_users"),

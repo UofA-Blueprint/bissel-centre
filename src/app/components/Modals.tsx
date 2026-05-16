@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { X } from "lucide-react";
 import { ArcCard as AvailableArcCard } from "../services/arcCardService";
 
@@ -19,17 +19,14 @@ export function IssueCardModal({
 }: IssueCardModalProps) {
   const [selectedCardId, setSelectedCardId] = useState("");
   const [months, setMonths] = useState(3);
-
-  useEffect(() => {
-    if (availableCards.length > 0) setSelectedCardId(availableCards[0].id);
-  }, [availableCards]);
+  const resolvedCardId = selectedCardId || availableCards[0]?.id || "";
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedCardId) return;
-    onConfirm(selectedCardId, months);
+    if (!resolvedCardId) return;
+    onConfirm(resolvedCardId, months);
   };
 
   return (
@@ -55,7 +52,7 @@ export function IssueCardModal({
                   Select ARC Card
                 </label>
                 <select
-                  value={selectedCardId}
+                  value={resolvedCardId}
                   onChange={(e) => setSelectedCardId(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
                 >

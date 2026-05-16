@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
 
   const expiresIn = 60 * 60 * 24 * 5 * 1000; // 5 days
 
-  let decodedToken: { admin?: boolean };
+  let decodedToken;
   try {
     const verified = await admin.auth().verifyIdToken(idToken, true);
     decodedToken = verified as typeof verified & { admin?: boolean };

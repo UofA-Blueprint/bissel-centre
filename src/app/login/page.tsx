@@ -28,10 +28,12 @@ export default function StaffLoginPage() {
     setError("");
 
     try {
+
+      const normalizedEmail = email.trim().toLowerCase();
       // Authenticate with Firebase Auth
       const userCredential = await signInWithEmailAndPassword(
         auth,
-        email,
+        normalizedEmail,
         password
       );
 
@@ -67,7 +69,7 @@ export default function StaffLoginPage() {
 
       // Handle remember me functionality
       if (rememberMe) {
-        localStorage.setItem("rememberedEmail", email);
+        localStorage.setItem("rememberedEmail", normalizedEmail);
       } else {
         localStorage.removeItem("rememberedEmail");
       }
@@ -140,7 +142,7 @@ export default function StaffLoginPage() {
               {error}
             </div>
           )}
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleLogin} className="space-y-4" autoComplete="on">
             <div>
               <label
                 htmlFor="email"
@@ -150,13 +152,17 @@ export default function StaffLoginPage() {
               </label>
               <input
                 id="email"
+                name="username"
                 type="email"
-                autoComplete="email"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 required
                 disabled={loading}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your admin email"
+                placeholder="Enter your staff admin email"
                 className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#2CC0DE] focus:border-transparent"
               />
             </div>
@@ -169,6 +175,7 @@ export default function StaffLoginPage() {
               </label>
               <input
                 id="password"
+                name="password"
                 type="password"
                 autoComplete="current-password"
                 required
@@ -183,6 +190,7 @@ export default function StaffLoginPage() {
               <label className="inline-flex items-center text-sm text-gray-700">
                 <input
                   id="rememberMe"
+                  name="rememberMe"
                   type="checkbox"
                   checked={rememberMe}
                   disabled={loading}

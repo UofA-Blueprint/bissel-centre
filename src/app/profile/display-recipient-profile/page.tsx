@@ -46,7 +46,10 @@ import {
   ArcCard as AvailableArcCard,
   getAvailableArcCards,
 } from "../../services/arcCardService";
-import { encryptPhone, decryptPhone } from "@/utils/phoneEncryption";
+import {
+  encryptPhoneClient,
+  decryptPhoneClient,
+} from "@/utils/phoneEncryption.client";
 
 function DisplayRecipientProfileContent() {
   const router = useRouter();
@@ -108,7 +111,7 @@ function DisplayRecipientProfileContent() {
       return;
     }
     if (user.phoneNumber.startsWith("ENC:")) {
-      decryptPhone(user.phoneNumber.slice(4))
+      decryptPhoneClient(user.phoneNumber.slice(4))
         .then(setDisplayPhone)
         .catch(() => setDisplayPhone(""));
     } else {
@@ -378,7 +381,7 @@ function DisplayRecipientProfileContent() {
       let phoneToEdit = user.phoneNumber || "";
       if (phoneToEdit.startsWith("ENC:")) {
         try {
-          phoneToEdit = await decryptPhone(phoneToEdit.slice(4));
+          phoneToEdit = await decryptPhoneClient(phoneToEdit.slice(4));
         } catch {
           phoneToEdit = "";
         }
@@ -412,7 +415,8 @@ function DisplayRecipientProfileContent() {
     try {
       const dataToSave = { ...editedUser };
       if (dataToSave.phoneNumber) {
-        dataToSave.phoneNumber = "ENC:" + (await encryptPhone(dataToSave.phoneNumber));
+        dataToSave.phoneNumber =
+          "ENC:" + (await encryptPhoneClient(dataToSave.phoneNumber));
       }
       await updateUserWithHistory(user.id, dataToSave, getStaffId());
       await loadUserData();
@@ -1106,7 +1110,9 @@ function DisplayRecipientProfileContent() {
                       </h3>
 
                       {(() => {
-                        const issuedAt = new Date(arcCards[0].issuedAt);
+                        const issuedAt = arcCards[0].issuedAt
+                          ? new Date(arcCards[0].issuedAt)
+                          : new Date();
                         const now = new Date();
                         const durationMs = now.getTime() - issuedAt.getTime();
                         const durationMonths = Math.floor(
@@ -1165,12 +1171,12 @@ function DisplayRecipientProfileContent() {
                               </div>
                               <div
                                 className={`text-sm font-medium ${
-                                  arcCards[0].monthsRemaining <= 1
+                                  (arcCards[0].monthsRemaining ?? 0) <= 1
                                     ? "text-red-600"
                                     : "text-gray-900"
                                 }`}
                               >
-                                {arcCards[0].monthsRemaining}
+                                {arcCards[0].monthsRemaining ?? "N/A"}
                               </div>
                             </div>
 

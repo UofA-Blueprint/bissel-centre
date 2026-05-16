@@ -97,13 +97,14 @@ export interface ArcCardInput {
 // Issue represents a single card issuance to a user
 export interface Issue {
   id: string;
-  cardId: string;         // Reference to arc_cards doc
-  userId: string;         // Who received the card
-  issueDate: string;      // When issued (e.g., "4/17/2024")
-  issuedBy?: string;      // Staff who issued it
-  returnedAt?: unknown;   // When returned (null = still active)
+  cardId: string; // Reference to arc_cards doc
+  userId: string; // Who received the card
+  issueDate: string; // When issued (e.g., "4/17/2024")
+  issuedBy?: string; // Staff who issued it
+  returnedAt?: unknown; // When returned (null = still active)
   notes?: string;
   createdAt?: unknown;
+  expiresAt?: unknown;
 }
 
 export interface IssueInput {
@@ -112,4 +113,5 @@ export interface IssueInput {
   issueDate: string;
   issuedBy?: string;
   notes?: string;
+  expiresAt?: unknown;
 }

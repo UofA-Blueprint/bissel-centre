@@ -35,6 +35,14 @@ type CardRow = {
   notes: string;
 };
 
+const STATUS_MEANINGS: Record<CardStatus, string> = {
+  Active: "Card is currently assigned and in use by a recipient.",
+  Unattributed: "Ready to be issued; currently not assigned.",
+  Unloaded: "Card exists but is not loaded with funds.",
+  Expired: "Card is no longer valid due to expiry.",
+  Cancelled: "Card is cancelled and should not be used.",
+};
+
 // --- API Fetch Function ---
 
 async function fetchCards(): Promise<CardRow[]> {
@@ -90,7 +98,7 @@ function SortableHeader({
   sorted,
 }: {
   label: string;
-  onClick?: () => void;
+  onClick?: (event: unknown) => void;
   sorted: false | "asc" | "desc";
 }) {
   return (
@@ -108,6 +116,8 @@ function SortableHeader({
   );
 }
 
+
+
 export default function CardsPage() {
   const [data, setData] = useState<CardRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,6 +131,43 @@ export default function CardsPage() {
   const [statusFilters, setStatusFilters] = useState<CardStatus[]>([]);
   const [departmentFilters, setDepartmentFilters] = useState<CardDepartment[]>([]);
   const filterRef = useRef<HTMLDivElement>(null);
+
+  // edit card api call
+const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
+  const firstRes = await fetch("/api/cards", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: cardId, status: nextStatus, confirmDangerous: false }),
+  });
+  const firstPayload = await firstRes.json();
+  if (firstRes.status === 409 && firstPayload?.requiresConfirmation) {
+    const reasonText = Array.isArray(firstPayload.reasons)
+      ? firstPayload.reasons.map((r: string) => `- ${r}`).join("\n")
+      : "";
+    const ok = window.confirm(
+      `Warning: This could be dangerous.\n\n` +
+        `${firstPayload.warning ?? ""}\n\n` +
+        `${reasonText}\n\n` +
+        `Selected status meaning:\n${nextStatus}: ${STATUS_MEANINGS[nextStatus]}\n\n` +
+        `Continue anyway?`,
+    );
+    if (!ok) return;
+    const secondRes = await fetch("/api/cards", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: cardId, status: nextStatus, confirmDangerous: true }),
+    });
+    if (!secondRes.ok) {
+      const secondPayload = await secondRes.json().catch(() => ({}));
+      throw new Error(secondPayload.error || "Failed to force update status");
+    }
+  } else if (!firstRes.ok) {
+    throw new Error(firstPayload.error || "Failed to update card status");
+  }
+  setData((prev) =>
+    prev.map((card) => (card.id === cardId ? { ...card, status: nextStatus } : card)),
+  );
+};
 
   // Close filter dropdown when clicking outside
   useEffect(() => {
@@ -225,10 +272,24 @@ export default function CardsPage() {
       {
         accessorKey: "status",
         header: () => <span className="text-xs font-bold text-gray-900">Status</span>,
-        cell: ({ getValue }) => {
-          const value = getValue<CardStatus>();
-          return <Chip label={value} tone={statusStyles[value]} />;
-        },
+        cell: ({ row, getValue }) => {
+          const current = getValue<CardStatus>();
+          return (
+            <select
+              value={current}
+              onChange={(e) =>
+                void updateCardStatus(row.original.id, e.target.value as CardStatus)
+              }
+              className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
+            >
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          );
+  },
       },
       {
         accessorKey: "department",
