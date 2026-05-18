@@ -6,6 +6,11 @@ import { checkAdmin } from "@/app/admin/actions";
 
 const ADMIN_STAFF_COLLECTION = "administrative_staff";
 
+function generateTemporaryPassword(): string {
+  // Server-generated secret ensures invited users cannot log in until they reset.
+  return `${crypto.randomUUID()}A1!`;
+}
+
 async function sendPasswordSetupEmail(email: string): Promise<void> {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
 
@@ -40,17 +45,11 @@ async function sendPasswordSetupEmail(email: string): Promise<void> {
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, firstName, lastName, identificationNumber } =
+    const { email, firstName, lastName, identificationNumber } =
       await request.json();
 
     // 1. Basic server-side validation
-    if (
-      !email ||
-      !password ||
-      !firstName ||
-      !lastName ||
-      !identificationNumber
-    ) {
+    if (!email || !firstName || !lastName || !identificationNumber) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 },
@@ -75,13 +74,14 @@ export async function POST(request: NextRequest) {
     console.log("Verified IT Admin Identification Number successfully");
 
     const hashedID = hashITIDNumber(identificationNumber);
+    const temporaryPassword = generateTemporaryPassword();
 
     console.log("Hashed IT Admin Identification Number successfully");
 
     // 3. Create the user in Firebase Auth
     const userRecord = await adminAuth.createUser({
       email,
-      password,
+      password: temporaryPassword,
       displayName: `${firstName} ${lastName}`,
     });
 
