@@ -186,7 +186,7 @@ export default function DashboardPage() {
             />
             <button
               className="p-2 bg-cyan-500 hover:bg-cyan-600 rounded-full"
-              // onClick={handleSearch}
+            // onClick={handleSearch}
             >
               <Image
                 src="/search-enter.svg"
@@ -270,8 +270,12 @@ const StatCard: React.FC<StatCardProps> = ({ icon, number, label }) => {
 const UserCard: React.FC<{ user: User }> = ({ user }) => {
   const isBanned = user.banned;
   const arcCardStatus = user.arcCardStatus;
+  const router = useRouter();
   return (
-    <div className="bg-white rounded-lg shadow-md px-6 py-4 w-full flex items-center justify-between">
+    <div
+      className="bg-white rounded-lg shadow-md px-6 py-4 w-full flex items-center justify-between cursor-pointer hover:shadow-lg transition-shadow"
+      onClick={() => router.push(`/profile/${user.id}`)}
+    >
       {/* Avatar */}
       <div className="w-10 h-10 bg-gray-300 rounded-full overflow-hidden flex items-center justify-center mr-4">
         {user.picture ? (
@@ -282,7 +286,9 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
             height={40}
             className="rounded-full object-cover w-[40px] h-[40px]"
             onError={(e) => {
-              (e.currentTarget as HTMLImageElement).style.display = "none";
+              (
+                e.currentTarget as HTMLImageElement
+              ).style.display = "none";
             }}
           />
         ) : (
@@ -299,13 +305,12 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
         <div className="sm:ml-auto flex flex-row sm:flex-row flex-wrap items-center sm:items-center text-right min-w-[180px] gap-2 sm:gap-4 mt-2 sm:mt-0 w-full sm:w-auto">
           {/* Status and Banned Flag */}
           <span
-            className={`flex items-center text-base font-medium ${
-              arcCardStatus === "Expired"
+            className={`flex items-center text-base font-medium ${arcCardStatus === "Expired"
                 ? "text-red-500"
                 : arcCardStatus === "Active"
                   ? "text-gray-500"
                   : "text-gray-500"
-            }`}
+              }`}
           >
             {isBanned && (
               <Image

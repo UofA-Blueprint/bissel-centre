@@ -40,13 +40,12 @@ jest.mock("next/server", () => ({
 // mock the admin actions module (auto-mocked; we'll assert on the mocked functions)
 jest.mock("@/app/admin/actions");
 
-// Now import the module under test after mocks are in place
 import { POST } from "@/app/admin/api/create-admin/route";
 import * as adminActions from "@/app/admin/actions";
 import { NextRequest } from "next/server";
 
-// mock NextRequest helper
-const mockNextRequest = <T = unknown,>(body: T): NextRequest => {
+// mock NextRequest
+const mockNextRequest = (body: Record<string, unknown>): NextRequest => {
   return {
     json: async () => body,
   } as unknown as NextRequest;
@@ -133,9 +132,9 @@ describe("POST /admin/api/create-admin", () => {
 
   test("propagates Firebase email-already-exists error with 409", async () => {
     mockCheckAdmin.mockResolvedValue(true);
-    const err = new Error(
-      "The email address is already in use by another account.",
-    ) as Error & { code?: string };
+    const err: Record<string, unknown> = new Error(
+      "The email address is already in use by another account."
+    );
     err.code = "auth/email-already-exists";
     mockCreateAdmin.mockRejectedValue(err);
 

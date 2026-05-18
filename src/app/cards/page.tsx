@@ -98,7 +98,7 @@ function SortableHeader({
   sorted,
 }: {
   label: string;
-  onClick?: (event: unknown) => void;
+  onClick?: ((event: unknown) => void) | (() => void);
   sorted: false | "asc" | "desc";
 }) {
   return (
