@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { auth } from "../services/firebase";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
@@ -36,6 +37,8 @@ const AdminRegistration: React.FC = () => {
     useState<AdminRegistrationFormData>(initialFormData);
   const [errors, setErrors] = useState<Record<string, string>>(initialErrors);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
+  const [registrationWarning, setRegistrationWarning] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -88,6 +91,8 @@ const AdminRegistration: React.FC = () => {
 
       await signInWithEmailAndPassword(auth, formData.email, formData.password);
 
+      setRegisteredEmail(formData.email);
+      setRegistrationWarning(data.warning ?? "");
       setFormData(initialFormData);
       setDialogOpen(true);
     } catch (error) {
@@ -228,21 +233,49 @@ const AdminRegistration: React.FC = () => {
       <Dialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
-        className="fixed z-10 inset-0 overflow-y-auto"
+        className="fixed z-20 inset-0 overflow-y-auto"
       >
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-          <div className="bg-white z-10 rounded-lg p-6 mx-auto max-w-sm">
-            <DialogTitle className="text-lg font-bold">Success</DialogTitle>
-            <Description className="mt-2 text-sm text-gray-500">
-              Registration successful!
-            </Description>
-            <button
-              className="mt-4 p-2 bg-blue-500 text-white rounded"
-              onClick={() => setDialogOpen(false)}
-            >
-              Close
-            </button>
+        <div className="flex items-center justify-center min-h-screen px-4 py-8">
+          <div className="fixed inset-0 bg-slate-900/55" aria-hidden="true" />
+          <div className="relative z-10 mx-auto w-full max-w-md overflow-hidden rounded-2xl border border-cyan-100 bg-white shadow-2xl">
+            <div className="bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-5 text-white">
+              <DialogTitle className="text-xl font-semibold">
+                Registration Complete
+              </DialogTitle>
+              <Description className="mt-1 text-sm text-cyan-50">
+                The staff account has been created successfully.
+              </Description>
+            </div>
+
+            <div className="px-6 py-5 space-y-4">
+              <div className="rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+                A password reset email should now be in{" "}
+                <span className="font-semibold">{registeredEmail}</span>. Ask
+                the registered user to open the email and set a new password to
+                complete onboarding.
+              </div>
+
+              {registrationWarning && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  {registrationWarning}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+                <button
+                  className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                  onClick={() => setDialogOpen(false)}
+                >
+                  Register Another User
+                </button>
+                <Link
+                  href="/"
+                  className="rounded-xl bg-slate-900 px-4 py-2 text-center text-sm font-medium text-white transition hover:bg-slate-700"
+                >
+                  Go to Home
+                </Link>
+              </div>
+            </div>
           </div>
         </div>
       </Dialog>
