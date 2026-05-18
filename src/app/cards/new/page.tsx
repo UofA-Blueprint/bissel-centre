@@ -19,6 +19,23 @@ type DraftCard = {
   securityCode: string;
 };
 
+type PendingStatusChange = {
+  rowId: number;
+  nextStatus: CardStatus;
+};
+
+const STATUS_WARNING_PREF_KEY = "arc_card_new_status_warning_hide_v1";
+
+const STATUS_MEANINGS: Record<CardStatus, string> = {
+  Active: "Card is being used by someone.",
+  Unattributed: "Card is ready to be issued and not currently assigned.",
+  Unloaded: "Card is created but not loaded with money yet.",
+  Expired: "Card is no longer valid.",
+  Cancelled: "Card has been cancelled and should not be used.",
+};
+
+
+
 function DeptPill({ value }: { value: CardDepartment }) {
   return (
     <span
@@ -36,6 +53,11 @@ export default function NewAllocationPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<DraftCard[]>([]);
+
+  const [statusWarningOpen, setStatusWarningOpen] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<PendingStatusChange | null>(null);
+  const [dontShowStatusWarningAgain, setDontShowStatusWarningAgain] =
+    useState(false);
 
   const nextId = useMemo(() => rows.length + 1, [rows.length]);
 
@@ -55,6 +77,57 @@ export default function NewAllocationPage() {
         securityCode: "",
       },
     ]);
+  };
+
+  const shouldSkipStatusWarning = (): boolean => {
+    try {
+      return localStorage.getItem(STATUS_WARNING_PREF_KEY) === "1";
+    } catch {
+      // If localStorage is blocked/unavailable, default to showing warning
+      return false;
+    }
+  };
+
+  const handleStatusChangeAttempt = (rowId: number, nextStatus: CardStatus) => {
+    // No warning for default/safe initial state
+    if (nextStatus === "Unloaded") {
+      updateRow(rowId, "status", nextStatus);
+      return;
+    }
+    // Respect "don't show again"
+    if (shouldSkipStatusWarning()) {
+      updateRow(rowId, "status", nextStatus);
+      return;
+    }
+    // Show warning modal before applying risky status
+    setPendingStatusChange({ rowId, nextStatus });
+    setDontShowStatusWarningAgain(false);
+    setStatusWarningOpen(true);
+  };
+
+  const confirmStatusChange = () => {
+    if (!pendingStatusChange) return;
+    if (dontShowStatusWarningAgain) {
+      try {
+        localStorage.setItem(STATUS_WARNING_PREF_KEY, "1");
+      } catch {
+        // ignore localStorage write failures
+      }
+    }
+    updateRow(
+      pendingStatusChange.rowId,
+      "status",
+      pendingStatusChange.nextStatus,
+    );
+    setStatusWarningOpen(false);
+    setPendingStatusChange(null);
+    setDontShowStatusWarningAgain(false);
+  };
+
+  const cancelStatusChange = () => {
+    setStatusWarningOpen(false);
+    setPendingStatusChange(null);
+    setDontShowStatusWarningAgain(false);
   };
 
   const handleSubmit = async () => {
@@ -160,7 +233,7 @@ export default function NewAllocationPage() {
                   <select
                     className="w-32 rounded-full border border-gray-300 bg-gray-50 px-3 py-1 text-sm text-gray-800 focus:border-primary focus:outline-none"
                     value={row.status}
-                    onChange={(e) => updateRow(row.id, "status", e.target.value as CardStatus)}
+                    onChange={(e) => handleStatusChangeAttempt(row.id, e.target.value as CardStatus)}
                   >
                     {STATUS_OPTIONS.map((s) => (
                       <option key={s} value={s}>
@@ -221,6 +294,54 @@ export default function NewAllocationPage() {
         <span className="text-lg">+</span>
         Add Card
       </button>
+      {/* Status warning modal */}
+      {statusWarningOpen && pendingStatusChange && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-2xl rounded-lg bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900">
+              Warning: Non-default status selected
+            </h3>
+            <p className="mt-2 text-sm text-gray-700">
+              New cards should normally start as <strong>Unloaded</strong>.
+              You selected <strong>{pendingStatusChange.nextStatus}</strong>.
+            </p>
+            <div className="mt-4 rounded border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+              <p className="font-semibold mb-2">Status meanings:</p>
+              <ul className="space-y-1">
+                {STATUS_OPTIONS.map((status) => (
+                  <li key={status}>
+                    <strong>{status}:</strong> {STATUS_MEANINGS[status]}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <label className="mt-4 flex items-center gap-2 text-sm text-gray-700">
+              <input
+                type="checkbox"
+                checked={dontShowStatusWarningAgain}
+                onChange={(e) => setDontShowStatusWarningAgain(e.target.checked)}
+              />
+              Do not show this warning again on this browser
+            </label>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                onClick={cancelStatusChange}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rounded bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-opacity-90"
+                onClick={confirmStatusChange}
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
