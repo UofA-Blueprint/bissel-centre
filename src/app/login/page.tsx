@@ -131,7 +131,7 @@ export default function LoginPage() {
     try {
       await sendPasswordResetEmail(auth, forgotEmail.trim().toLowerCase());
       setForgotStatus(
-        "A password reset email has been sent if the address exists in our system.",
+        "A password reset email has been sent if the address exists in our system. Please check your spam if you can't find email",
       );
     } catch (err: any) {
       if (err.code === "auth/user-not-found") {

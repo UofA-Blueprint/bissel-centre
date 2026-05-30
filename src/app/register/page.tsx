@@ -181,7 +181,7 @@ const AdminRegistration: React.FC = () => {
                 A password reset email should now be in{" "}
                 <span className="font-semibold">{registeredEmail}</span>. Ask
                 the registered user to open the email and set a new password to
-                complete onboarding.
+                complete onboarding. If they can't find the email, ask them to check spam
               </div>
 
               {registrationWarning && (
