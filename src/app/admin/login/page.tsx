@@ -7,6 +7,7 @@ import LogoHeader from "@/app/components/LogoHeader";
 import { signInWithCustomToken } from "firebase/auth";
 import { auth } from "@/app/services/firebase";
 import { useRouter } from "next/navigation";
+import BackNavigation from "@/app/components/BackNavigation";
 import "./style.css";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -173,6 +174,9 @@ function AdminLoginCard() {
 export default function AdminLogin() {
   return (
     <div className="hcenter center-window">
+      <div className="absolute left-6 top-6">
+        <BackNavigation href="/" label="Back to Home" />
+      </div>
       <LogoHeader />
       <AdminLoginCard />
     </div>

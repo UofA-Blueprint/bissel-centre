@@ -8,6 +8,7 @@ import {
   sendPasswordResetEmail,
 } from "firebase/auth";
 import Image from "next/image";
+import BackNavigation from "@/app/components/BackNavigation";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -148,6 +149,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col py-12 px-4 sm:px-6 lg:px-8">
+      <BackNavigation href="/" label="Back to Home" className="max-w-5xl mx-auto mb-6" />
       {/* Forgot Password Modal */}
       {showForgotModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">

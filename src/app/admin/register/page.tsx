@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import Image from "next/image";
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
+import BackNavigation from "@/app/components/BackNavigation";
 import {
   userFormFields,
   validateRegistrationForm,
@@ -109,6 +110,7 @@ const AdminRegisterPage: React.FC = () => {
 
   return (
     <div className="flex flex-col items-center w-full pt-10">
+      <BackNavigation href="/admin/login" label="Back to Admin Login" className="max-w-3xl px-4 mb-4" />
       <Image
         src="/BissellLogo_Blue 1.svg"
         alt="Bissell Logo"

@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Dialog, DialogTitle, Description } from "@headlessui/react";
+import BackNavigation from "@/app/components/BackNavigation";
 import {
   userFormFields,
   validateRegistrationForm,
@@ -94,6 +95,7 @@ const AdminRegistration: React.FC = () => {
 
   return (
     <div className="flex flex-col items-center w-full pt-10">
+      <BackNavigation href="/" label="Back to Home" className="max-w-3xl px-4 mb-4" />
       <Image
         src="/BissellLogo_Blue 1.svg"
         alt="Bissell Logo"
@@ -181,7 +183,7 @@ const AdminRegistration: React.FC = () => {
                 A password reset email should now be in{" "}
                 <span className="font-semibold">{registeredEmail}</span>. Ask
                 the registered user to open the email and set a new password to
-                complete onboarding. If they can't find the email, ask them to check spam
+                complete onboarding. If they can&apos;t find the email, ask them to check spam
               </div>
 
               {registrationWarning && (
