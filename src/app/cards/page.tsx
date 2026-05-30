@@ -12,6 +12,7 @@ import {
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Filter, Plus, Search, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import BackNavigation from "@/app/components/BackNavigation";
 import {
   CardStatus,
   CardDepartment,
@@ -427,6 +428,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
 
   return (
     <div className="space-y-4 p-6 bg-gray-50 font-sans">
+      <BackNavigation href="/dashboard" label="Back to Staff Dashboard" />
       {/* --- Header Actions --- */}
       <header className="flex items-end justify-between pb-4">
         <div>

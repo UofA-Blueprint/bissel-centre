@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { ArrowLeft, Home, Search, AlertTriangle } from "lucide-react";
+import { Home, Search, AlertTriangle } from "lucide-react";
+import BackNavigation from "@/app/components/BackNavigation";
 
 export default function NotFound() {
   return (
@@ -60,13 +61,9 @@ export default function NotFound() {
             Return Home
           </Link>
 
-          <button
-            onClick={() => window.history.back()}
-            className="inline-flex items-center justify-center w-full px-8 py-4 bg-white text-gray-700 font-semibold rounded-xl border-2 border-gray-200 hover:border-primary hover:text-primary transition-all duration-200 shadow-sm hover:shadow-md"
-          >
-            <ArrowLeft className="w-5 h-5 mr-3" />
-            Go Back
-          </button>
+          <div className="flex justify-center">
+            <BackNavigation href="/" label="Back to Home" />
+          </div>
         </div>
 
         {/* Help Section */}

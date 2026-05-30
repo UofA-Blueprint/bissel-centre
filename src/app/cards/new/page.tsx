@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import BackNavigation from "@/app/components/BackNavigation";
 import {
   CardStatus,
   CardDepartment,
@@ -182,16 +183,9 @@ export default function NewAllocationPage() {
 
   return (
     <div className="space-y-6">
+      <BackNavigation href="/cards" label="Back to ARC Card List" />
       <header className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="text-primary text-sm font-medium hover:underline"
-            onClick={() => router.back()}
-          >
-            ← New Allocation
-          </button>
-        </div>
+        <div className="text-primary text-sm font-medium">New Allocation</div>
         <button 
           onClick={handleSubmit}
           disabled={submitting}
