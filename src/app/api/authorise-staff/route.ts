@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { cookies } from "next/headers";
+import admin from "firebase-admin";
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,17 +16,17 @@ export async function POST(request: NextRequest) {
     if (scheme?.toLowerCase() !== "bearer" || !token) {
       return NextResponse.json(
         { error: "Missing or invalid Authorization header" },
-        { status: 401 }
+        { status: 401 },
       );
     }
 
-    const admin = await initAdmin();
+    const app = await initAdmin();
 
     // Verify the ID token to derive a trusted UID
-    const decoded = await admin.auth().verifyIdToken(token, true);
+    const decoded = await app.auth().verifyIdToken(token, true);
     const trustedUid = decoded.uid;
 
-    const db = admin.firestore();
+    const db = app.firestore();
 
     // Check if staff member exists in the administrative_staff collection
     const staffDocRef = db.collection("administrative_staff").doc(trustedUid);
@@ -34,11 +35,22 @@ export async function POST(request: NextRequest) {
     if (!staffDoc.exists) {
       return NextResponse.json(
         { error: "Staff member not found in administrative staff" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
     const staffData = staffDoc.data();
+
+    // On first successful login, activate onboarding if needed
+    if (staffData?.onboardingStatus === "invited") {
+      await staffDocRef.update({
+        onboardingStatus: "active",
+        inviteAcceptedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      // Update local staffData for response
+      staffData.onboardingStatus = "active";
+      staffData.inviteAcceptedAt = new Date(); // For client display only
+    }
 
     return NextResponse.json({
       success: true,
@@ -49,6 +61,8 @@ export async function POST(request: NextRequest) {
         lastName: staffData?.lastName || staffData?.secondName,
         role: staffData?.role || "staff",
         createdBy: staffData?.createdBy,
+        onboardingStatus: staffData?.onboardingStatus,
+        inviteAcceptedAt: staffData?.inviteAcceptedAt || null,
       },
     });
   } catch (error) {
@@ -56,7 +70,7 @@ export async function POST(request: NextRequest) {
     // If token verification fails, respond with 401
     return NextResponse.json(
       { error: "Failed to authorize staff member" },
-      { status: 401 }
+      { status: 401 },
     );
   }
 }
