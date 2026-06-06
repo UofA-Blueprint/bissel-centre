@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { initAdmin } from "@/app/services/firebaseAdmin";
-import { getDashboardSummary } from "@/app/services/dashboardService";
+import { getDashboardSummaryForViewer } from "@/app/services/dashboardService";
 
 export async function GET() {
   try {
@@ -35,7 +35,13 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const summary = await getDashboardSummary();
+    const userRecord = await app.auth().getUser(decodedClaims.uid);
+
+    const summary = await getDashboardSummaryForViewer({
+      uid: decodedClaims.uid,
+      email: userRecord.email || "",
+      name: userRecord.displayName || "",
+    });
     return NextResponse.json(summary);
   } catch (error) {
     console.error("Error fetching dashboard summary:", error);

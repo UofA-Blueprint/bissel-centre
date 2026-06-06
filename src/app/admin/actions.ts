@@ -2,7 +2,6 @@
 "use server";
 
 import { initAdmin } from "@/app/services/firebaseAdmin";
-import { getAllAdministrativeStaff } from "@/app/services/administrativeStaffService";
 import { cookies } from "next/headers";
 import { hashITIDNumber } from "@/utils/hashITIDNumber";
 import { randomBytes } from "crypto";
@@ -121,8 +120,26 @@ export const listUsers = async () => {
 };
 
 export const getAdministrativeStaff = async () => {
-  return await getAllAdministrativeStaff(); 
-}
+  const session = await getAdminSession();
+  if (!session) {
+    throw new Error("Unauthorized: IT admin session required");
+  }
+
+  const admin = await initAdmin();
+  const snapshot = await admin.firestore().collection("administrative_staff").get();
+
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      createdAt: data.createdAt?.toDate?.() ?? null,
+      createdBy: data.createdBy ?? "",
+      email: data.email ?? "",
+      firstName: data.firstName ?? "",
+      secondName: data.secondName ?? data.lastName ?? "",
+    };
+  });
+};
 
 export const deleteAdministrativeStaff = async (id: string) => {
   const session = await getAdminSession();

@@ -46,6 +46,12 @@ interface SessionUser {
 }
 
 interface DashboardSummaryResponse {
+  viewer: {
+    uid: string;
+    email: string;
+    name: string;
+
+  };
   stats: StatCardProps[];
   users: User[];
 }
@@ -67,26 +73,11 @@ export default function DashboardPage() {
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const sessionResponse = await fetch("/api/user-session");
-        if (!sessionResponse.ok) {
-          router.replace("/login");
-          return;
-        }
-
-        const sessionData = await sessionResponse.json();
-        if (sessionData.admin) {
-          router.replace("/admin/dashboard");
-          return;
-        }
-
-        setSessionUser({
-          name: sessionData.name,
-          email: sessionData.email,
-        });
 
         const dashboardResponse = await fetch("/api/dashboard/summary", {
           cache: "no-store",
@@ -103,10 +94,17 @@ export default function DashboardPage() {
         const summary =
           (await dashboardResponse.json()) as DashboardSummaryResponse;
 
+        setSessionUser({
+          name: summary.viewer.name,
+          email: summary.viewer.email
+        })
+
         setStats(summary.stats);
         setUsers(summary.users);
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
+      } finally {
+        setIsInitialLoading(false);
       }
     };
 
@@ -142,6 +140,14 @@ export default function DashboardPage() {
       console.error("Logout failed:", error);
     }
   };
+
+  if (isInitialLoading) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center">
+        <div className="h-14 w-14 rounded-full border-4 border-cyan-100 border-t-cyan-500 animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <main>
