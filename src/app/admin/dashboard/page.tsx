@@ -207,10 +207,10 @@ export default function AdminDashboardPage() {
 
     if (loading) {
         return (
-            <main>
-                <p>Loading...</p>
-            </main>
-        );
+            <div className="min-h-screen bg-white flex items-center justify-center">
+              <div className="h-14 w-14 rounded-full border-4 border-cyan-100 border-t-cyan-500 animate-spin" />
+            </div>
+          );
     }
 
     if (error) {

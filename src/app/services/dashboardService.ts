@@ -33,6 +33,11 @@ export interface DashboardUser {
 }
 
 export interface DashboardSummary {
+  viewer: {
+    uid: string;
+    email: string;
+    name: string;
+  }
   stats: DashboardStat[];
   users: DashboardUser[];
 }
@@ -75,17 +80,40 @@ const toDateString = (value: Date): string => {
   return `${mm}/${dd}/${yy}`;
 };
 
-export async function getDashboardSummary(): Promise<DashboardSummary> {
+export async function getDashboardSummaryForViewer(viewer: {
+  uid: string;
+  email: string;
+  name: string;
+}): Promise<DashboardSummary> {
   const app = await initAdmin();
   const db = app.firestore();
 
-  const [usersSnapshot, arcCardsSnapshot, bannedSnapshot, issuesSnapshot] =
-    await Promise.all([
-      db.collection("users").get(),
-      db.collection("arc_cards").get(),
-      db.collection("banned_users").get(),
-      db.collection("issues").get(),
-    ]);
+  const [
+  usersSnapshot,
+  issuesSnapshot,
+  totalCardsAgg,
+  activeCardsAgg,
+  expiredCardsAgg,
+  bannedUsersAgg,] = await Promise.all([
+  db
+    .collection("users")
+    .select(
+      "firstName",
+      "secondName",
+      "picture",
+      "aliases",
+      "banned",
+      "email",
+      "createdAt",
+      "updatedAt",
+    )
+    .get(),
+  db.collection("issues").select("userId", "createdAt", "returnedAt").get(),
+  db.collection("arc_cards").count().get(),
+  db.collection("arc_cards").where("status", "==", "Active").count().get(),
+  db.collection("arc_cards").where("status", "==", "Expired").count().get(),
+  db.collection("banned_users").count().get(),
+]);
 
   const now = new Date();
   const activeIssueByUserId = new Set<string>();
@@ -128,13 +156,9 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     };
   });
 
-  const availableCards = arcCardsSnapshot.size;
-  const activeCards = arcCardsSnapshot.docs.filter(
-    (doc) => doc.data().status === "Active",
-  ).length;
-  const expiredCards = arcCardsSnapshot.docs.filter(
-    (doc) => doc.data().status === "Expired",
-  ).length;
+  const availableCards = totalCardsAgg.data().count;
+  const activeCards = activeCardsAgg.data().count;
+  const expiredCards = expiredCardsAgg.data().count;
 
   const stats: DashboardStat[] = [
     { icon: "/card.svg", number: availableCards, label: "Available Cards" },
@@ -142,12 +166,13 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
     { icon: "/caution.svg", number: expiredCards, label: "Expired Cards" },
     {
       icon: "/flag.svg",
-      number: bannedSnapshot.size,
+      number: bannedUsersAgg.data().count,
       label: "Flagged Users",
     },
   ];
 
   return {
+    viewer,
     stats,
     users,
   };
