@@ -180,6 +180,51 @@ function SearchableSelect({
   );
 }
 
+function StatusWarningTooltip({ children }: { children: React.ReactNode }) {
+  const [show, setShow] = useState(false);
+  const iconRef = useRef<HTMLSpanElement>(null);
+  const [style, setStyle] = useState<React.CSSProperties>({});
+
+  const showTooltip = () => {
+    if (!iconRef.current) return;
+    const rect = iconRef.current.getBoundingClientRect();
+    const tooltipWidth = 224; // matches w-56
+    const openRight = rect.right + 8 + tooltipWidth <= window.innerWidth;
+    setStyle({
+      position: "fixed",
+      top: rect.top + rect.height / 2,
+      transform: "translateY(-50%)",
+      ...(openRight
+        ? { left: rect.right + 8 }
+        : { right: window.innerWidth - rect.left + 8 }),
+    });
+    setShow(true);
+  };
+
+  return (
+    <span
+      ref={iconRef}
+      className="inline-flex items-center"
+      onMouseEnter={showTooltip}
+      onMouseLeave={() => setShow(false)}
+    >
+      <AlertTriangle
+        className="h-4 w-4 cursor-help text-amber-500"
+        aria-label="Non-default status"
+      />
+      {show && (
+        <div
+          role="tooltip"
+          style={style}
+          className="pointer-events-none z-[9999] w-56 rounded-md bg-gray-900 px-3 py-2 text-xs leading-snug text-white shadow-lg"
+        >
+          {children}
+        </div>
+      )}
+    </span>
+  );
+}
+
 interface NewCardModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -724,16 +769,35 @@ export default function NewCardModal({
                           {row.allocationDate}
                         </td>
                         <td className="px-3 py-2.5">
-                          <SearchableSelect
-                            options={STATUS_OPTIONS}
-                            value={row.status}
-                            onChange={(val) =>
-                              handleStatusChangeAttempt(
-                                row.id,
-                                val as CardStatus
-                              )
-                            }
-                          />
+                          <div className="flex items-center gap-1.5">
+                            <div className="min-w-0 flex-1">
+                              <SearchableSelect
+                                options={STATUS_OPTIONS}
+                                value={row.status}
+                                onChange={(val) =>
+                                  handleStatusChangeAttempt(
+                                    row.id,
+                                    val as CardStatus
+                                  )
+                                }
+                              />
+                            </div>
+                            {/* Constant-width slot so the column never resizes */}
+                            <div className="w-4 flex-shrink-0">
+                              {row.status !== "Unloaded" && (
+                                <StatusWarningTooltip>
+                                  Is this card really{" "}
+                                  <strong>{row.status}</strong>? New cards are
+                                  usually <strong>Unloaded</strong>. {row.status}{" "}
+                                  cards means{" "}
+                                  {STATUS_MEANINGS[row.status]
+                                    .charAt(0)
+                                    .toLowerCase() +
+                                    STATUS_MEANINGS[row.status].slice(1)}
+                                </StatusWarningTooltip>
+                              )}
+                            </div>
+                          </div>
                         </td>
                         <td className="px-3 py-2.5">
                           <SearchableSelect
