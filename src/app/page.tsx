@@ -1,11 +1,16 @@
 "use client";
 import Image from "next/image";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+
 
 export default function Home() {
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
-  const router = useRouter();
+
+
+  const registerHref = isAdmin ? "/admin/register" : "/register";
+  const loginHref = isAdmin ? "/admin/login" : "/login";
+
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-20 p-4 md:p-8 lg:p-12">
@@ -37,30 +42,18 @@ export default function Home() {
         </div>
 
         <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-4 w-full">
-          <button
-            className="bg-primary text-white px-8 sm:px-12 md:px-16 py-2 rounded-lg shadow-md hover:bg-opacity-50 transition-all duration-200 w-full sm:w-auto"
-            onClick={() => {
-              if(isAdmin){
-              router.push("/admin/register");
-              } else {
-                router.push("/register")
-              }
-            }}
+        <Link
+        href={registerHref}
+        className="bg-primary text-white px-8 sm:px-12 md:px-16 py-2 rounded-lg shadow-md hover:bg-opacity-50 transition-all duration-200 w-full sm:w-auto inline-flex items-center justify-center"
           >
-            Register
-          </button>
-          <button
-            className="bg-primary text-white px-8 sm:px-12 md:px-16 py-2 rounded-lg shadow-md hover:bg-opacity-50 transition-all duration-200 w-full sm:w-auto"
-            onClick={() => {
-              if (isAdmin) {
-                router.push("/admin/login");
-              } else {
-                router.push("/login");
-              }
-            }}
-          >
-            Login
-          </button>
+          Register
+        </Link>
+        <Link
+          href={loginHref}
+          className="bg-primary text-white px-8 sm:px-12 md:px-16 py-2 rounded-lg shadow-md hover:bg-opacity-50 transition-all duration-200 w-full sm:w-auto inline-flex items-center justify-center"
+        >
+          Login
+        </Link>
         </div>
       </div>
 
