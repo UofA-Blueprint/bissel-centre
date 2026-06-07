@@ -110,11 +110,7 @@ export default function AdminDashboardPage() {
         async function fetchData() {
             try {
                 // First check if there's a valid session
-                const sessionCheckResponse = await fetch("/api/user-session");
-                if (!sessionCheckResponse.ok) {
-                    router.replace("/");
-                    return;
-                }
+                
 
                 // Fetch session data
                 const sessionResponse = await getAdminSession();
