@@ -127,7 +127,6 @@ export default function DashboardPage() {
   }, [searchQuery, users]);
 
   const handleGoToCards = () => {
-    document.cookie = "cards_access=1; Path=/; Max-Age=600; SameSite=Lax";
     router.push("/cards");
   };
 
