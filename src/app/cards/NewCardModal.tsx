@@ -17,6 +17,16 @@ import {
   DEPARTMENT_OPTIONS,
 } from "./types";
 
+const STATUS_MEANINGS: Record<CardStatus, string> = {
+  Active: "Card is being used by someone.",
+  Unattributed: "Card is ready to be issued and not currently assigned.",
+  Unloaded: "Card is created but not loaded with money yet.",
+  Expired: "Card is no longer valid.",
+  Cancelled: "Card has been cancelled and should not be used.",
+};
+
+const STATUS_WARNING_PREF_KEY = "arc_card_new_status_warning_hide_v1";
+
 type DraftCard = {
   id: number;
   allocationDate: string;
@@ -187,6 +197,13 @@ export default function NewCardModal({
   const [error, setError] = useState<string | null>(null);
   const [csvErrors, setCsvErrors] = useState<CsvError[]>([]);
   const [shakingRows, setShakingRows] = useState<Set<number>>(new Set());
+  const [statusWarningOpen, setStatusWarningOpen] = useState(false);
+  const [pendingStatusChange, setPendingStatusChange] = useState<{
+    rowId: number;
+    nextStatus: CardStatus;
+  } | null>(null);
+  const [dontShowStatusWarningAgain, setDontShowStatusWarningAgain] =
+    useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -248,6 +265,54 @@ export default function NewCardModal({
     setRows((prev) =>
       prev.map((row) => (row.id === id ? { ...row, [key]: value } : row))
     );
+  };
+
+  const shouldSkipStatusWarning = (): boolean => {
+    try {
+      return localStorage.getItem(STATUS_WARNING_PREF_KEY) === "1";
+    } catch {
+      // If localStorage is blocked/unavailable, default to showing the warning
+      return false;
+    }
+  };
+
+  const handleStatusChangeAttempt = (
+    rowId: number,
+    nextStatus: CardStatus
+  ) => {
+    // No warning for the safe default status, or if the user opted out
+    if (nextStatus === "Unloaded" || shouldSkipStatusWarning()) {
+      updateRow(rowId, "status", nextStatus);
+      return;
+    }
+    setPendingStatusChange({ rowId, nextStatus });
+    setDontShowStatusWarningAgain(false);
+    setStatusWarningOpen(true);
+  };
+
+  const confirmStatusChange = () => {
+    if (!pendingStatusChange) return;
+    if (dontShowStatusWarningAgain) {
+      try {
+        localStorage.setItem(STATUS_WARNING_PREF_KEY, "1");
+      } catch {
+        // ignore localStorage write failures
+      }
+    }
+    updateRow(
+      pendingStatusChange.rowId,
+      "status",
+      pendingStatusChange.nextStatus
+    );
+    setStatusWarningOpen(false);
+    setPendingStatusChange(null);
+    setDontShowStatusWarningAgain(false);
+  };
+
+  const cancelStatusChange = () => {
+    setStatusWarningOpen(false);
+    setPendingStatusChange(null);
+    setDontShowStatusWarningAgain(false);
   };
 
   const removeRow = (id: number) => {
@@ -532,6 +597,7 @@ export default function NewCardModal({
   if (!isOpen) return null;
 
   return (
+    <>
     <div
       className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
       onClick={handleOverlayClick}
@@ -662,7 +728,10 @@ export default function NewCardModal({
                             options={STATUS_OPTIONS}
                             value={row.status}
                             onChange={(val) =>
-                              updateRow(row.id, "status", val as CardStatus)
+                              handleStatusChangeAttempt(
+                                row.id,
+                                val as CardStatus
+                              )
                             }
                           />
                         </td>
@@ -785,5 +854,61 @@ export default function NewCardModal({
         </div>
       </div>
     </div>
+    {statusWarningOpen && pendingStatusChange && (
+      <div
+        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4"
+        onClick={cancelStatusChange}
+      >
+        <div
+          className="w-full max-w-2xl rounded-lg bg-white p-5 shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="text-lg font-semibold text-gray-900">
+            Warning: Non-default status selected
+          </h3>
+          <p className="mt-2 text-sm text-gray-700">
+            New cards should normally start as <strong>Unloaded</strong>. You
+            selected <strong>{pendingStatusChange.nextStatus}</strong>.
+          </p>
+          <div className="mt-4 rounded border border-gray-200 bg-gray-50 p-3 text-sm text-gray-700">
+            <p className="font-semibold mb-2">Status meanings:</p>
+            <ul className="space-y-1">
+              {STATUS_OPTIONS.map((status) => (
+                <li key={status}>
+                  <strong>{status}:</strong> {STATUS_MEANINGS[status]}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <label className="mt-4 flex items-center gap-2 text-sm text-gray-700">
+            <input
+              type="checkbox"
+              checked={dontShowStatusWarningAgain}
+              onChange={(e) =>
+                setDontShowStatusWarningAgain(e.target.checked)
+              }
+            />
+            Do not show this warning again on this browser
+          </label>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              type="button"
+              className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              onClick={cancelStatusChange}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="rounded bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white hover:bg-cyan-600"
+              onClick={confirmStatusChange}
+            >
+              Continue
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
