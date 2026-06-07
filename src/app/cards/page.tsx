@@ -9,10 +9,10 @@ import {
   SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Filter, Plus, Search, X } from "lucide-react";
-import Link from "next/link";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Eye, EyeOff, Filter, Plus, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import BackNavigation from "@/app/components/BackNavigation";
+import NewCardModal from "./NewCardModal";
 import {
   CardStatus,
   CardDepartment,
@@ -126,6 +126,12 @@ export default function CardsPage() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
   
+  // Security code visibility
+  const [showSecurityCodes, setShowSecurityCodes] = useState(false);
+
+  // New card modal
+  const [showNewCardModal, setShowNewCardModal] = useState(false);
+
   // Search and Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
@@ -181,7 +187,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
+  const loadCards = () => {
     fetchCards()
       .then((cards) => {
         setData(cards);
@@ -191,6 +197,10 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
         setError(err.message);
         setLoading(false);
       });
+  };
+
+  useEffect(() => {
+    loadCards();
   }, []);
 
   // Filter and search logic
@@ -304,7 +314,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
         accessorKey: "final7Digits",
         header: ({ column }) => (
           <SortableHeader
-            label="Final 7 Digits"
+            label="ARC Card Number"
             sorted={column.getIsSorted()}
             onClick={column.getToggleSortingHandler()}
           />
@@ -322,7 +332,14 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
             onClick={column.getToggleSortingHandler()}
           />
         ),
-        cell: ({ getValue }) => <span className="text-gray-700">{getValue<string>()}</span>,
+        cell: ({ getValue }) => {
+          const code = getValue<string>();
+          return (
+            <span className="text-gray-700 font-mono">
+              {showSecurityCodes ? code : "•••"}
+            </span>
+          );
+        },
       },
       {
         accessorKey: "passRecipient",
@@ -374,7 +391,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
         cell: ({ getValue }) => <span className="text-gray-500">{getValue<string>()}</span>,
       },
     ],
-    [expandedDates]
+    [expandedDates, showSecurityCodes]
   );
 
   const table = useReactTable({
@@ -534,13 +551,29 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
             )}
           </div>
           
-          <Link
-            href="/cards/new"
+          <button
+            onClick={() => setShowSecurityCodes(!showSecurityCodes)}
+            className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+              showSecurityCodes
+                ? "border-cyan-500 bg-cyan-50 text-cyan-700"
+                : "border-gray-300 text-gray-600 hover:bg-gray-50"
+            }`}
+            title={showSecurityCodes ? "Hide security codes" : "Show security codes"}
+          >
+            {showSecurityCodes ? (
+              <Eye className="h-4 w-4" />
+            ) : (
+              <EyeOff className="h-4 w-4" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setShowNewCardModal(true)}
             className="flex items-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors"
           >
             <Plus className="h-4 w-4" strokeWidth={3} />
             New Allocation
-          </Link>
+          </button>
         </div>
       </header>
 
@@ -622,6 +655,13 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
+
+      {/* New Card Modal */}
+      <NewCardModal
+        isOpen={showNewCardModal}
+        onClose={() => setShowNewCardModal(false)}
+        onSaved={loadCards}
+      />
     </div>
   );
 }
