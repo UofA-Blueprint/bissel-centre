@@ -44,12 +44,6 @@ interface User {
 }
 
 interface DashboardSummaryResponse {
-  viewer: {
-    uid: string;
-    email: string;
-    name: string;
-
-  };
   stats: StatCardProps[];
   users: User[];
 }
@@ -91,11 +85,6 @@ export default function DashboardPage() {
         const summary =
           (await dashboardResponse.json()) as DashboardSummaryResponse;
 
-        setSessionUser({
-          name: summary.viewer.name,
-          email: summary.viewer.email
-        })
-
         setStats(summary.stats);
         setUsers(summary.users);
       } catch (error) {
@@ -127,24 +116,6 @@ export default function DashboardPage() {
     document.cookie = "cards_access=1; Path=/; Max-Age=600; SameSite=Lax";
     router.push("/cards");
   };
-
-  const handleLogout = async () => {
-    try {
-      await fetch("/api/logout", { method: "POST" });
-      await signOut(auth);
-      router.replace("/login");
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <div className="h-14 w-14 rounded-full border-4 border-cyan-100 border-t-cyan-500 animate-spin" />
-      </div>
-    );
-  }
 
   return (
     <main className="lg:h-screen lg:flex lg:flex-col">
