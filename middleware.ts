@@ -144,14 +144,6 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Cards routes are intentionally entered from dashboard action only.
-  if (pathname.startsWith("/cards")) {
-    const cardsAccessCookie = request.cookies.get("cards_access")?.value;
-    if (cardsAccessCookie !== "1") {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
-  }
-
   // If we get here, user has valid session and appropriate permissions
   return NextResponse.next();
 }

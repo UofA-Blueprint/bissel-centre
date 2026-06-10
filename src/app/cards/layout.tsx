@@ -8,14 +8,9 @@ export default async function CardsLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("session")?.value;
-  const cardsAccess = cookieStore.get("cards_access")?.value;
 
   if (!sessionCookie) {
     redirect("/login");
-  }
-
-  if (cardsAccess !== "1") {
-    redirect("/dashboard");
   }
 
   const admin = await initAdmin();
