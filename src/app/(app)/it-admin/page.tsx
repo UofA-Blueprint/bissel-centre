@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import PageHeader from "@/app/components/PageHeader";
+import AdminGateActions from "@/app/components/AdminGateActions";
 
 // The "Admin" tab is visible to everyone in the shared nav, but the page is
 // only functional for IT admins. Non-admins get a message instead of being
@@ -29,10 +30,11 @@ export default async function ITAdminPage() {
     return (
       <>
         <PageHeader title="Admin" />
-        <div className="flex items-center justify-center p-16">
+        <div className="flex flex-col items-center justify-center gap-6 p-16">
           <p className="text-gray-600 text-lg text-center">
             You need to sign in as an IT Admin to access this page.
           </p>
+          <AdminGateActions />
         </div>
       </>
     );
