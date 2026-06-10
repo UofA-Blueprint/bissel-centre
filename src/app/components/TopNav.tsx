@@ -21,7 +21,17 @@ const NAV_ITEMS = [
   { label: "Admin", href: "/it-admin" },
 ];
 
-export default function TopNav({ user }: { user: NavUser }) {
+export default function TopNav({
+  user,
+  navItems = NAV_ITEMS,
+  homeHref = "/dashboard",
+  logoutRedirect = "/",
+}: {
+  user: NavUser;
+  navItems?: { label: string; href: string }[];
+  homeHref?: string;
+  logoutRedirect?: string;
+}) {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
@@ -49,7 +59,7 @@ export default function TopNav({ user }: { user: NavUser }) {
     try {
       await fetch("/api/logout", { method: "POST" });
       await signOut(auth);
-      router.replace("/");
+      router.replace(logoutRedirect);
     } catch (error) {
       console.error("Logout failed:", error);
     }
@@ -72,7 +82,7 @@ export default function TopNav({ user }: { user: NavUser }) {
         <div className="flex items-center justify-between h-16 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:h-20">
           {/* Logo */}
           <div className="flex items-center lg:justify-self-start">
-            <Link href="/dashboard">
+            <Link href={homeHref}>
               <Image
                 src="/logo.png"
                 alt="Bissell"
@@ -87,7 +97,7 @@ export default function TopNav({ user }: { user: NavUser }) {
           {/* Centered Nav (desktop) */}
           <div className="hidden lg:flex lg:justify-center self-stretch">
             <nav className="flex h-full">
-              {NAV_ITEMS.map(({ label, href }) => (
+              {navItems.map(({ label, href }) => (
                 <Link
                   key={href}
                   href={href}

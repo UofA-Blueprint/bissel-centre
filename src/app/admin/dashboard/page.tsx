@@ -2,8 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { signOut } from "firebase/auth";
-import { auth } from "../../services/firebase";
 import {
     getAdminSession,
     getAdministrativeStaff,
@@ -12,6 +10,8 @@ import {
 import Fuse from "fuse.js"; // Import Fuse.js for fuzzy search
 import React from "react";
 import Image from "next/image";
+import TopNav from "@/app/components/TopNav";
+import SearchBar from "@/app/components/SearchBar";
 
 interface User {
     id: string;
@@ -160,16 +160,6 @@ export default function AdminDashboardPage() {
         setSearchResults(results);
     }, [searchQuery, users]);
 
-    const handleLogout = async () => {
-        try {
-            await fetch("/api/logout", { method: "POST" });
-            await signOut(auth);
-            router.replace("/admin/login");
-        } catch (error) {
-            console.error("Logout failed:", error);
-        }
-    };
-
     async function handleDeleteUser(uid: string) {
         if (!confirm("Are you sure you want to delete this user?")) {
             return;
@@ -223,60 +213,30 @@ export default function AdminDashboardPage() {
 
     return (
         <main>
-            <div className="bg-white shadow mb-6">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between items-center py-6">
-                        <h1 className="text-2xl font-bold text-gray-900">
-                            Welcome, Admin {session.name || session.email}
-                        </h1>
-                        <button
-                            onClick={handleLogout}
-                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium"
-                        >
-                            Logout
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div className="p-6 bg-gray-100 min-h-screen px-24">
+            <TopNav
+                user={{ name: session.name, email: session.email ?? "" }}
+                navItems={[{ label: "Dashboard", href: "/admin/dashboard" }]}
+                homeHref="/admin/dashboard"
+                logoutRedirect="/admin/login"
+            />
+            <div className="p-6 bg-gray-100 min-h-screen px-4 sm:px-8 md:px-16 lg:px-24">
                 {/* Search Bar */}
-                <div className="bg-[#979793] rounded-xl shadow-md max-w-7xl mx-auto mb-6 px-2 py-2">
-                    {/* Search input row */}
-                    <div className="flex items-center bg-white rounded-lg px-4 py-2 mb-3">
-                        <input
-                            type="text"
-                            placeholder="Search administrative staff..."
-                            className="flex-1 outline-none text-gray-700 text-base bg-white"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                <SearchBar
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    placeholder="Search administrative staff..."
+                    className="max-w-7xl mx-auto mb-6"
+                >
+                    <button className="flex items-center gap-2">
+                        <Image
+                            src="/filter.svg"
+                            alt="Filter"
+                            width={16}
+                            height={16}
                         />
-                        <button
-                            className="p-2 bg-cyan-500 hover:bg-cyan-600 rounded-full"
-                            // onClick={handleSearch}
-                        >
-                            <Image
-                                src="/search-enter.svg"
-                                alt="Search"
-                                width={20}
-                                height={20}
-                            />
-                        </button>
-                    </div>
-
-                    {/* Button row inside gray container */}
-                    <div className="flex justify-between items-center text-white text-sm">
-                        
-                        <button className="flex items-center gap-2">
-                            <Image
-                                src="/filter.svg"
-                                alt="Filter"
-                                width={16}
-                                height={16}
-                            />
-                            Filters
-                        </button>
-                    </div>
-                </div>
+                        Filters
+                    </button>
+                </SearchBar>
 
                 {/* Search Results */}
                 <div className="flex flex-wrap gap-4 justify-center max-w-7xl mx-auto">
