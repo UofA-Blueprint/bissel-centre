@@ -12,7 +12,7 @@ import {
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, ChevronUp, Filter, Plus, Search, X } from "lucide-react";
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import BackNavigation from "@/app/components/BackNavigation";
 import {
   CardStatus,
@@ -183,7 +183,6 @@ export default function CardsPage() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [statusFilters, setStatusFilters] = useState<CardStatus[]>([]);
   const [departmentFilters, setDepartmentFilters] = useState<CardDepartment[]>([]);
-  const filterRef = useRef<HTMLDivElement>(null);
 
   // edit card api call
 const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
@@ -221,17 +220,6 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
     prev.map((card) => (card.id === cardId ? { ...card, status: nextStatus } : card)),
   );
 };
-
-  // Close filter dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-        setShowFilterDropdown(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   useEffect(() => {
     fetchCards()
@@ -498,82 +486,22 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
             )}
           </div>
           
-          <div className="relative" ref={filterRef}>
-            <button
-              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-              className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition-colors ${
-                activeFilterCount > 0
-                  ? "border-cyan-500 bg-cyan-50 text-cyan-700"
-                  : "border-cyan-500 text-cyan-600 hover:bg-cyan-50"
-              }`}
-            >
-              <Filter className="h-4 w-4" />
-              Filter
-              {activeFilterCount > 0 && (
-                <span className="ml-1 rounded-full bg-cyan-500 px-2 py-0.5 text-xs text-white">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-            
-            {showFilterDropdown && (
-              <div className="absolute right-0 top-full mt-2 w-80 rounded-lg border border-gray-200 bg-white shadow-lg z-50">
-                <div className="p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900">Filters</h3>
-                    {activeFilterCount > 0 && (
-                      <button
-                        onClick={clearAllFilters}
-                        className="text-xs text-cyan-600 hover:text-cyan-700"
-                      >
-                        Clear all
-                      </button>
-                    )}
-                  </div>
-                  
-                  {/* Status Filter */}
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Status</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {STATUS_OPTIONS.map((status) => (
-                        <button
-                          key={status}
-                          onClick={() => toggleStatusFilter(status)}
-                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                            statusFilters.includes(status)
-                              ? STATUS_STYLES[status] + " ring-2 ring-offset-1 ring-cyan-500"
-                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          }`}
-                        >
-                          {status}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* Department Filter */}
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Department</h4>
-                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-                      {DEPARTMENT_OPTIONS.map((dept) => (
-                        <button
-                          key={dept}
-                          onClick={() => toggleDepartmentFilter(dept)}
-                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                            departmentFilters.includes(dept)
-                              ? DEPARTMENT_STYLES[dept] + " ring-2 ring-offset-1 ring-cyan-500"
-                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          }`}
-                        >
-                          {dept}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
+          <button
+            onClick={() => setShowFilterDropdown(true)}
+            className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition-colors ${
+              activeFilterCount > 0
+                ? "border-cyan-500 bg-cyan-50 text-cyan-700"
+                : "border-cyan-500 text-cyan-600 hover:bg-cyan-50"
+            }`}
+          >
+            <Filter className="h-4 w-4" />
+            Filter
+            {activeFilterCount > 0 && (
+              <span className="ml-1 rounded-full bg-cyan-500 px-2 py-0.5 text-xs text-white">
+                {activeFilterCount}
+              </span>
             )}
-          </div>
+          </button>
           
           <Link
             href="/cards/new"
@@ -653,11 +581,16 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
           ) : (
             rows.map((row) => {
               const card = row.original;
+              const isSelected = selectedCardId === card.id;
               return (
                 <button
                   key={row.id}
                   onClick={() => setSelectedCardId(card.id)}
-                  className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-left shadow-sm active:bg-gray-50"
+                  className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left shadow-sm transition hover:bg-gray-50 active:scale-[0.99] active:bg-gray-100 ${
+                    isSelected
+                      ? "border-cyan-400 bg-cyan-50 ring-1 ring-cyan-300"
+                      : "border-gray-200 bg-white"
+                  }`}
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
@@ -784,6 +717,86 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
                 </dl>
               </>
             )}
+          </DialogPanel>
+        </div>
+      </Dialog>
+
+      {/* --- Filter Drawer --- */}
+      <Dialog
+        open={showFilterDropdown}
+        onClose={() => setShowFilterDropdown(false)}
+        className="relative z-50"
+      >
+        <DialogBackdrop
+          transition
+          className="fixed inset-0 bg-black/30 transition-opacity duration-200 data-[closed]:opacity-0"
+        />
+        <div className="fixed inset-0 flex justify-end">
+          <DialogPanel
+            transition
+            className="flex h-full w-full max-w-sm flex-col overflow-y-auto bg-white p-5 shadow-xl transition duration-200 ease-out data-[closed]:translate-x-full"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <DialogTitle className="text-lg font-semibold text-gray-900">
+                Filters
+              </DialogTitle>
+              <div className="flex items-center gap-3">
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={clearAllFilters}
+                    className="text-xs text-cyan-600 hover:text-cyan-700"
+                  >
+                    Clear all
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowFilterDropdown(false)}
+                  className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Status Filter */}
+            <div className="mb-6">
+              <h4 className="mb-2 text-sm font-medium text-gray-700">Status</h4>
+              <div className="flex flex-wrap gap-2">
+                {STATUS_OPTIONS.map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => toggleStatusFilter(status)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      statusFilters.includes(status)
+                        ? STATUS_STYLES[status] + " ring-2 ring-offset-1 ring-cyan-500"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Department Filter */}
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-gray-700">Department</h4>
+              <div className="flex flex-wrap gap-2">
+                {DEPARTMENT_OPTIONS.map((dept) => (
+                  <button
+                    key={dept}
+                    onClick={() => toggleDepartmentFilter(dept)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      departmentFilters.includes(dept)
+                        ? DEPARTMENT_STYLES[dept] + " ring-2 ring-offset-1 ring-cyan-500"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {dept}
+                  </button>
+                ))}
+              </div>
+            </div>
           </DialogPanel>
         </div>
       </Dialog>
