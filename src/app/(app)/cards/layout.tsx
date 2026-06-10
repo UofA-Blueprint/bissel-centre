@@ -1,4 +1,3 @@
-import "../globals.css";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { initAdmin } from "@/app/services/firebaseAdmin";

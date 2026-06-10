@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Fuse from "fuse.js";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
-import Header from "@/app/components/Header";
 
 interface StatCardProps {
   icon: string;
@@ -118,7 +117,6 @@ export default function DashboardPage() {
 
   return (
     <main className="lg:h-screen lg:flex lg:flex-col">
-      <Header title="" />
       <div className="p-6 bg-gray-100 min-h-screen px-4 sm:px-8 md:px-16 lg:px-24 lg:min-h-0 lg:flex-1 lg:flex lg:flex-col lg:overflow-hidden">
         {/* Stats Section */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 max-w-7xl mx-auto w-full lg:shrink-0">
