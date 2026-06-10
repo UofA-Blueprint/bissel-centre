@@ -8,6 +8,7 @@ import Link from "next/link";
 import Fuse from "fuse.js";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
 import SearchBar from "@/app/components/SearchBar";
+import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
 
 interface StatCardProps {
   icon: string;
@@ -125,18 +126,7 @@ export default function DashboardPage() {
   if (forbidden) {
     return (
       <main className="bg-gray-100 min-h-screen">
-        <div className="flex flex-col items-center justify-center gap-6 p-16 text-center">
-          <p className="text-gray-600 text-lg max-w-md">
-            This dashboard is for administrative staff. You&apos;re signed in as
-            an IT Admin.
-          </p>
-          <Link
-            href="/admin/dashboard"
-            className="px-6 py-2.5 rounded-lg bg-primary text-white font-medium hover:bg-cyan-600 transition-colors"
-          >
-            Go to Admin Dashboard
-          </Link>
-        </div>
+        <StaffOnlyNotice />
       </main>
     );
   }

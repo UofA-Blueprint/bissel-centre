@@ -215,7 +215,7 @@ export default function AdminDashboardPage() {
         <main>
             <TopNav
                 user={{ name: session.name, email: session.email ?? "" }}
-                navItems={[{ label: "Dashboard", href: "/admin/dashboard" }]}
+                activeHref="/it-admin"
                 homeHref="/admin/dashboard"
                 logoutRedirect="/admin/login"
             />

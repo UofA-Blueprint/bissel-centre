@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { initAdmin } from "@/app/services/firebaseAdmin";
+import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
 
 export default async function CardsLayout({
   children,
@@ -20,9 +21,10 @@ export default async function CardsLayout({
     redirect("/login");
   }
 
-  // IT admins are not allowed on staff cards routes.
+  // IT admins are not staff: show the same notice as the dashboard instead of
+  // rendering the cards content.
   if (decodedClaims.admin === true) {
-    redirect("/admin/dashboard");
+    return <StaffOnlyNotice />;
   }
 
   // Ensure this is a regular administrative staff member.

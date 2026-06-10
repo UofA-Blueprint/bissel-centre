@@ -26,11 +26,14 @@ export default function TopNav({
   navItems = NAV_ITEMS,
   homeHref = "/dashboard",
   logoutRedirect = "/",
+  activeHref,
 }: {
   user: NavUser;
   navItems?: { label: string; href: string }[];
   homeHref?: string;
   logoutRedirect?: string;
+  /** Force which nav item is highlighted (overrides the pathname match). */
+  activeHref?: string;
 }) {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -74,7 +77,9 @@ export default function TopNav({
       .slice(0, 2);
 
   const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + "/");
+    activeHref
+      ? href === activeHref
+      : pathname === href || pathname.startsWith(href + "/");
 
   return (
     <div className="bg-white shadow-sm border-b">
@@ -104,7 +109,7 @@ export default function TopNav({
                   className={`px-8 flex items-center text-lg border-t-4 border-t-transparent border-b-4 ${
                     isActive(href)
                       ? "border-primary text-gray-900 font-bold"
-                      : "border-transparent text-gray-500 font-semibold hover:text-gray-700 hover:border-gray-300"
+                      : "border-transparent text-gray-500 font-semibold hover:text-gray-700 hover:border-b-gray-300"
                   }`}
                 >
                   {label}
