@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, ChevronDown, LogOut } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -23,10 +23,11 @@ const NAV_ITEMS = [
 
 export default function TopNav({ user }: { user: NavUser }) {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
-  // Close dropdown when clicking outside
+  // Close profile dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const target = event.target as Element;
@@ -38,6 +39,11 @@ export default function TopNav({ user }: { user: NavUser }) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showProfileDropdown]);
+
+  // Close the mobile menu whenever the route changes
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   const handleLogout = async () => {
     try {
@@ -62,24 +68,24 @@ export default function TopNav({ user }: { user: NavUser }) {
 
   return (
     <div className="bg-white shadow-sm border-b">
-      <div className="px-6 sm:px-10 lg:px-16">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center h-20">
+      <div className="px-4 sm:px-6 lg:px-16">
+        <div className="flex items-center justify-between h-16 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:h-20">
           {/* Logo */}
-          <div className="flex items-center justify-self-start">
-            <Link href="/dashboard" className="ml-1">
+          <div className="flex items-center lg:justify-self-start">
+            <Link href="/dashboard">
               <Image
                 src="/logo.png"
-                alt="ARC Card"
-                width={100}
-                height={100}
-                className="rounded-lg"
+                alt="Bissell"
+                width={622}
+                height={206}
+                className="h-8 lg:h-12 w-auto"
                 priority
               />
             </Link>
           </div>
 
-          {/* Centered Nav */}
-          <div className="flex justify-center self-stretch">
+          {/* Centered Nav (desktop) */}
+          <div className="hidden lg:flex lg:justify-center self-stretch">
             <nav className="flex h-full">
               {NAV_ITEMS.map(({ label, href }) => (
                 <Link
@@ -98,7 +104,7 @@ export default function TopNav({ user }: { user: NavUser }) {
           </div>
 
           {/* Right Actions */}
-          <div className="flex items-center space-x-4 justify-self-end">
+          <div className="flex items-center gap-2 sm:gap-4 lg:justify-self-end">
             <button className="text-gray-500 hover:text-gray-700">
               <Bell size={20} />
             </button>
@@ -106,7 +112,7 @@ export default function TopNav({ user }: { user: NavUser }) {
             <div className="relative">
               <button
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                className="flex items-center space-x-2 hover:bg-gray-100 rounded-lg px-2 py-1 transition-colors"
+                className="flex items-center space-x-2 hover:bg-gray-100 rounded-lg px-1 sm:px-2 py-1 transition-colors"
               >
                 {user.photoURL ? (
                   <Image
@@ -117,20 +123,20 @@ export default function TopNav({ user }: { user: NavUser }) {
                     className="w-8 h-8 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="w-8 h-8 bg-gradient-to-br from-primary to-cyan-500 rounded-full flex items-center justify-center">
+                  <div className="w-8 h-8 bg-gradient-to-br from-primary to-cyan-500 rounded-full flex items-center justify-center shrink-0">
                     <span className="text-white text-xs font-medium">
                       {getUserInitials(user.name || user.email || "U")}
                     </span>
                   </div>
                 )}
 
-                <span className="text-sm text-gray-800 font-medium">
+                <span className="hidden sm:block max-w-[160px] truncate text-sm text-gray-800 font-medium">
                   {user.name || user.email || "User"}
                 </span>
 
                 <ChevronDown
                   size={16}
-                  className={`text-gray-500 transition-transform ${
+                  className={`hidden sm:block text-gray-500 transition-transform ${
                     showProfileDropdown ? "rotate-180" : ""
                   }`}
                 />
@@ -139,10 +145,12 @@ export default function TopNav({ user }: { user: NavUser }) {
               {showProfileDropdown && (
                 <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 profile-dropdown">
                   <div className="px-4 py-2 border-b border-gray-100">
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-gray-900 truncate">
                       {user.name || user.email}
                     </p>
-                    <p className="text-xs text-gray-500">{user.email}</p>
+                    <p className="text-xs text-gray-500 truncate">
+                      {user.email}
+                    </p>
                   </div>
 
                   <button
@@ -155,9 +163,38 @@ export default function TopNav({ user }: { user: NavUser }) {
                 </div>
               )}
             </div>
+
+            {/* Hamburger (mobile) */}
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="lg:hidden text-gray-600 hover:text-gray-900 p-1"
+              aria-label="Toggle navigation menu"
+            >
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
           </div>
         </div>
       </div>
+
+      {/* Mobile Nav Menu */}
+      {mobileMenuOpen && (
+        <nav className="lg:hidden border-t border-gray-100 py-1">
+          {NAV_ITEMS.map(({ label, href }) => (
+            <Link
+              key={href}
+              href={href}
+              onClick={() => setMobileMenuOpen(false)}
+              className={`block px-4 py-3 text-base ${
+                isActive(href)
+                  ? "text-primary font-bold bg-primary/5"
+                  : "text-gray-600 font-medium hover:bg-gray-50"
+              }`}
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
+      )}
     </div>
   );
 }
