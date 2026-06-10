@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Fuse from "fuse.js";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
+import SearchBar from "@/app/components/SearchBar";
 
 interface StatCardProps {
   icon: string;
@@ -64,6 +65,7 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [forbidden, setForbidden] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -76,6 +78,11 @@ export default function DashboardPage() {
         if (!dashboardResponse.ok) {
           if (dashboardResponse.status === 401) {
             router.replace("/login");
+            return;
+          }
+          if (dashboardResponse.status === 403) {
+            // Signed in, but not administrative staff (e.g. an IT admin).
+            setForbidden(true);
             return;
           }
           throw new Error("Failed to load dashboard summary");
@@ -115,6 +122,25 @@ export default function DashboardPage() {
     router.push("/cards");
   };
 
+  if (forbidden) {
+    return (
+      <main className="bg-gray-100 min-h-screen">
+        <div className="flex flex-col items-center justify-center gap-6 p-16 text-center">
+          <p className="text-gray-600 text-lg max-w-md">
+            This dashboard is for administrative staff. You&apos;re signed in as
+            an IT Admin.
+          </p>
+          <Link
+            href="/admin/dashboard"
+            className="px-6 py-2.5 rounded-lg bg-primary text-white font-medium hover:bg-cyan-600 transition-colors"
+          >
+            Go to Admin Dashboard
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="lg:h-screen lg:flex lg:flex-col">
       <div className="p-6 bg-gray-100 min-h-screen px-4 sm:px-8 md:px-16 lg:px-24 lg:min-h-0 lg:flex-1 lg:flex lg:flex-col lg:overflow-hidden">
@@ -132,62 +158,42 @@ export default function DashboardPage() {
         </div>
 
         {/* Search Bar */}
-        <div className="bg-[#A8A29E] rounded-2xl shadow-md max-w-7xl mx-auto w-full mb-4 sm:mb-6 px-3 pt-3 pb-2 sm:px-4 sm:pt-4 sm:pb-3 sticky top-0 z-20 lg:static lg:z-auto lg:shrink-0">
-          {/* Search input row */}
-          <div className="flex items-center bg-white rounded-xl px-4 py-2 sm:px-5 sm:py-3 mb-3 sm:mb-4">
-            <input
-              type="text"
-              placeholder="Search recipients..."
-              className="flex-1 outline-none text-gray-700 text-base sm:text-lg bg-white"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <button
-              className="p-2 sm:p-2.5 bg-cyan-500 hover:bg-cyan-600 rounded-full"
-              // onClick={handleSearch}
+        <SearchBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search recipients..."
+          className="max-w-7xl mx-auto mb-4 sm:mb-6 sticky top-0 z-20 lg:static lg:z-auto lg:shrink-0"
+        >
+          <button
+            className="flex items-center gap-1 whitespace-nowrap hover:opacity-75 transition-opacity"
+            onClick={() => setIsModalOpen(true)}
+          >
+            <span className="text-lg sm:text-xl">＋</span> New Recipient
+          </button>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                handleGoToCards();
+              }}
+              className="flex items-center gap-2 whitespace-nowrap rounded-lg bg-primary text-white font-medium px-2.5 py-1 sm:px-3 sm:py-1.5 hover:bg-cyan-600 transition-colors"
             >
               <Image
-                src="/search-enter.svg"
-                alt="Search"
-                width={20}
-                height={20}
+                src="/card.svg"
+                alt="ARC Cards"
+                width={16}
+                height={16}
+                className="brightness-0 invert"
               />
+              ARC Cards
+            </Link>
+            <button className="flex items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 hover:bg-white/10 transition-colors">
+              <Image src="/filter.svg" alt="Filter" width={16} height={16} />
+              Filters
             </button>
           </div>
-
-          {/* Button row inside gray container */}
-          <div className="flex justify-between items-center text-white text-xs sm:text-sm px-1">
-            <button
-              className="flex items-center gap-1 whitespace-nowrap hover:opacity-75 transition-opacity"
-              onClick={() => setIsModalOpen(true)}
-            >
-              <span className="text-lg sm:text-xl">＋</span> New Recipient
-            </button>
-            <div className="flex items-center gap-2 sm:gap-4">
-              <Link
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleGoToCards();
-                }}
-                className="flex items-center gap-2 whitespace-nowrap rounded-lg bg-primary text-white font-medium px-2.5 py-1 sm:px-3 sm:py-1.5 hover:bg-cyan-600 transition-colors"
-              >
-                <Image
-                  src="/card.svg"
-                  alt="ARC Cards"
-                  width={16}
-                  height={16}
-                  className="brightness-0 invert"
-                />
-                ARC Cards
-              </Link>
-              <button className="flex items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 hover:bg-white/10 transition-colors">
-                <Image src="/filter.svg" alt="Filter" width={16} height={16} />
-                Filters
-              </button>
-            </div>
-          </div>
-        </div>
+        </SearchBar>
 
         {/* Search Results - scrollable region on lg+ */}
         <div className="max-w-7xl mx-auto w-full lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
