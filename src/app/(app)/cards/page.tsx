@@ -12,7 +12,7 @@ import {
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, ChevronUp, Filter, Plus, Search, X } from "lucide-react";
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import BackNavigation from "@/app/components/BackNavigation";
 import {
   CardStatus,
@@ -177,6 +177,8 @@ export default function CardsPage() {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [barsHidden, setBarsHidden] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   
   // Search and Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -220,6 +222,27 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
     prev.map((card) => (card.id === cardId ? { ...card, status: nextStatus } : card)),
   );
 };
+
+  // Hide the sticky search/pagination bars on scroll-down; reveal on scroll-up or tap.
+  useEffect(() => {
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      // Only hide once the toolbar is actually pinned at the top, so it never
+      // translates while still scrolling into place (the partial-state glitch).
+      const pinned = (toolbarRef.current?.getBoundingClientRect().top ?? 1) <= 0;
+      if (y > lastY && pinned) setBarsHidden(true);
+      else if (y < lastY) setBarsHidden(false);
+      lastY = y;
+    };
+    const reveal = () => setBarsHidden(false);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("touchstart", reveal, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("touchstart", reveal);
+    };
+  }, []);
 
   useEffect(() => {
     fetchCards()
@@ -460,17 +483,24 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
   return (
     <div className="space-y-4 px-2 py-3 sm:p-6 bg-gray-50 font-sans">
       <BackNavigation href="/dashboard" label="Back to Staff Dashboard" />
-      {/* --- Header Actions --- */}
-      <header className="flex flex-col gap-3 pb-4 md:flex-row md:items-end md:justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">ARC Card Master List</h1>
-        <div className="flex flex-wrap items-center gap-2 md:gap-3">
-          <div className="relative flex-1 min-w-[150px] sm:flex-none">
+      {/* --- Title --- */}
+      <h1 className="text-2xl font-bold text-gray-900">ARC Card Master List</h1>
+
+      {/* --- Toolbar: full-width search + actions (sticky, hide-on-scroll on mobile) --- */}
+      <div
+        ref={toolbarRef}
+        className={`sticky top-0 z-30 -mx-2 bg-gray-50 px-2 pb-3 pt-1 transition-transform duration-200 sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pb-4 sm:pt-0 ${
+          barsHidden ? "-translate-y-full sm:translate-y-0" : "translate-y-0"
+        }`}
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative w-full sm:flex-1">
             <input
               type="search"
               placeholder="Search cards..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-64 rounded-md border border-gray-300 bg-white pl-4 pr-10 py-2 text-sm placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              className="w-full rounded-md border border-gray-300 bg-white pl-4 pr-10 py-2 text-sm placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
             />
             {searchQuery ? (
               <button
@@ -485,33 +515,35 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
               </div>
             )}
           </div>
-          
-          <button
-            onClick={() => setShowFilterDropdown(true)}
-            className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition-colors ${
-              activeFilterCount > 0
-                ? "border-cyan-500 bg-cyan-50 text-cyan-700"
-                : "border-cyan-500 text-cyan-600 hover:bg-cyan-50"
-            }`}
-          >
-            <Filter className="h-4 w-4" />
-            Filter
-            {activeFilterCount > 0 && (
-              <span className="ml-1 rounded-full bg-cyan-500 px-2 py-0.5 text-xs text-white">
-                {activeFilterCount}
-              </span>
-            )}
-          </button>
-          
-          <Link
-            href="/cards/new"
-            className="flex items-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors"
-          >
-            <Plus className="h-4 w-4" strokeWidth={3} />
-            New Allocation
-          </Link>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowFilterDropdown(true)}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition-colors sm:flex-none ${
+                activeFilterCount > 0
+                  ? "border-cyan-500 bg-cyan-50 text-cyan-700"
+                  : "border-cyan-500 text-cyan-600 hover:bg-cyan-50"
+              }`}
+            >
+              <Filter className="h-4 w-4" />
+              Filter
+              {activeFilterCount > 0 && (
+                <span className="ml-1 rounded-full bg-cyan-500 px-2 py-0.5 text-xs text-white">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+
+            <Link
+              href="/cards/new"
+              className="flex flex-1 items-center justify-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors sm:flex-none"
+            >
+              <Plus className="h-4 w-4" strokeWidth={3} />
+              New Allocation
+            </Link>
+          </div>
         </div>
-      </header>
+      </div>
 
       {/* --- Table Wrapper --- */}
       <div className="hidden md:block overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -616,8 +648,12 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
         </div>
       </div>
 
-      {/* --- Pagination Footer --- */}
-      <div className="flex items-center justify-end gap-4 py-4 pr-2">
+      {/* --- Pagination Footer (sticky, hide-on-scroll on mobile) --- */}
+      <div
+        className={`sticky bottom-0 z-30 -mx-2 flex items-center justify-end gap-4 border-t border-gray-200 bg-gray-50 px-2 py-3 pr-2 transition-transform duration-200 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:py-4 ${
+          barsHidden ? "translate-y-full sm:translate-y-0" : "translate-y-0"
+        }`}
+      >
         <button
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
