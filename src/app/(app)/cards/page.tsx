@@ -9,7 +9,8 @@ import {
   SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Filter, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, ChevronUp, Filter, Plus, Search, X } from "lucide-react";
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import BackNavigation from "@/app/components/BackNavigation";
@@ -67,7 +68,7 @@ async function fetchCards(): Promise<CardRow[]> {
     allocationDate: card.allocationDate,
     status: card.status,
     department: card.department,
-    final7Digits: card.arcCardNumber,
+    final7Digits: card.arcCardNumber?.slice(-7) ?? "",
     securityCode: card.securityCode,
     passRecipient: card.passRecipient,
     issueDates: card.issueDates,
@@ -119,12 +120,63 @@ function SortableHeader({
 
 
 
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+// Normalize inconsistent date strings (YYYY-MM-DD or M/D/YYYY) to "Mon D, YYYY".
+function formatDate(value: string): string {
+  if (!value) return "";
+  const iso = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  const us = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  let y: number, m: number, d: number;
+  if (iso) {
+    y = +iso[1];
+    m = +iso[2];
+    d = +iso[3];
+  } else if (us) {
+    m = +us[1];
+    d = +us[2];
+    y = +us[3];
+  } else {
+    return value;
+  }
+  if (m < 1 || m > 12) return value;
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
+}
+
+function StatusSelect({
+  value,
+  onChange,
+  className = "",
+}: {
+  value: CardStatus;
+  onChange: (next: CardStatus) => void;
+  className?: string;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as CardStatus)}
+      className={`rounded-md border border-gray-300 bg-white px-2 py-1 text-sm ${className}`}
+    >
+      {STATUS_OPTIONS.map((s) => (
+        <option key={s} value={s}>
+          {s}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export default function CardsPage() {
   const [data, setData] = useState<CardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   
   // Search and Filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -268,29 +320,19 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
             onClick={column.getToggleSortingHandler()}
           />
         ),
-        cell: ({ getValue }) => <span className="text-gray-700">{getValue<string>()}</span>,
+        cell: ({ getValue }) => (
+          <span className="text-gray-700">{formatDate(getValue<string>())}</span>
+        ),
       },
       {
         accessorKey: "status",
         header: () => <span className="text-xs font-bold text-gray-900">Status</span>,
-        cell: ({ row, getValue }) => {
-          const current = getValue<CardStatus>();
-          return (
-            <select
-              value={current}
-              onChange={(e) =>
-                void updateCardStatus(row.original.id, e.target.value as CardStatus)
-              }
-              className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          );
-  },
+        cell: ({ row, getValue }) => (
+          <StatusSelect
+            value={getValue<CardStatus>()}
+            onChange={(next) => void updateCardStatus(row.original.id, next)}
+          />
+        ),
       },
       {
         accessorKey: "department",
@@ -393,6 +435,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
   });
 
   const rows = table.getRowModel().rows;
+  const selectedCard = data.find((c) => c.id === selectedCardId) ?? null;
   const { pageIndex, pageSize } = table.getState().pagination;
   const start = pageIndex * pageSize + 1;
   const end = Math.min(start + rows.length - 1, filteredData.length);
@@ -427,21 +470,19 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
   }
 
   return (
-    <div className="space-y-4 p-6 bg-gray-50 font-sans">
+    <div className="space-y-4 px-2 py-3 sm:p-6 bg-gray-50 font-sans">
       <BackNavigation href="/dashboard" label="Back to Staff Dashboard" />
       {/* --- Header Actions --- */}
-      <header className="flex items-end justify-between pb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">ARC Card Master List</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
+      <header className="flex flex-col gap-3 pb-4 md:flex-row md:items-end md:justify-between">
+        <h1 className="text-2xl font-bold text-gray-900">ARC Card Master List</h1>
+        <div className="flex flex-wrap items-center gap-2 md:gap-3">
+          <div className="relative flex-1 min-w-[150px] sm:flex-none">
             <input
               type="search"
               placeholder="Search cards..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-64 rounded-md border border-gray-300 bg-white pl-4 pr-10 py-2 text-sm placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              className="w-full sm:w-64 rounded-md border border-gray-300 bg-white pl-4 pr-10 py-2 text-sm placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
             />
             {searchQuery ? (
               <button
@@ -545,7 +586,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
       </header>
 
       {/* --- Table Wrapper --- */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+      <div className="hidden md:block overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-sm">
             <thead>
@@ -597,6 +638,51 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
         </div>
       </div>
 
+      {/* --- Mobile Card List (dense, read-only; tap a row to edit) --- */}
+      <div className="md:hidden">
+        {rows.length > 0 && (
+          <p className="px-1 pb-2 text-xs text-gray-400">
+            Tap a card to view details · edit status
+          </p>
+        )}
+        <div className="space-y-2">
+          {rows.length === 0 ? (
+            <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-500">
+              No records found.
+            </div>
+          ) : (
+            rows.map((row) => {
+              const card = row.original;
+              return (
+                <button
+                  key={row.id}
+                  onClick={() => setSelectedCardId(card.id)}
+                  className="flex w-full items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-left shadow-sm active:bg-gray-50"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate font-semibold text-gray-900">
+                        {card.passRecipient || "Unattributed"}
+                      </span>
+                      <span
+                        className={`w-24 shrink-0 rounded-full px-2 py-0.5 text-center text-xs font-semibold ${statusStyles[card.status]}`}
+                      >
+                        {card.status}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-gray-500">
+                      {card.department} · •••• {card.final7Digits || "—"} ·{" "}
+                      {formatDate(card.allocationDate) || "—"}
+                    </p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+
       {/* --- Pagination Footer --- */}
       <div className="flex items-center justify-end gap-4 py-4 pr-2">
         <button
@@ -622,6 +708,85 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
+
+      {/* --- Detail Sheet (mobile): the place to edit --- */}
+      <Dialog
+        open={selectedCard !== null}
+        onClose={() => setSelectedCardId(null)}
+        className="relative z-50 md:hidden"
+      >
+        <DialogBackdrop
+          transition
+          className="fixed inset-0 bg-black/30 transition-opacity duration-200 data-[closed]:opacity-0"
+        />
+        <div className="fixed inset-0 flex items-end justify-center">
+          <DialogPanel
+            transition
+            className="w-full max-w-lg rounded-t-2xl bg-white p-5 shadow-xl transition duration-200 ease-out data-[closed]:translate-y-full"
+          >
+            {selectedCard && (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <DialogTitle className="truncate text-lg font-bold text-gray-900">
+                      {selectedCard.passRecipient || "Unattributed"}
+                    </DialogTitle>
+                    <p className="text-xs text-gray-500">
+                      Allocated {formatDate(selectedCard.allocationDate) || "—"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedCardId(null)}
+                    className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Editable status — the edit lives here, not in the list */}
+                <div className="mt-4">
+                  <label className="text-xs font-medium text-gray-500">Status</label>
+                  <div className="mt-1">
+                    <StatusSelect
+                      value={selectedCard.status}
+                      onChange={(next) =>
+                        void updateCardStatus(selectedCard.id, next)
+                      }
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                  <dt className="text-gray-500">Department</dt>
+                  <dd>
+                    <Chip
+                      label={selectedCard.department}
+                      tone={deptStyles[selectedCard.department]}
+                    />
+                  </dd>
+                  <dt className="text-gray-500">Card</dt>
+                  <dd className="text-gray-700">
+                    •••• {selectedCard.final7Digits || "—"}
+                  </dd>
+                  <dt className="text-gray-500">Security</dt>
+                  <dd className="text-gray-700">
+                    {selectedCard.securityCode || "—"}
+                  </dd>
+                  <dt className="text-gray-500">Issued</dt>
+                  <dd className="text-gray-700">
+                    {selectedCard.issueDates && selectedCard.issueDates.length > 0
+                      ? selectedCard.issueDates.map(formatDate).join(", ")
+                      : "—"}
+                  </dd>
+                  <dt className="text-gray-500">Notes</dt>
+                  <dd className="text-gray-500">{selectedCard.notes || "—"}</dd>
+                </dl>
+              </>
+            )}
+          </DialogPanel>
+        </div>
+      </Dialog>
     </div>
   );
 }

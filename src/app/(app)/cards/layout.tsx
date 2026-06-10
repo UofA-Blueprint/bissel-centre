@@ -38,7 +38,7 @@ export default async function CardsLayout({
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 max-h-screen">
-      <main className="mx-auto max-w-8xl p-6">{children}</main>
+      <main className="mx-auto max-w-8xl p-0 sm:p-6">{children}</main>
     </div>
   );
 }
