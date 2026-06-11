@@ -202,7 +202,40 @@ export async function POST(request: NextRequest) {
       ? body.cards
       : [body];
 
-    // Check if migration has been run
+    if (cardsToCreate.length === 0) {
+      return NextResponse.json(
+        { error: "No cards supplied." },
+        { status: 400 }
+      );
+    }
+
+    for (let i = 0; i < cardsToCreate.length; i++) {
+      const card = cardsToCreate[i];
+      const arcCardNumber = card?.arcCardNumber;
+      const securityCode = card?.securityCode;
+
+      if (typeof arcCardNumber !== "string" || arcCardNumber.length !== 7) {
+        return NextResponse.json(
+          {
+            error: `Card #${i + 1}: ARC Card Number must be the last 7 digits (got ${
+              typeof arcCardNumber === "string" ? arcCardNumber.length : "none"
+            }).`,
+          },
+          { status: 400 }
+        );
+      }
+      if (typeof securityCode !== "string" || securityCode.length !== 3) {
+        return NextResponse.json(
+          {
+            error: `Card #${i + 1}: Security Code must be exactly 3 characters (got ${
+              typeof securityCode === "string" ? securityCode.length : "none"
+            }).`,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const createdCards: ArcCard[] = [];
     
 
