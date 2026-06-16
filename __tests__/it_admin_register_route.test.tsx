@@ -1,4 +1,3 @@
-// --- Top-level firebase-admin mock (self-contained to avoid hoisting issues) ---
 jest.mock("firebase-admin", () => {
   const mockSet = jest.fn();
   const mockDoc = jest.fn(() => ({ set: mockSet }));

@@ -1,4 +1,3 @@
-/* eslint-disable  @typescript-eslint/no-explicit-any */
 import { POST } from "@/app/admin/api/get-custom-token/route";
 import * as adminActions from "@/app/admin/actions";
 
