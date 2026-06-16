@@ -1,5 +1,3 @@
-/* eslint-disable  @typescript-eslint/no-explicit-any */
-
 // --- Top-level firebase-admin mock (self-contained to avoid hoisting issues) ---
 jest.mock("firebase-admin", () => {
   const mockSet = jest.fn();
@@ -71,7 +69,7 @@ describe("POST /admin/api/create-admin", () => {
   });
 
   test("returns 400 when required fields missing", async () => {
-    const req = mockNextRequest({ email: "a@b.com" }); // missing firstName/lastName/identificationNumber
+    const req = mockNextRequest({ email: "a@b.com" });
     const res = await POST(req);
     const json = await (res as Response).json();
     expect(json.error).toMatch(/Missing required fields/i);
@@ -97,7 +95,7 @@ describe("POST /admin/api/create-admin", () => {
   test("returns uid and rawId on success", async () => {
     mockCheckAdmin.mockResolvedValue(true);
     mockCreateAdmin.mockResolvedValue({
-      user: { uid: "uid123" },
+      user: { uid: "uid123" } as any,
       rawId: "RAWID12345",
     });
 

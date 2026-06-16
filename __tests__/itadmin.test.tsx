@@ -1,6 +1,6 @@
 import React from "react";
 import { render, fireEvent, screen } from "@testing-library/react";
-import Home from "../app/page";
+import Home from "../src/app/page";
 
 // Create a push mock which will be used in our mock of useRouter
 const pushMock = jest.fn();
