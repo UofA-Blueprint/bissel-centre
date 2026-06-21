@@ -1,21 +1,16 @@
-import "../globals.css";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { initAdmin } from "@/app/services/firebaseAdmin";
+import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
 
 export default async function CardsLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("session")?.value;
-  const cardsAccess = cookieStore.get("cards_access")?.value;
 
   if (!sessionCookie) {
     redirect("/login");
-  }
-
-  if (cardsAccess !== "1") {
-    redirect("/dashboard");
   }
 
   const admin = await initAdmin();
@@ -26,9 +21,10 @@ export default async function CardsLayout({
     redirect("/login");
   }
 
-  // IT admins are not allowed on staff cards routes.
+  // IT admins are not staff: show the same notice as the dashboard instead of
+  // rendering the cards content.
   if (decodedClaims.admin === true) {
-    redirect("/admin/dashboard");
+    return <StaffOnlyNotice />;
   }
 
   // Ensure this is a regular administrative staff member.
@@ -44,7 +40,7 @@ export default async function CardsLayout({
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 max-h-screen">
-      <main className="mx-auto max-w-8xl p-6">{children}</main>
+      <main className="mx-auto max-w-8xl p-0 sm:p-6">{children}</main>
     </div>
   );
 }

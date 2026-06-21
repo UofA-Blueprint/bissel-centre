@@ -9,7 +9,8 @@ import {
   SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronUp, Filter, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, ChevronUp, Filter, Plus, Search, X } from "lucide-react";
+import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import BackNavigation from "@/app/components/BackNavigation";
@@ -67,7 +68,7 @@ async function fetchCards(): Promise<CardRow[]> {
     allocationDate: card.allocationDate,
     status: card.status,
     department: card.department,
-    final7Digits: card.arcCardNumber,
+    final7Digits: card.arcCardNumber?.slice(-7) ?? "",
     securityCode: card.securityCode,
     passRecipient: card.passRecipient,
     issueDates: card.issueDates,
@@ -119,19 +120,71 @@ function SortableHeader({
 
 
 
+const MONTHS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+// Normalize inconsistent date strings (YYYY-MM-DD or M/D/YYYY) to "Mon D, YYYY".
+function formatDate(value: string): string {
+  if (!value) return "";
+  const iso = value.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  const us = value.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  let y: number, m: number, d: number;
+  if (iso) {
+    y = +iso[1];
+    m = +iso[2];
+    d = +iso[3];
+  } else if (us) {
+    m = +us[1];
+    d = +us[2];
+    y = +us[3];
+  } else {
+    return value;
+  }
+  if (m < 1 || m > 12) return value;
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
+}
+
+function StatusSelect({
+  value,
+  onChange,
+  className = "",
+}: {
+  value: CardStatus;
+  onChange: (next: CardStatus) => void;
+  className?: string;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value as CardStatus)}
+      className={`rounded-md border border-gray-300 bg-white px-2 py-1 text-sm ${className}`}
+    >
+      {STATUS_OPTIONS.map((s) => (
+        <option key={s} value={s}>
+          {s}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export default function CardsPage() {
   const [data, setData] = useState<CardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
+  const [barsHidden, setBarsHidden] = useState(false);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   
   // Search and Filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [statusFilters, setStatusFilters] = useState<CardStatus[]>([]);
   const [departmentFilters, setDepartmentFilters] = useState<CardDepartment[]>([]);
-  const filterRef = useRef<HTMLDivElement>(null);
 
   // edit card api call
 const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
@@ -170,15 +223,25 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
   );
 };
 
-  // Close filter dropdown when clicking outside
+  // Hide the sticky search/pagination bars on scroll-down; reveal on scroll-up or tap.
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
-        setShowFilterDropdown(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      // Only hide once the toolbar is actually pinned at the top, so it never
+      // translates while still scrolling into place (the partial-state glitch).
+      const pinned = (toolbarRef.current?.getBoundingClientRect().top ?? 1) <= 0;
+      if (y > lastY && pinned) setBarsHidden(true);
+      else if (y < lastY) setBarsHidden(false);
+      lastY = y;
+    };
+    const reveal = () => setBarsHidden(false);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("touchstart", reveal, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("touchstart", reveal);
+    };
   }, []);
 
   useEffect(() => {
@@ -268,29 +331,19 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
             onClick={column.getToggleSortingHandler()}
           />
         ),
-        cell: ({ getValue }) => <span className="text-gray-700">{getValue<string>()}</span>,
+        cell: ({ getValue }) => (
+          <span className="text-gray-700">{formatDate(getValue<string>())}</span>
+        ),
       },
       {
         accessorKey: "status",
         header: () => <span className="text-xs font-bold text-gray-900">Status</span>,
-        cell: ({ row, getValue }) => {
-          const current = getValue<CardStatus>();
-          return (
-            <select
-              value={current}
-              onChange={(e) =>
-                void updateCardStatus(row.original.id, e.target.value as CardStatus)
-              }
-              className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm"
-            >
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          );
-  },
+        cell: ({ row, getValue }) => (
+          <StatusSelect
+            value={getValue<CardStatus>()}
+            onChange={(next) => void updateCardStatus(row.original.id, next)}
+          />
+        ),
       },
       {
         accessorKey: "department",
@@ -393,6 +446,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
   });
 
   const rows = table.getRowModel().rows;
+  const selectedCard = data.find((c) => c.id === selectedCardId) ?? null;
   const { pageIndex, pageSize } = table.getState().pagination;
   const start = pageIndex * pageSize + 1;
   const end = Math.min(start + rows.length - 1, filteredData.length);
@@ -427,21 +481,26 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
   }
 
   return (
-    <div className="space-y-4 p-6 bg-gray-50 font-sans">
+    <div className="space-y-4 px-2 py-3 sm:p-6 bg-gray-50 font-sans">
       <BackNavigation href="/dashboard" label="Back to Staff Dashboard" />
-      {/* --- Header Actions --- */}
-      <header className="flex items-end justify-between pb-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">ARC Card Master List</h1>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
+      {/* --- Title --- */}
+      <h1 className="text-2xl font-bold text-gray-900">ARC Card Master List</h1>
+
+      {/* --- Toolbar: full-width search + actions (sticky, hide-on-scroll on mobile) --- */}
+      <div
+        ref={toolbarRef}
+        className={`sticky top-0 z-30 -mx-2 bg-gray-50 px-2 pb-3 pt-1 transition-transform duration-200 sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pb-4 sm:pt-0 ${
+          barsHidden ? "-translate-y-full sm:translate-y-0" : "translate-y-0"
+        }`}
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative w-full sm:flex-1">
             <input
               type="search"
               placeholder="Search cards..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-64 rounded-md border border-gray-300 bg-white pl-4 pr-10 py-2 text-sm placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              className="w-full rounded-md border border-gray-300 bg-white pl-4 pr-10 py-2 text-sm placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
             />
             {searchQuery ? (
               <button
@@ -456,11 +515,11 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
               </div>
             )}
           </div>
-          
-          <div className="relative" ref={filterRef}>
+
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-              className={`flex items-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition-colors ${
+              onClick={() => setShowFilterDropdown(true)}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-semibold transition-colors sm:flex-none ${
                 activeFilterCount > 0
                   ? "border-cyan-500 bg-cyan-50 text-cyan-700"
                   : "border-cyan-500 text-cyan-600 hover:bg-cyan-50"
@@ -474,78 +533,20 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
                 </span>
               )}
             </button>
-            
-            {showFilterDropdown && (
-              <div className="absolute right-0 top-full mt-2 w-80 rounded-lg border border-gray-200 bg-white shadow-lg z-50">
-                <div className="p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900">Filters</h3>
-                    {activeFilterCount > 0 && (
-                      <button
-                        onClick={clearAllFilters}
-                        className="text-xs text-cyan-600 hover:text-cyan-700"
-                      >
-                        Clear all
-                      </button>
-                    )}
-                  </div>
-                  
-                  {/* Status Filter */}
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Status</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {STATUS_OPTIONS.map((status) => (
-                        <button
-                          key={status}
-                          onClick={() => toggleStatusFilter(status)}
-                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                            statusFilters.includes(status)
-                              ? STATUS_STYLES[status] + " ring-2 ring-offset-1 ring-cyan-500"
-                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          }`}
-                        >
-                          {status}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* Department Filter */}
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Department</h4>
-                    <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
-                      {DEPARTMENT_OPTIONS.map((dept) => (
-                        <button
-                          key={dept}
-                          onClick={() => toggleDepartmentFilter(dept)}
-                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                            departmentFilters.includes(dept)
-                              ? DEPARTMENT_STYLES[dept] + " ring-2 ring-offset-1 ring-cyan-500"
-                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                          }`}
-                        >
-                          {dept}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+
+            <Link
+              href="/cards/new"
+              className="flex flex-1 items-center justify-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors sm:flex-none"
+            >
+              <Plus className="h-4 w-4" strokeWidth={3} />
+              New Allocation
+            </Link>
           </div>
-          
-          <Link
-            href="/cards/new"
-            className="flex items-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors"
-          >
-            <Plus className="h-4 w-4" strokeWidth={3} />
-            New Allocation
-          </Link>
         </div>
-      </header>
+      </div>
 
       {/* --- Table Wrapper --- */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+      <div className="hidden md:block overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-sm">
             <thead>
@@ -597,8 +598,62 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
         </div>
       </div>
 
-      {/* --- Pagination Footer --- */}
-      <div className="flex items-center justify-end gap-4 py-4 pr-2">
+      {/* --- Mobile Card List (dense, read-only; tap a row to edit) --- */}
+      <div className="md:hidden">
+        {rows.length > 0 && (
+          <p className="px-1 pb-2 text-xs text-gray-400">
+            Tap a card to view details · edit status
+          </p>
+        )}
+        <div className="space-y-2">
+          {rows.length === 0 ? (
+            <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-gray-500">
+              No records found.
+            </div>
+          ) : (
+            rows.map((row) => {
+              const card = row.original;
+              const isSelected = selectedCardId === card.id;
+              return (
+                <button
+                  key={row.id}
+                  onClick={() => setSelectedCardId(card.id)}
+                  className={`flex w-full items-center gap-3 rounded-lg border px-4 py-3 text-left shadow-sm transition hover:bg-gray-50 active:scale-[0.99] active:bg-gray-100 ${
+                    isSelected
+                      ? "border-cyan-400 bg-cyan-50 ring-1 ring-cyan-300"
+                      : "border-gray-200 bg-white"
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate font-semibold text-gray-900">
+                        {card.passRecipient || "Unattributed"}
+                      </span>
+                      <span
+                        className={`w-24 shrink-0 rounded-full px-2 py-0.5 text-center text-xs font-semibold ${statusStyles[card.status]}`}
+                      >
+                        {card.status}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-gray-500">
+                      {card.department} · •••• {card.final7Digits || "—"} ·{" "}
+                      {formatDate(card.allocationDate) || "—"}
+                    </p>
+                  </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-gray-300" />
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+
+      {/* --- Pagination Footer (sticky, hide-on-scroll on mobile) --- */}
+      <div
+        className={`sticky bottom-0 z-30 -mx-2 flex items-center justify-end gap-4 border-t border-gray-200 bg-gray-50 px-2 py-3 pr-2 transition-transform duration-200 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:py-4 ${
+          barsHidden ? "translate-y-full sm:translate-y-0" : "translate-y-0"
+        }`}
+      >
         <button
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
@@ -622,6 +677,165 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
           <ArrowRight className="h-4 w-4" />
         </button>
       </div>
+
+      {/* --- Detail Sheet (mobile): the place to edit --- */}
+      <Dialog
+        open={selectedCard !== null}
+        onClose={() => setSelectedCardId(null)}
+        className="relative z-50 md:hidden"
+      >
+        <DialogBackdrop
+          transition
+          className="fixed inset-0 bg-black/30 transition-opacity duration-200 data-[closed]:opacity-0"
+        />
+        <div className="fixed inset-0 flex items-end justify-center">
+          <DialogPanel
+            transition
+            className="w-full max-w-lg rounded-t-2xl bg-white p-5 shadow-xl transition duration-200 ease-out data-[closed]:translate-y-full"
+          >
+            {selectedCard && (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <DialogTitle className="truncate text-lg font-bold text-gray-900">
+                      {selectedCard.passRecipient || "Unattributed"}
+                    </DialogTitle>
+                    <p className="text-xs text-gray-500">
+                      Allocated {formatDate(selectedCard.allocationDate) || "—"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setSelectedCardId(null)}
+                    className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
+
+                {/* Editable status — the edit lives here, not in the list */}
+                <div className="mt-4">
+                  <label className="text-xs font-medium text-gray-500">Status</label>
+                  <div className="mt-1">
+                    <StatusSelect
+                      value={selectedCard.status}
+                      onChange={(next) =>
+                        void updateCardStatus(selectedCard.id, next)
+                      }
+                      className="w-full"
+                    />
+                  </div>
+                </div>
+
+                <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                  <dt className="text-gray-500">Department</dt>
+                  <dd>
+                    <Chip
+                      label={selectedCard.department}
+                      tone={deptStyles[selectedCard.department]}
+                    />
+                  </dd>
+                  <dt className="text-gray-500">Card</dt>
+                  <dd className="text-gray-700">
+                    •••• {selectedCard.final7Digits || "—"}
+                  </dd>
+                  <dt className="text-gray-500">Security</dt>
+                  <dd className="text-gray-700">
+                    {selectedCard.securityCode || "—"}
+                  </dd>
+                  <dt className="text-gray-500">Issued</dt>
+                  <dd className="text-gray-700">
+                    {selectedCard.issueDates && selectedCard.issueDates.length > 0
+                      ? selectedCard.issueDates.map(formatDate).join(", ")
+                      : "—"}
+                  </dd>
+                  <dt className="text-gray-500">Notes</dt>
+                  <dd className="text-gray-500">{selectedCard.notes || "—"}</dd>
+                </dl>
+              </>
+            )}
+          </DialogPanel>
+        </div>
+      </Dialog>
+
+      {/* --- Filter Drawer --- */}
+      <Dialog
+        open={showFilterDropdown}
+        onClose={() => setShowFilterDropdown(false)}
+        className="relative z-50"
+      >
+        <DialogBackdrop
+          transition
+          className="fixed inset-0 bg-black/30 transition-opacity duration-200 data-[closed]:opacity-0"
+        />
+        <div className="fixed inset-0 flex justify-end">
+          <DialogPanel
+            transition
+            className="flex h-full w-full max-w-sm flex-col overflow-y-auto bg-white p-5 shadow-xl transition duration-200 ease-out data-[closed]:translate-x-full"
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <DialogTitle className="text-lg font-semibold text-gray-900">
+                Filters
+              </DialogTitle>
+              <div className="flex items-center gap-3">
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={clearAllFilters}
+                    className="text-xs text-cyan-600 hover:text-cyan-700"
+                  >
+                    Clear all
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowFilterDropdown(false)}
+                  className="rounded-full p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+
+            {/* Status Filter */}
+            <div className="mb-6">
+              <h4 className="mb-2 text-sm font-medium text-gray-700">Status</h4>
+              <div className="flex flex-wrap gap-2">
+                {STATUS_OPTIONS.map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => toggleStatusFilter(status)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      statusFilters.includes(status)
+                        ? STATUS_STYLES[status] + " ring-2 ring-offset-1 ring-cyan-500"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {status}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Department Filter */}
+            <div>
+              <h4 className="mb-2 text-sm font-medium text-gray-700">Department</h4>
+              <div className="flex flex-wrap gap-2">
+                {DEPARTMENT_OPTIONS.map((dept) => (
+                  <button
+                    key={dept}
+                    onClick={() => toggleDepartmentFilter(dept)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      departmentFilters.includes(dept)
+                        ? DEPARTMENT_STYLES[dept] + " ring-2 ring-offset-1 ring-cyan-500"
+                        : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {dept}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </DialogPanel>
+        </div>
+      </Dialog>
     </div>
   );
 }

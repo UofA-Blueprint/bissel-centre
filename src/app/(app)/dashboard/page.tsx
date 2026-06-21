@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Fuse from "fuse.js";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
-import Header from "@/app/components/Header";
+import SearchBar from "@/app/components/SearchBar";
+import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
 
 interface StatCardProps {
   icon: string;
@@ -65,6 +66,7 @@ export default function DashboardPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [forbidden, setForbidden] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -77,6 +79,11 @@ export default function DashboardPage() {
         if (!dashboardResponse.ok) {
           if (dashboardResponse.status === 401) {
             router.replace("/login");
+            return;
+          }
+          if (dashboardResponse.status === 403) {
+            // Signed in, but not administrative staff (e.g. an IT admin).
+            setForbidden(true);
             return;
           }
           throw new Error("Failed to load dashboard summary");
@@ -113,16 +120,22 @@ export default function DashboardPage() {
   }, [searchQuery, users]);
 
   const handleGoToCards = () => {
-    document.cookie = "cards_access=1; Path=/; Max-Age=600; SameSite=Lax";
     router.push("/cards");
   };
 
+  if (forbidden) {
+    return (
+      <main className="bg-gray-100 min-h-screen">
+        <StaffOnlyNotice />
+      </main>
+    );
+  }
+
   return (
     <main className="lg:h-screen lg:flex lg:flex-col">
-      <Header title="" />
       <div className="p-6 bg-gray-100 min-h-screen px-4 sm:px-8 md:px-16 lg:px-24 lg:min-h-0 lg:flex-1 lg:flex lg:flex-col lg:overflow-hidden">
         {/* Stats Section */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 max-w-7xl mx-auto w-full lg:shrink-0">
+        <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-4 sm:gap-4 sm:overflow-visible mb-4 sm:mb-6 max-w-7xl mx-auto w-full lg:shrink-0">
           {stats.map((stat, index) => (
             <StatCard
               key={index}
@@ -135,74 +148,54 @@ export default function DashboardPage() {
         </div>
 
         {/* Search Bar */}
-        <div className="bg-[#A8A29E] rounded-2xl shadow-md max-w-7xl mx-auto w-full mb-6 px-4 pt-4 pb-3 lg:shrink-0">
-          {/* Search input row */}
-          <div className="flex items-center bg-white rounded-xl px-5 py-3 mb-4">
-            <input
-              type="text"
-              placeholder="Search recipients..."
-              className="flex-1 outline-none text-gray-700 text-lg bg-white"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            <button
-              className="p-2.5 bg-cyan-500 hover:bg-cyan-600 rounded-full"
-              // onClick={handleSearch}
+        <SearchBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Search recipients..."
+          className="max-w-7xl mx-auto mb-4 sm:mb-6 sticky top-0 z-20 lg:static lg:z-auto lg:shrink-0"
+        >
+          <button
+            className="flex items-center gap-1 whitespace-nowrap hover:opacity-75 transition-opacity"
+            onClick={() => setIsModalOpen(true)}
+          >
+            <span className="text-lg sm:text-xl">＋</span> New Recipient
+          </button>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <Link
+              href="#"
+              onClick={(e) => {
+                e.preventDefault();
+                handleGoToCards();
+              }}
+              className="flex items-center gap-2 whitespace-nowrap rounded-lg bg-primary text-white font-medium px-2.5 py-1 sm:px-3 sm:py-1.5 hover:bg-cyan-600 transition-colors"
             >
               <Image
-                src="/search-enter.svg"
-                alt="Search"
-                width={20}
-                height={20}
+                src="/card.svg"
+                alt="ARC Cards"
+                width={16}
+                height={16}
+                className="brightness-0 invert"
               />
+              ARC Cards
+            </Link>
+            <button className="flex items-center gap-2 whitespace-nowrap rounded-lg px-2.5 py-1 sm:px-3 sm:py-1.5 hover:bg-white/10 transition-colors">
+              <Image src="/filter.svg" alt="Filter" width={16} height={16} />
+              Filters
             </button>
           </div>
-
-          {/* Button row inside gray container */}
-          <div className="flex justify-between items-center text-white text-sm px-1">
-            <button
-              className="flex items-center gap-1 hover:opacity-75 transition-opacity"
-              onClick={() => setIsModalOpen(true)}
-            >
-              <span className="text-xl">＋</span> New Recipient
-            </button>
-            <div className="flex items-center gap-4">
-              <Link
-                href="#"
-                onClick={(e) => {
-                  e.preventDefault();
-                  handleGoToCards();
-                }}
-                className="flex items-center gap-2 rounded-lg bg-primary text-white font-medium px-3 py-1.5 hover:bg-cyan-600 transition-colors"
-              >
-                <Image
-                  src="/card.svg"
-                  alt="ARC Cards"
-                  width={16}
-                  height={16}
-                  className="brightness-0 invert"
-                />
-                ARC Cards
-              </Link>
-              <button className="flex items-center gap-2 rounded-lg px-3 py-1.5 hover:bg-white/10 transition-colors">
-                <Image src="/filter.svg" alt="Filter" width={16} height={16} />
-                Filters
-              </button>
-            </div>
-          </div>
-        </div>
+        </SearchBar>
 
         {/* Search Results - scrollable region on lg+ */}
         <div className="max-w-7xl mx-auto w-full lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
           {isLoading ? (
-            <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2 sm:gap-4">
               {Array.from({ length: 5 }).map((_, i) => (
                 <UserCardSkeleton key={i} />
               ))}
             </div>
           ) : (
             <>
-              <div className="flex flex-wrap gap-4 justify-center">
+              <div className="flex flex-wrap gap-2 sm:gap-4 justify-center">
                 {searchResults.map((user) => (
                   <UserCard key={user.id} user={user} />
                 ))}
@@ -238,20 +231,20 @@ const StatCard: React.FC<StatCardComponentProps> = ({
   isLoading,
 }) => {
   const cardShadow =
-    "shadow-[13px_3px_29px_0_rgba(0,0,0,0.04),52px_14px_53px_0_rgba(0,0,0,0.03)]";
+    "shadow-sm sm:shadow-[13px_3px_29px_0_rgba(0,0,0,0.04),52px_14px_53px_0_rgba(0,0,0,0.03)]";
   const cardBorder = "border-[0.5px] border-[#9C9C98]/25";
 
   if (isLoading) {
     return (
       <div
-        className={`bg-gray-200 rounded-xl ${cardBorder} ${cardShadow} w-full h-[120px] animate-pulse`}
+        className={`bg-gray-200 rounded-xl ${cardBorder} ${cardShadow} snap-start shrink-0 w-[150px] sm:w-full h-[120px] animate-pulse`}
       />
     );
   }
 
   return (
     <div
-      className={`bg-white rounded-xl ${cardBorder} ${cardShadow} px-5 py-4 w-full h-[120px] flex flex-col items-center justify-center text-center`}
+      className={`bg-white rounded-xl ${cardBorder} ${cardShadow} snap-start shrink-0 w-[150px] sm:w-full px-5 py-4 h-[120px] flex flex-col items-center justify-center text-center`}
     >
       {/* Icon + Number */}
       <div className="flex items-center gap-2">
@@ -267,9 +260,9 @@ const StatCard: React.FC<StatCardComponentProps> = ({
 
 const UserCardSkeleton: React.FC = () => {
   return (
-    <div className="bg-white rounded-lg shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)] px-6 py-4 w-full flex items-center justify-between animate-pulse">
+    <div className="bg-white rounded-lg shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)] px-4 py-2.5 sm:px-6 sm:py-4 w-full flex items-center justify-between animate-pulse">
       {/* Avatar */}
-      <div className="w-10 h-10 bg-gray-200 rounded-full mr-4" />
+      <div className="w-9 h-9 sm:w-12 sm:h-12 bg-gray-200 rounded-full mr-3 sm:mr-4 shrink-0" />
       {/* Name + status placeholders */}
       <div className="flex-1 flex items-center justify-between">
         <div className="h-5 w-40 bg-gray-200 rounded" />
@@ -289,28 +282,30 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
   const initial = user.firstName?.trim().charAt(0).toUpperCase() || "?";
   const showImage = user.picture && !imgError;
   return (
-    <div className="bg-white rounded-lg shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)] px-6 py-4 w-full flex items-center justify-between">
+    <div className="bg-white rounded-lg shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)] px-4 py-2.5 sm:px-6 sm:py-4 w-full flex items-center justify-between">
       {/* Avatar */}
-      <div className="w-12 h-12 shrink-0 bg-gray-200 rounded-full overflow-hidden flex items-center justify-center mr-4">
+      <div className="w-9 h-9 sm:w-12 sm:h-12 shrink-0 bg-gray-200 rounded-full overflow-hidden flex items-center justify-center mr-3 sm:mr-4">
         {showImage ? (
           <Image
             src={user.picture as string}
             alt={`${user.firstName} ${user.secondName}`}
             width={48}
             height={48}
-            className="rounded-full object-cover w-12 h-12"
+            className="rounded-full object-cover w-9 h-9 sm:w-12 sm:h-12"
             onError={() => setImgError(true)}
           />
         ) : (
-          <span className="text-xl font-bold text-gray-700">{initial}</span>
+          <span className="text-base sm:text-xl font-bold text-gray-700">
+            {initial}
+          </span>
         )}
       </div>
       {/* Name and Info Row */}
-      <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center min-w-0">
-        <span className="text-xl font-bold text-gray-900 truncate">
+      <div className="flex-1 flex flex-row items-center min-w-0 gap-2">
+        <span className="flex-1 min-w-0 text-base sm:text-xl font-bold text-gray-900 truncate">
           {user.firstName} {user.secondName}
         </span>
-        <div className="sm:ml-auto flex items-center gap-6 mt-2 sm:mt-0">
+        <div className="flex items-center gap-2 sm:gap-6 shrink-0">
           {/* Flag column - always reserves space */}
           <div className="w-4 flex justify-center shrink-0">
             {isBanned && (
@@ -324,7 +319,7 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
           </div>
           {/* Status column - right-aligned, fixed min-width */}
           <div
-            className={`flex items-center justify-end gap-1 min-w-[80px] text-base font-medium ${
+            className={`flex items-center justify-end gap-1 min-w-0 sm:min-w-[80px] text-sm sm:text-base font-medium ${
               arcCardStatus === "Expired" ? "text-red-500" : "text-gray-500"
             }`}
           >
@@ -345,7 +340,7 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
             </span>
           </div>
           {/* Last Issued column - right-aligned, fixed min-width */}
-          <div className="min-w-[170px] text-right text-base text-gray-500 font-normal whitespace-nowrap">
+          <div className="min-w-0 sm:min-w-[170px] text-right text-sm sm:text-base text-gray-500 font-normal whitespace-nowrap">
             Last issued:{" "}
             <span className="text-gray-800 font-medium">
               {user.lastIssued || "N/A"}

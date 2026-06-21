@@ -3,7 +3,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import admin from "firebase-admin";
-import { ArcCard, ArcCardInput } from "@/app/cards/types";
+import { ArcCard, ArcCardInput } from "@/app/(app)/cards/types";
 import { cookies } from "next/headers";
 import { expireOverdueArcCards } from "@/app/services/cardExpiryService";
 
