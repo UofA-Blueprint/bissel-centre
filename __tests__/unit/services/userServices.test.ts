@@ -4,17 +4,7 @@ import {
   banUser,
   deleteUser,
   issueNewArcCard,
-  User,
 } from "@/app/services/userService";
-import {
-  doc,
-  getDoc,
-  getDocs,
-  updateDoc,
-  addDoc,
-  deleteDoc,
-  Timestamp,
-} from "firebase/firestore";
 
 // 1. Mock the Firestore SDK functions
 const mockDoc = jest.fn();
