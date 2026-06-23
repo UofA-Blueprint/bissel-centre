@@ -1,5 +1,5 @@
 // /src/tests/firebase.test.ts
-import { auth, db, storage } from "../src/app/services/firebase";
+import { auth, db, storage } from "@/app/services/firebase";
 
 describe("Firebase Initialization", () => {
   test("Firebase Auth should be initialized", () => {

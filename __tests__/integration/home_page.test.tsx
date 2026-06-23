@@ -1,6 +1,6 @@
 import React from "react";
 import { render, fireEvent, screen } from "@testing-library/react";
-import Home from "../src/app/page";
+import Home from "@/app/page";
 
 describe("Home component", () => {
   test("toggles to admin view when admin toggle is clicked", () => {
