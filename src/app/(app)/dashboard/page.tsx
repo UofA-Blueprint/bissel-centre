@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Fuse from "fuse.js";
+import { Flag } from "lucide-react";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
 import SearchBar from "@/app/components/SearchBar";
 import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
@@ -67,10 +68,12 @@ export default function DashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setForbidden(false);
 
         const dashboardResponse = await fetch("/api/dashboard/summary", {
           cache: "no-store",
@@ -102,7 +105,7 @@ export default function DashboardPage() {
     };
 
     fetchData();
-  }, [router]);
+  }, [router, refreshNonce]);
 
   useEffect(() => {
     if (!searchQuery.trim()) {
@@ -158,9 +161,9 @@ export default function DashboardPage() {
             className="flex items-center gap-1 whitespace-nowrap hover:opacity-75 transition-opacity"
             onClick={() => setIsModalOpen(true)}
           >
-            <span className="text-lg sm:text-xl">＋</span> New Recipient
+            <span className="text-sm">＋ New Recipient </span>
           </button>
-          <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-2 sm:gap-4 ml-2">
             <Link
               href="#"
               onClick={(e) => {
@@ -184,6 +187,11 @@ export default function DashboardPage() {
             </button>
           </div>
         </SearchBar>
+        <div className="max-w-7xl mx-auto w-full -mt-2 mb-4 sm:mb-6 flex justify-center">
+          <span className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-sm font-medium text-white shadow-sm text-center">
+            If the dashboard doesn&apos;t reflect the latest updates, please refresh.
+          </span>
+        </div>
 
         {/* Search Results - scrollable region on lg+ */}
         <div className="max-w-7xl mx-auto w-full lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
@@ -219,6 +227,10 @@ export default function DashboardPage() {
       <RegisterRecipientModal
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
+        onSuccess={() => {
+          setIsLoading(true);
+          setRefreshNonce((prev) => prev + 1);
+        }}
       />
     </main>
   );
@@ -281,6 +293,13 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
   const [imgError, setImgError] = useState(false);
   const initial = user.firstName?.trim().charAt(0).toUpperCase() || "?";
   const showImage = user.picture && !imgError;
+  const userStatusText = user.status === "Inactive" ? "Inactive User" : "Active User";
+  const cardStatusText =
+    arcCardStatus === "Active"
+      ? "Card Active"
+      : arcCardStatus === "Expired"
+        ? "Card Expired"
+        : "No Active Card";
   return (
     <div className="bg-white rounded-lg shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)] px-4 py-2.5 sm:px-6 sm:py-4 w-full flex items-center justify-between">
       {/* Avatar */}
@@ -301,50 +320,23 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
         )}
       </div>
       {/* Name and Info Row */}
-      <div className="flex-1 flex flex-row items-center min-w-0 gap-2">
-        <span className="flex-1 min-w-0 text-base sm:text-xl font-bold text-gray-900 truncate">
-          {user.firstName} {user.secondName}
-        </span>
-        <div className="flex items-center gap-2 sm:gap-6 shrink-0">
-          {/* Flag column - always reserves space */}
-          <div className="w-4 flex justify-center shrink-0">
-            {isBanned && (
-              <Image
-                src="/flag.svg"
-                alt="Flagged"
-                width={15}
-                height={15}
-              />
-            )}
+      <div className="flex-1 flex flex-col sm:flex-row sm:items-center min-w-0 gap-2">
+        <div className="flex-1 min-w-0 flex items-center gap-2">
+          {isBanned && <Flag className="h-4 w-4 text-red-500 shrink-0" aria-label="Flagged user" />}
+          <span className="min-w-0 text-base sm:text-xl font-bold text-gray-900 truncate">
+            {user.firstName} {user.secondName}
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:gap-6">
+          <div className="min-w-0 sm:min-w-[120px] text-left sm:text-right text-xs sm:text-base font-medium text-gray-600">
+            {userStatusText}
           </div>
-          {/* Status column - right-aligned, fixed min-width */}
           <div
-            className={`flex items-center justify-end gap-1 min-w-0 sm:min-w-[80px] text-sm sm:text-base font-medium ${
-              arcCardStatus === "Expired" ? "text-red-500" : "text-gray-500"
+            className={`min-w-0 sm:min-w-[130px] text-left sm:text-right text-xs sm:text-base font-medium ${
+              cardStatusText === "Card Expired" ? "text-red-500" : "text-gray-500"
             }`}
           >
-            {arcCardStatus === "Expired" && (
-              <Image
-                src="/caution.svg"
-                alt="Expired"
-                width={18}
-                height={18}
-              />
-            )}
-            <span>
-              {arcCardStatus === "Expired"
-                ? "Expired"
-                : arcCardStatus === "Active"
-                  ? "Active"
-                  : "N/A"}
-            </span>
-          </div>
-          {/* Last Issued column - right-aligned, fixed min-width */}
-          <div className="min-w-0 sm:min-w-[170px] text-right text-sm sm:text-base text-gray-500 font-normal whitespace-nowrap">
-            Last issued:{" "}
-            <span className="text-gray-800 font-medium">
-              {user.lastIssued || "N/A"}
-            </span>
+            {cardStatusText}
           </div>
         </div>
       </div>

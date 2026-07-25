@@ -5,6 +5,12 @@ import { cookies } from "next/headers";
 import { encryptPhone } from "@/utils/phoneEncryption";
 import admin from "firebase-admin";
 
+const MAX_PICTURE_FIELD_BYTES = 1_000_000; // Firestore field value must stay < ~1,048,487 bytes.
+
+function getUtf8ByteSize(value: string): number {
+  return Buffer.byteLength(value, "utf8");
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Verify user session
@@ -66,9 +72,19 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+    const pictureBytes = getUtf8ByteSize(photoUpload.imageUrl);
+    if (pictureBytes > MAX_PICTURE_FIELD_BYTES) {
+      return NextResponse.json(
+        {
+          error:
+            "Recipient photo is too large. Please upload a smaller image.",
+        },
+        { status: 400 },
+      );
+    }
 
     // Validate required personal details fields
-    const requiredFields = ["firstName", "lastName"] as const;
+    const requiredFields = ["firstName", "lastName", "email"] as const;
     for (const field of requiredFields) {
       if (!personalDetails[field]) {
         return NextResponse.json(
@@ -169,11 +185,27 @@ export async function POST(request: NextRequest) {
           const expiresAtDate = new Date(issueDate);
           expiresAtDate.setMonth(expiresAtDate.getMonth() + arcCardDurationMonths);
 
+          // Defensive cleanup: older data may still contain open issues for this
+          // same card. Close them before creating the new active issue so expiry
+          // maintenance cannot immediately re-expire this reassigned card.
+          const staleOpenIssuesQuery = db
+            .collection("issues")
+            .where("cardId", "==", cardDoc.id)
+            .where("returnedAt", "==", null);
+          const staleOpenIssuesSnap = await tx.get(staleOpenIssuesQuery);
+
           const issueRef = db.collection("issues").doc();
+
+          for (const staleIssueDoc of staleOpenIssuesSnap.docs) {
+            tx.update(staleIssueDoc.ref, {
+              returnedAt: issueTimestamp,
+            });
+          }
 
           tx.set(userRef, {
             ...userData,
-            arcCardNumber: arcCardDigits
+            arcCardNumber: arcCardDigits,
+            passesIssued: [cardDoc.id],
           })
 
           // Rule 3: once assigned, card becomes Active

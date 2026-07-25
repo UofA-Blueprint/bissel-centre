@@ -109,9 +109,9 @@ const AdminRegistration: React.FC = () => {
         <h1 className="text-lg pb-1">Register</h1>
         <p className="text-gray-500 text-sm">
           Already have an account?{" "}
-          <a href="#" className="text-black font-bold">
+          <Link href="/login" className="text-black font-bold">
             Sign in
-          </a>
+          </Link>
         </p>
         <form
           className={`mt-4 text-sm ${

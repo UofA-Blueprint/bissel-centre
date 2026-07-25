@@ -45,6 +45,45 @@ async function verifyStaffAccess() {
   return { app, db };
 }
 
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
+}
+
+async function fetchUserNamesByIds(
+  db: admin.firestore.Firestore,
+  userIds: Iterable<string>,
+): Promise<Map<string, string>> {
+  const ids = Array.from(new Set(Array.from(userIds).filter(Boolean)));
+  const result = new Map<string, string>();
+  if (ids.length === 0) return result;
+
+  // Firestore "in" query supports a small bounded list per query; chunk safely.
+  const idChunks = chunk(ids, 10);
+  await Promise.all(
+    idChunks.map(async (idsPart) => {
+      const snap = await db
+        .collection("users")
+        .where(admin.firestore.FieldPath.documentId(), "in", idsPart)
+        .select("firstName", "secondName")
+        .get();
+
+      for (const doc of snap.docs) {
+        const data = doc.data() as { firstName?: string; secondName?: string };
+        result.set(
+          doc.id,
+          `${data.firstName || ""} ${data.secondName || ""}`.trim(),
+        );
+      }
+    }),
+  );
+
+  return result;
+}
+
 // GET /api/cards - Fetch all cards
 export async function GET() {
   try {
@@ -54,17 +93,16 @@ export async function GET() {
     }
     const { db } = access;
 
-    try {
-      await expireOverdueArcCards(db);
-    } catch (expiryError) {
-      // Do not fail cards page if expiry sync fails once.
+    // Do not block cards response on maintenance.
+    void expireOverdueArcCards(db).catch((expiryError) => {
       console.error("Card expiry sync failed:", expiryError);
-    }
+    });
 
-    const cardsSnapshot = await db.collection("arc_cards").get();
-
-    // Check if migration has been run by looking for issues collection
-    const migrationDoc = await db.collection("_migrations").doc("issues_v1").get();
+    const [cardsSnapshot, migrationDoc] = await Promise.all([
+      db.collection("arc_cards").get(),
+      // Check if migration has been run by looking for issues collection
+      db.collection("_migrations").doc("issues_v1").get(),
+    ]);
     const isMigrated = migrationDoc.exists;
 
     const cards: ArcCard[] = [];
@@ -101,18 +139,7 @@ export async function GET() {
       }
 
       // Batch fetch users
-      const userNames = new Map<string, string>();
-      for (const userId of userIds) {
-        try {
-          const userDoc = await db.collection("users").doc(userId).get();
-          if (userDoc.exists) {
-            const userData = userDoc.data();
-            userNames.set(userId, `${userData?.firstName || ""} ${userData?.secondName || ""}`.trim());
-          }
-        } catch {
-          // User not found
-        }
-      }
+      const userNames = await fetchUserNamesByIds(db, userIds);
 
       for (const doc of cardsSnapshot.docs) {
         const data = doc.data();
@@ -145,20 +172,21 @@ export async function GET() {
       }
     } else {
       // Pre-migration: use old schema
+      const neededUserIds = new Set<string>();
+      for (const doc of cardsSnapshot.docs) {
+        const data = doc.data();
+        if (data.userId && !data.passRecipient) {
+          neededUserIds.add(data.userId);
+        }
+      }
+      const userNames = await fetchUserNamesByIds(db, neededUserIds);
+
       for (const doc of cardsSnapshot.docs) {
         const data = doc.data();
         
         let passRecipient = data.passRecipient || "";
         if (data.userId && !passRecipient) {
-          try {
-            const userDoc = await db.collection("users").doc(data.userId).get();
-            if (userDoc.exists) {
-              const userData = userDoc.data();
-              passRecipient = `${userData?.firstName || ""} ${userData?.secondName || ""}`.trim();
-            }
-          } catch {
-            // User not found
-          }
+          passRecipient = userNames.get(data.userId) || "";
         }
 
         cards.push({
@@ -342,17 +370,38 @@ export async function PATCH(request: NextRequest){
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
     
-      if (nextStatus === "Cancelled" && currentUserId) {
+      // Keep card/user mirror fields in sync:
+      // any transition away from Active should detach the current holder.
+      if (nextStatus !== "Active" && currentUserId) {
         const userRef = db.collection("users").doc(currentUserId);
         const userSnap = await tx.get(userRef);
-    
+
+        // Close any open issue for this card/user so dashboard history-based
+        // views no longer treat it as currently active.
+        const openIssueQuery = db
+          .collection("issues")
+          .where("cardId", "==", cardRef.id)
+          .where("userId", "==", currentUserId)
+          .where("returnedAt", "==", null)
+          .limit(1);
+        const openIssueSnap = await tx.get(openIssueQuery);
+
+        // All reads above; writes below.
         if (userSnap.exists) {
           tx.update(userRef, {
             arcCardNumber: admin.firestore.FieldValue.delete(),
+            passesIssued: admin.firestore.FieldValue.arrayUnion(cardRef.id),
             updatedAt: new Date().toISOString(),
           });
         }
-    
+
+        if (!openIssueSnap.empty) {
+          tx.update(openIssueSnap.docs[0].ref, {
+            returnedAt: admin.firestore.FieldValue.serverTimestamp(),
+            closedCardStatus: nextStatus,
+          });
+        }
+
         cardUpdates.currentUserId = null;
       }
     

@@ -44,8 +44,10 @@ export interface DashboardSummary {
 
 interface IssueRecord {
   userId?: string;
+  cardId?: string;
   createdAt?: unknown;
   returnedAt?: unknown;
+  closedCardStatus?: string;
 }
 
 const toDateOrNull = (value: unknown): Date | null => {
@@ -91,6 +93,7 @@ export async function getDashboardSummaryForViewer(viewer: {
   const [
   usersSnapshot,
   issuesSnapshot,
+  cardsSnapshot,
   totalCardsAgg,
   activeCardsAgg,
   expiredCardsAgg,
@@ -103,12 +106,17 @@ export async function getDashboardSummaryForViewer(viewer: {
       "picture",
       "aliases",
       "banned",
+      "status",
       "email",
       "createdAt",
       "updatedAt",
     )
     .get(),
-  db.collection("issues").select("userId", "createdAt", "returnedAt").get(),
+  db
+    .collection("issues")
+    .select("userId", "cardId", "createdAt", "returnedAt", "closedCardStatus")
+    .get(),
+  db.collection("arc_cards").select("status", "currentUserId").get(),
   db.collection("arc_cards").count().get(),
   db.collection("arc_cards").where("status", "==", "Active").count().get(),
   db.collection("arc_cards").where("status", "==", "Expired").count().get(),
@@ -116,8 +124,21 @@ export async function getDashboardSummaryForViewer(viewer: {
 ]);
 
   const now = new Date();
-  const activeIssueByUserId = new Set<string>();
   const latestIssueDateByUserId = new Map<string, Date>();
+  const latestIssueCardIdByUserId = new Map<string, string>();
+  const latestIssueReturnedAtByUserId = new Map<string, unknown>();
+  const latestIssueClosedStatusByUserId = new Map<string, string | undefined>();
+  const activeCardByUserId = new Map<string, "Active">();
+  const cardStatusByCardId = new Map<string, string>();
+
+  for (const cardDoc of cardsSnapshot.docs) {
+    const cardData = cardDoc.data() as { status?: string; currentUserId?: string | null };
+    const status = cardData.status ?? "";
+    cardStatusByCardId.set(cardDoc.id, status);
+    if (status === "Active" && cardData.currentUserId) {
+      activeCardByUserId.set(cardData.currentUserId, "Active");
+    }
+  }
 
   for (const issueDoc of issuesSnapshot.docs) {
     const issue = issueDoc.data() as IssueRecord;
@@ -126,6 +147,7 @@ export async function getDashboardSummaryForViewer(viewer: {
     }
 
     const createdAt = toDateOrNull(issue.createdAt);
+  
     if (!createdAt) {
       continue;
     }
@@ -133,25 +155,45 @@ export async function getDashboardSummaryForViewer(viewer: {
     const existingLatest = latestIssueDateByUserId.get(issue.userId);
     if (!existingLatest || createdAt > existingLatest) {
       latestIssueDateByUserId.set(issue.userId, createdAt);
+      if (issue.cardId) {
+        latestIssueCardIdByUserId.set(issue.userId, issue.cardId);
+      }
+      latestIssueReturnedAtByUserId.set(issue.userId, issue.returnedAt);
+      latestIssueClosedStatusByUserId.set(
+        issue.userId,
+        issue.closedCardStatus,
+      );
     }
 
-    const returnedAt = toDateOrNull(issue.returnedAt);
-    if (createdAt <= now && !returnedAt) {
-      activeIssueByUserId.add(issue.userId);
-    }
   }
 
   const users: DashboardUser[] = usersSnapshot.docs.map((doc) => {
     const data = doc.data();
     const latestIssueDate = latestIssueDateByUserId.get(doc.id);
-    const hasActiveIssue = activeIssueByUserId.has(doc.id);
+    const latestIssueCardId = latestIssueCardIdByUserId.get(doc.id);
+    const latestIssueCardStatus = latestIssueCardId
+      ? cardStatusByCardId.get(latestIssueCardId)
+      : undefined;
+    const latestIssueReturnedAt = latestIssueReturnedAtByUserId.get(doc.id);
+    const latestIssueClosedStatus = latestIssueClosedStatusByUserId.get(doc.id);
+    const hasActiveCard = activeCardByUserId.has(doc.id);
+    const userAccountStatus = data.status === "Inactive" ? "Inactive" : "Active";
+    let cardStatusForDashboard: DashboardUser["arcCardStatus"] = undefined;
+    if (hasActiveCard) {
+      cardStatusForDashboard = "Active";
+    } else if (latestIssueReturnedAt && latestIssueClosedStatus === "Expired") {
+      cardStatusForDashboard = "Expired";
+    } else if (!latestIssueReturnedAt && latestIssueCardStatus === "Expired") {
+      cardStatusForDashboard = "Expired";
+    }
 
     return {
       id: doc.id,
       ...(data as Omit<DashboardUser, "id" | "arcCardStatus" | "lastIssued">),
+      status: userAccountStatus,
       createdAt: toDateOrNull(data.createdAt)?.toISOString() ?? data.createdAt,
       updatedAt: toDateOrNull(data.updatedAt)?.toISOString() ?? data.updatedAt,
-      arcCardStatus: hasActiveIssue ? "Active" : undefined,
+      arcCardStatus: cardStatusForDashboard,
       lastIssued: latestIssueDate ? toDateString(latestIssueDate) : "N/A",
     };
   });

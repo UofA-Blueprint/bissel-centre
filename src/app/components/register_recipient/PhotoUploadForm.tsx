@@ -11,6 +11,8 @@ import SearchIcon from "../icons/SearchIcon";
 import CameraIcon from "../icons/CameraIcon";
 
 export type PhotoUploadData = { imageUrl: string };
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+const MAX_BASE64_FIELD_BYTES = 1_000_000;
 type Props = {
   onSubmit: (data: PhotoUploadData) => void;
   onError?: (msg: string | null) => void;
@@ -121,7 +123,7 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (file) {
-        if (file.size > 2 * 1024 * 1024) {
+        if (file.size > MAX_UPLOAD_BYTES) {
           onError?.("File is too large. Please select an image under 2MB.");
           return;
         }
@@ -146,14 +148,63 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
       setView("preview");
     };
 
-    // Convert File to base64
-    const fileToBase64 = (file: File): Promise<string> => {
+    const dataUrlByteLength = (dataUrl: string): number => {
+      return new TextEncoder().encode(dataUrl).length;
+    };
+
+    const loadImageFromFile = (file: File): Promise<HTMLImageElement> => {
       return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+        const objectUrl = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = () => {
+          URL.revokeObjectURL(objectUrl);
+          resolve(image);
+        };
+        image.onerror = () => {
+          URL.revokeObjectURL(objectUrl);
+          reject(new Error("Failed to load image."));
+        };
+        image.src = objectUrl;
       });
+    };
+
+    const compressToBase64WithinLimit = async (
+      file: File,
+      maxFieldBytes: number,
+    ): Promise<string> => {
+      const image = await loadImageFromFile(file);
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Failed to prepare image compression.");
+      }
+
+      let scale = 1;
+      let quality = 0.9;
+
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const width = Math.max(1, Math.round(image.width * scale));
+        const height = Math.max(1, Math.round(image.height * scale));
+        canvas.width = width;
+        canvas.height = height;
+        context.clearRect(0, 0, width, height);
+        context.drawImage(image, 0, 0, width, height);
+
+        const candidate = canvas.toDataURL("image/jpeg", quality);
+        if (dataUrlByteLength(candidate) <= maxFieldBytes) {
+          return candidate;
+        }
+
+        if (quality > 0.55) {
+          quality -= 0.1;
+        } else {
+          scale *= 0.85;
+        }
+      }
+
+      throw new Error(
+        "Image is too large after compression. Please use a smaller photo.",
+      );
     };
 
     const collect = (): PhotoUploadData | null => {
@@ -188,8 +239,11 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
             setUploadProgress((prev) => Math.min(prev + 10, 90));
           }, 150);
 
-          // Convert to base64
-          const base64String = await fileToBase64(imageFile);
+          // Convert to base64 and compress to stay within Firestore field size.
+          const base64String = await compressToBase64WithinLimit(
+            imageFile,
+            MAX_BASE64_FIELD_BYTES,
+          );
 
           clearInterval(progressInterval);
           setUploadProgress(100);

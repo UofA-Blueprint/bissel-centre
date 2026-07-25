@@ -219,6 +219,7 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
     return (
       <form
         className="space-y-5"
+        autoComplete="off"
         onSubmit={(e) => {
           e.preventDefault();
           handleSubmit();
@@ -264,7 +265,7 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
             <label className="flex flex-col relative">
               <span className="text-sm mb-1">
-                ARC Card Number <span className="text-red-500">*</span>
+                ARC ID Number <span className="text-red-500">*</span>
               </span>
               <input
                 value={arcCardDigits}
@@ -285,19 +286,22 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
                   }, 100);
                 }}
                 type="text"
-                name="arcCardDigits"
+                name="arcPassId"            // avoid “card” and “number” in name
+                id="arcPassId"
                 inputMode="numeric"
+                //autoComplete="off"
+                autoComplete="new-password"
                 placeholder="Type at least 3 digits to search"
                 className="mt-1 text-sm font-normal border rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
               />
               {normalizedArcCard.length > 0 && normalizedArcCard.length < 3 && (
                 <span className="mt-1 text-xs text-gray-500">
-                  Enter at least 3 digits to see matching ARC cards.
+                  Enter at least 3 digits to see matching ARC Passes.
                 </span>
               )}
               {isSearchingArcCards && (
                 <span className="mt-1 text-xs text-gray-500">
-                  Searching ARC cards...
+                  Searching ARC Passes...
                 </span>
               )}
               {arcCardLookupError && (
@@ -313,7 +317,7 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
                     {arcCardSuggestions.length === 0 &&
                     hasArcCardSearchCompleted ? (
                       <div className="px-3 py-2 text-sm text-gray-500">
-                        No matching ARC cards found.
+                        No matching ARC Passes found.
                       </div>
                     ) : (
                       arcCardSuggestions.map((cardNumber) => (
@@ -351,6 +355,7 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
                 inputMode="numeric"
                 min="1"
                 max="12"
+                maxLength={2}
                 placeholder="Enter 1-12 months"
                 className="mt-1 text-sm font-normal border rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
               />
