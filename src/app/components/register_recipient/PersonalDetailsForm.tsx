@@ -7,7 +7,7 @@ export type RecipientFormData = {
   alias?: string;
   gender?: string;
   phone?: string;
-  email?: string;
+  email: string;
   dob?: string;
   address?: string;
   postalCode?: string;
@@ -47,13 +47,8 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
 
     const validate = (data: RecipientFormData): string | null => {
       // Validate required fields
-      if (!data.firstName || !data.lastName || !data.postalCode) {
-        return "First name, last name, postal code, and one of email or phone are required.";
-      }
-
-      // Validate that at least one contact method is provided
-      if (!data.email && !data.phone) {
-        return "Please provide either an email address or phone number.";
+      if (!data.firstName || !data.lastName || !data.postalCode || !data.email) {
+        return "First name, last name, email, and postal code are required.";
       }
 
       // Validate postal code format (Canadian: A1A1A1 or A1A 1A1)
@@ -164,10 +159,7 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <label className="flex flex-col">
             <span className="text-sm">
-              Email{" "}
-              <span className="text-gray-500 text-xs">
-                (required if no phone)
-              </span>
+              Email <span className="text-red-500">*</span>
             </span>
             <input
               value={email}
@@ -179,12 +171,7 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
             />
           </label>
           <label className="flex flex-col">
-            <span className="text-sm">
-              Phone{" "}
-              <span className="text-gray-500 text-xs">
-                (required if no email)
-              </span>
-            </span>
+            <span className="text-sm">Phone</span>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}

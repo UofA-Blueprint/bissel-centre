@@ -132,11 +132,11 @@ export default function LoginPage() {
     try {
       await sendPasswordResetEmail(auth, forgotEmail.trim().toLowerCase());
       setForgotStatus(
-        "A password reset email has been sent if the address exists in our system. Please check your spam if you can't find email",
+        "If an account exists for that email, we sent a reset link. Please check your spam if you can't find email",
       );
     } catch (err: any) {
       if (err.code === "auth/user-not-found") {
-        setForgotStatus("No account found with that email address.");
+        setForgotStatus("If an account exists for that email, we sent a reset link. Please check your spam if you can't find email");
       } else if (err.code === "auth/invalid-email") {
         setForgotStatus("Please enter a valid email address.");
       } else {

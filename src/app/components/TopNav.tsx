@@ -53,13 +53,11 @@ export default function TopNav({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showProfileDropdown]);
 
-  // Close the mobile menu whenever the route changes
-  useEffect(() => {
-    setMobileMenuOpen(false);
-  }, [pathname]);
 
   const handleLogout = async () => {
     try {
+      setShowProfileDropdown(false);
+      setMobileMenuOpen(false);
       await fetch("/api/logout", { method: "POST" });
       await signOut(auth);
       router.replace(logoutRedirect);

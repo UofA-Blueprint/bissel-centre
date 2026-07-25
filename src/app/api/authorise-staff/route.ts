@@ -7,7 +7,6 @@ export async function POST(request: NextRequest) {
   try {
     // Optional: inspect cookies for debugging
     const cookieStore = await cookies();
-    console.log("Cookies:", cookieStore.getAll());
 
     // Expect Authorization: Bearer <ID_TOKEN>
     const authHeader = request.headers.get("authorization") || "";

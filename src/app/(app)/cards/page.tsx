@@ -627,7 +627,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="min-w-0 flex-1 truncate font-semibold text-gray-900">
-                        {card.passRecipient || "Unattributed"}
+                        {card.passRecipient || "No recipient"}
                       </span>
                       <span
                         className={`w-24 shrink-0 rounded-full px-2 py-0.5 text-center text-xs font-semibold ${statusStyles[card.status]}`}

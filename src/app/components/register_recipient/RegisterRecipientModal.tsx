@@ -11,6 +11,7 @@ import SidebarSteps from "./SidebarSteps";
 type Props = {
   open: boolean;
   onClose: () => void;
+  onSuccess?: () => void;
 };
 
 type FormData = {
@@ -19,7 +20,7 @@ type FormData = {
   photoUpload?: PhotoUploadData;
 };
 
-const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
+const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const personalDetailsRef = useRef<{ submit: () => void }>(null);
   const additionalInfoRef = useRef<{ submit: () => void }>(null);
@@ -98,6 +99,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose }) => {
       setCompletedSteps(new Set());
       setErrorMessage(null);
       onClose();
+      onSuccess?.();
     } catch (error) {
       console.error("Registration error:", error);
       setErrorMessage(
