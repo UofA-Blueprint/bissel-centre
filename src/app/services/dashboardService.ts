@@ -1,6 +1,6 @@
 import "server-only";
 
-import { initAdmin } from "@/app/services/firebaseAdmin";
+import type { Firestore } from "firebase-admin/firestore";
 
 export interface DashboardStat {
   icon: string;
@@ -86,10 +86,7 @@ export async function getDashboardSummaryForViewer(viewer: {
   uid: string;
   email: string;
   name: string;
-}): Promise<DashboardSummary> {
-  const app = await initAdmin();
-  const db = app.firestore();
-
+}, db: Firestore): Promise<DashboardSummary> {
   const [
   usersSnapshot,
   issuesSnapshot,
@@ -123,7 +120,6 @@ export async function getDashboardSummaryForViewer(viewer: {
   db.collection("banned_users").count().get(),
 ]);
 
-  const now = new Date();
   const latestIssueDateByUserId = new Map<string, Date>();
   const latestIssueCardIdByUserId = new Map<string, string>();
   const latestIssueReturnedAtByUserId = new Map<string, unknown>();

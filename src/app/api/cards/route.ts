@@ -7,6 +7,57 @@ import { ArcCard, ArcCardInput } from "@/app/(app)/cards/types";
 import { cookies } from "next/headers";
 import { expireOverdueArcCards } from "@/app/services/cardExpiryService";
 
+const EDMONTON_TIMEZONE = "America/Edmonton";
+
+function formatEdmontonDate(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: EDMONTON_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) return "";
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeDateOnlyInput(value: unknown): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoMatch) {
+    return `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+  }
+
+  const slashParts = raw.split("/");
+  if (slashParts.length === 3) {
+    const first = Number(slashParts[0]);
+    const second = Number(slashParts[1]);
+    const year = Number(slashParts[2]);
+    if (
+      Number.isFinite(first) &&
+      Number.isFinite(second) &&
+      Number.isFinite(year)
+    ) {
+      const month = first > 12 ? second : first;
+      const day = first > 12 ? first : second;
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      }
+    }
+  }
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return formatEdmontonDate(parsed);
+  }
+
+  return raw;
+}
+
 async function verifyStaffAccess() {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("session")?.value;
@@ -175,8 +226,9 @@ export async function GET() {
       const neededUserIds = new Set<string>();
       for (const doc of cardsSnapshot.docs) {
         const data = doc.data();
-        if (data.userId && !data.passRecipient) {
-          neededUserIds.add(data.userId);
+        const holderId = data.currentUserId || data.userId;
+        if (holderId && !data.passRecipient) {
+          neededUserIds.add(holderId);
         }
       }
       const userNames = await fetchUserNamesByIds(db, neededUserIds);
@@ -185,13 +237,14 @@ export async function GET() {
         const data = doc.data();
         
         let passRecipient = data.passRecipient || "";
-        if (data.userId && !passRecipient) {
-          passRecipient = userNames.get(data.userId) || "";
+        const holderId = data.currentUserId || data.userId;
+        if (holderId && !passRecipient) {
+          passRecipient = userNames.get(holderId) || "";
         }
 
         cards.push({
           id: doc.id,
-          currentUserId: data.userId || null,
+          currentUserId: data.currentUserId || data.userId || null,
           allocationDate: data.allocationDate || "",
           status: data.status || "Unloaded",
           department: data.department || "Emergency",
@@ -242,7 +295,7 @@ export async function POST(request: NextRequest) {
 
       const newCard = {
         currentUserId: cardInput.currentUserId || null,
-        allocationDate: cardInput.allocationDate,
+        allocationDate: normalizeDateOnlyInput(cardInput.allocationDate),
         status,
         department: cardInput.department,
         arcCardNumber: cardInput.arcCardNumber,
@@ -391,7 +444,7 @@ export async function PATCH(request: NextRequest){
           tx.update(userRef, {
             arcCardNumber: admin.firestore.FieldValue.delete(),
             passesIssued: admin.firestore.FieldValue.arrayUnion(cardRef.id),
-            updatedAt: new Date().toISOString(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           });
         }
 

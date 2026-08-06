@@ -175,7 +175,6 @@ export default function CardsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [barsHidden, setBarsHidden] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -219,7 +218,16 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
     throw new Error(firstPayload.error || "Failed to update card status");
   }
   setData((prev) =>
-    prev.map((card) => (card.id === cardId ? { ...card, status: nextStatus } : card)),
+    prev.map((card) =>
+      card.id === cardId
+        ? {
+            ...card,
+            status: nextStatus,
+            // Keep recipient display in sync with server unlink behavior.
+            passRecipient: nextStatus === "Active" ? card.passRecipient : "",
+          }
+        : card
+    ),
   );
 };
 
@@ -323,19 +331,6 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
         size: 50,
       },
       {
-        accessorKey: "allocationDate",
-        header: ({ column }) => (
-          <SortableHeader
-            label="Allocation Date"
-            sorted={column.getIsSorted()}
-            onClick={column.getToggleSortingHandler()}
-          />
-        ),
-        cell: ({ getValue }) => (
-          <span className="text-gray-700">{formatDate(getValue<string>())}</span>
-        ),
-      },
-      {
         accessorKey: "status",
         header: () => <span className="text-xs font-bold text-gray-900">Status</span>,
         cell: ({ row, getValue }) => (
@@ -380,46 +375,17 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
       {
         accessorKey: "passRecipient",
         header: () => <span className="text-xs font-bold text-gray-900">Pass Recipient</span>,
-        cell: ({ getValue }) => <span className="font-medium text-gray-900">{getValue<string>()}</span>,
+        cell: ({ getValue }) => (
+          <span className="font-medium text-gray-900">{getValue<string>() || "No recipient"}</span>
+        ),
       },
       {
-        accessorKey: "issueDates",
-        header: () => <span className="text-xs font-bold text-gray-900">Issue Dates</span>,
-        cell: ({ getValue, row }) => {
-          const dates = getValue<string[]>();
-          const isExpanded = expandedDates[row.original.id];
-          const toggle = () =>
-            setExpandedDates((prev) => ({ ...prev, [row.original.id]: !isExpanded }));
-
-          if (!dates || dates.length === 0) return <span className="text-gray-400"></span>;
-
-          if (dates.length === 1) {
-            return <span className="text-gray-700">{dates[0]}</span>;
-          }
-
-          if (isExpanded) {
-            return (
-              <button onClick={toggle} className="flex flex-col text-left text-gray-700">
-                {dates.map((d) => (
-                  <span key={d} className="block">{d}</span>
-                ))}
-                <span className="text-xs text-cyan-600 font-medium mt-1">Show less</span>
-              </button>
-            );
-          }
-
-          return (
-            <div className="flex items-center gap-1 text-gray-700">
-              <span>{dates[0]}</span>
-              <button
-                onClick={toggle}
-                className="text-gray-500 hover:text-gray-700 text-sm font-medium whitespace-nowrap"
-              >
-                +{dates.length - 1} more
-              </button>
-            </div>
-          );
-        },
+        id: "allocationDateDisplay",
+        accessorKey: "allocationDate",
+        header: () => <span className="text-xs font-bold text-gray-900">Allocation Date</span>,
+        cell: ({ getValue }) => (
+          <span className="text-gray-700">{formatDate(getValue<string>()) || "—"}</span>
+        ),
       },
       {
         accessorKey: "notes",
@@ -427,7 +393,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
         cell: ({ getValue }) => <span className="text-gray-500">{getValue<string>()}</span>,
       },
     ],
-    [expandedDates]
+    []
   );
 
   const table = useReactTable({
@@ -454,13 +420,12 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
   // Hardcoded width based on the screenshot column distribution
   const columnWidths: Record<string, string> = {
     rowNumber: "60px",
-    allocationDate: "130px",
     status: "130px",
     department: "180px",
     final7Digits: "120px",
     securityCode: "120px",
     passRecipient: "200px",
-    issueDates: "180px",
+    allocationDateDisplay: "180px",
     notes: "100px",
   };
 
@@ -698,7 +663,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <DialogTitle className="truncate text-lg font-bold text-gray-900">
-                      {selectedCard.passRecipient || "Unattributed"}
+                      {selectedCard.passRecipient || "No recipient"}
                     </DialogTitle>
                     <p className="text-xs text-gray-500">
                       Allocated {formatDate(selectedCard.allocationDate) || "—"}
@@ -742,11 +707,9 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
                   <dd className="text-gray-700">
                     {selectedCard.securityCode || "—"}
                   </dd>
-                  <dt className="text-gray-500">Issued</dt>
+                  <dt className="text-gray-500">Allocation Date</dt>
                   <dd className="text-gray-700">
-                    {selectedCard.issueDates && selectedCard.issueDates.length > 0
-                      ? selectedCard.issueDates.map(formatDate).join(", ")
-                      : "—"}
+                    {formatDate(selectedCard.allocationDate) || "—"}
                   </dd>
                   <dt className="text-gray-500">Notes</dt>
                   <dd className="text-gray-500">{selectedCard.notes || "—"}</dd>

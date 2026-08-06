@@ -22,6 +22,8 @@ type FormData = {
 
 const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const personalDetailsRef = useRef<{ submit: () => void }>(null);
   const additionalInfoRef = useRef<{ submit: () => void }>(null);
   const photouploadRef = useRef<{ submit: () => void }>(null);
@@ -77,6 +79,9 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
   };
 
   const handleFinalSubmit = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setIsSubmitting(true);
     try {
       setErrorMessage(null);
 
@@ -98,6 +103,8 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
       setCurrentPage(1);
       setCompletedSteps(new Set());
       setErrorMessage(null);
+      submittingRef.current = false;
+      setIsSubmitting(false);
       onClose();
       onSuccess?.();
     } catch (error) {
@@ -107,6 +114,8 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
           ? error.message
           : "Failed to register recipient. Please try again.",
       );
+      submittingRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -258,8 +267,9 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
             <button
               type="button"
               aria-label="Close"
+              disabled={isSubmitting}
               onClick={handleClose}
-              className="ml-3 inline-flex items-center justify-center rounded-md p-1 text-gray-500 hover:text-gray-700"
+              className="ml-3 inline-flex items-center justify-center rounded-md p-1 text-gray-500 hover:text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <span className="sr-only">Close</span>✕
             </button>
@@ -285,16 +295,25 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
             </div>
             <div>
               {currentPage > 1 && (
-                <button onClick={handleBack} className="px-3 py-2 text-primary">
+                <button
+                  onClick={handleBack}
+                  disabled={isSubmitting}
+                  className="px-3 py-2 text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
                   ← Back
                 </button>
               )}
             </div>
             <button
+              disabled={isSubmitting}
               onClick={currentPage === 4 ? handleFinalSubmit : handleContinue}
-              className="px-3 py-2 bg-primary text-white rounded-xl"
+              className="px-3 py-2 bg-primary text-white rounded-xl disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {currentPage === 4 ? "Finish Registration" : "Continue →"}
+              {currentPage === 4
+                ? isSubmitting
+                  ? "Finishing..."
+                  : "Finish Registration"
+                : "Continue →"}
             </button>
           </div>
         </DialogPanel>

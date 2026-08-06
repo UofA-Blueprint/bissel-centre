@@ -50,6 +50,12 @@ interface DashboardSummaryResponse {
   users: User[];
 }
 
+const DASHBOARD_CACHE_TTL_MS = 30_000;
+let dashboardSummaryCache: {
+  data: DashboardSummaryResponse;
+  timestampMs: number;
+} | null = null;
+
 export default function DashboardPage() {
   const router = useRouter();
   const [stats, setStats] = useState([
@@ -71,7 +77,24 @@ export default function DashboardPage() {
   const [refreshNonce, setRefreshNonce] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchData = async () => {
+      const cachedSummary = dashboardSummaryCache;
+      const now = Date.now();
+      const hasWarmCache =
+        refreshNonce === 0 &&
+        cachedSummary !== null &&
+        now - cachedSummary.timestampMs < DASHBOARD_CACHE_TTL_MS;
+
+      if (hasWarmCache) {
+        setStats(cachedSummary.data.stats);
+        setUsers(cachedSummary.data.users);
+        setIsLoading(false);
+      } else {
+        setIsLoading(true);
+      }
+
       try {
         setForbidden(false);
 
@@ -95,16 +118,28 @@ export default function DashboardPage() {
         const summary =
           (await dashboardResponse.json()) as DashboardSummaryResponse;
 
+        if (cancelled) return;
+
         setStats(summary.stats);
         setUsers(summary.users);
+        dashboardSummaryCache = {
+          data: summary,
+          timestampMs: Date.now(),
+        };
       } catch (error) {
+        if (cancelled) return;
         console.error("Error fetching dashboard data:", error);
       } finally {
-        setIsLoading(false);
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchData();
+    return () => {
+      cancelled = true;
+    };
   }, [router, refreshNonce]);
 
   useEffect(() => {

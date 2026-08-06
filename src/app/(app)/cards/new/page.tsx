@@ -26,6 +26,7 @@ type PendingStatusChange = {
 };
 
 const STATUS_WARNING_PREF_KEY = "arc_card_new_status_warning_hide_v1";
+const EDMONTON_TIMEZONE = "America/Edmonton";
 
 const STATUS_MEANINGS: Record<CardStatus, string> = {
   Active: "Card is being used by someone.",
@@ -34,6 +35,20 @@ const STATUS_MEANINGS: Record<CardStatus, string> = {
   Expired: "Card is no longer valid.",
   Cancelled: "Card has been cancelled and should not be used.",
 };
+
+function getEdmontonTodayDateString(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: EDMONTON_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) return "";
+  return `${year}-${month}-${day}`;
+}
 
 
 
@@ -71,7 +86,7 @@ export default function NewAllocationPage() {
       ...prev,
       {
         id: nextId,
-        allocationDate: new Date().toLocaleDateString("en-US"),
+        allocationDate: getEdmontonTodayDateString(),
         status: "Unloaded",
         department: "Mental Health",
         final7Digits: "",

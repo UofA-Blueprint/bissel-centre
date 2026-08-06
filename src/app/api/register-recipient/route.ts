@@ -6,9 +6,24 @@ import { encryptPhone } from "@/utils/phoneEncryption";
 import admin from "firebase-admin";
 
 const MAX_PICTURE_FIELD_BYTES = 1_000_000; // Firestore field value must stay < ~1,048,487 bytes.
+const EDMONTON_TIMEZONE = "America/Edmonton";
 
 function getUtf8ByteSize(value: string): number {
   return Buffer.byteLength(value, "utf8");
+}
+
+function formatEdmontonDate(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: EDMONTON_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) return "";
+  return `${year}-${month}-${day}`;
 }
 
 export async function POST(request: NextRequest) {
@@ -24,8 +39,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const admin = await initAdmin();
-    const decodedClaims = await admin
+    const adminApp = await initAdmin();
+    const decodedClaims = await adminApp
       .auth()
       .verifySessionCookie(sessionCookie, true);
     const createdByUid = decodedClaims.uid;
@@ -117,9 +132,9 @@ export async function POST(request: NextRequest) {
       passesIssued: [],
       banned: false,
       banReason: null,
-      createdAt: new Date().toISOString(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: createdByUid,
-      updatedAt: new Date().toISOString(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
 
       // Additional fields from form (not in core schema but preserving data)
       phone: encryptedPhone, // Encrypted phone number
@@ -181,7 +196,7 @@ export async function POST(request: NextRequest) {
   
           const issueTimestamp = Timestamp.now();
           const issueDate = issueTimestamp.toDate();
-          const issueDateString = `${issueDate.getMonth() + 1}/${issueDate.getDate()}/${issueDate.getFullYear()}`;
+          const issueDateString = formatEdmontonDate(issueDate);
           const expiresAtDate = new Date(issueDate);
           expiresAtDate.setMonth(expiresAtDate.getMonth() + arcCardDurationMonths);
 
@@ -212,7 +227,7 @@ export async function POST(request: NextRequest) {
           tx.update(cardDoc.ref,{
             currentUserId: userRef.id,
             status: "Active",
-            updatedAt: new Date().toISOString(),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           })
 
           tx.set(issueRef, {

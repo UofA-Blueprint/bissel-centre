@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 // Staff-only routes (regular administrative staff, not IT admins)
-const STAFF_ONLY_ROUTES = ["/dashboard", "/profile", "/cards"];
+const STAFF_ONLY_ROUTES = ["/dashboard", "/profile", "/cards", "/reports"];
 
 // Admin routes that remain public for authentication/bootstrap
 const ADMIN_PUBLIC_ROUTES = ["/admin/login", "/admin/register"];
