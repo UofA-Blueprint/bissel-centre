@@ -35,13 +35,11 @@ export async function GET() {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const userRecord = await app.auth().getUser(decodedClaims.uid);
-
     const summary = await getDashboardSummaryForViewer({
       uid: decodedClaims.uid,
-      email: userRecord.email || "",
-      name: userRecord.displayName || "",
-    });
+      email: decodedClaims.email || "",
+      name: decodedClaims.name || "",
+    }, app.firestore());
     return NextResponse.json(summary);
   } catch (error) {
     console.error("Error fetching dashboard summary:", error);

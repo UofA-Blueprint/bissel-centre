@@ -30,6 +30,7 @@ import type {
   UserReportRow,
   CardHistoryEntry,
   ActivityEntry,
+  ReportCardRow,
 } from "./types";
 // xlsx is only needed once the user actually exports, and it is a large
 // dependency. Import the types statically (erased at build time) and pull the
@@ -38,14 +39,21 @@ import type {
 import type * as XLSXNS from "xlsx";
 
 type XLSXModule = typeof import("xlsx");
+const EDMONTON_TIMEZONE = "America/Edmonton";
 
 // --- API ---
 
-async function fetchReportData(): Promise<UserReportRow[]> {
+async function fetchReportData(): Promise<{
+  users: UserReportRow[];
+  cards: ReportCardRow[];
+}> {
   const res = await fetch("/api/reports/data");
   if (!res.ok) throw new Error("Failed to fetch report data");
   const json = await res.json();
-  return json.users;
+  return {
+    users: json.users ?? [],
+    cards: json.cards ?? [],
+  };
 }
 
 // --- Helpers ---
@@ -53,13 +61,14 @@ async function fetchReportData(): Promise<UserReportRow[]> {
 function formatDate(dateStr: string): string {
   if (!dateStr) return "—";
   try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString("en-US", {
+    const parsed = parseFlexibleDate(dateStr);
+    if (!parsed) return dateStr;
+    return new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
-    });
+      timeZone: EDMONTON_TIMEZONE,
+    }).format(parsed);
   } catch {
     return dateStr;
   }
@@ -68,18 +77,90 @@ function formatDate(dateStr: string): string {
 function formatDateTime(dateStr: string): string {
   if (!dateStr) return "—";
   try {
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    return d.toLocaleDateString("en-US", {
+    const parsed = parseFlexibleDate(dateStr);
+    if (!parsed) return dateStr;
+    return new Intl.DateTimeFormat("en-US", {
       month: "short",
       day: "numeric",
       year: "numeric",
       hour: "numeric",
       minute: "2-digit",
-    });
+      timeZone: EDMONTON_TIMEZONE,
+    }).format(parsed);
   } catch {
     return dateStr;
   }
+}
+
+function parseDateOnlyParts(value: string): { year: number; month: number; day: number } | null {
+  const trimmed = value.trim();
+  const isoDateOnly = /^(\d{4})-(\d{2})-(\d{2})$/;
+  const isoDateOnlyMatch = trimmed.match(isoDateOnly);
+  if (isoDateOnlyMatch) {
+    return {
+      year: Number(isoDateOnlyMatch[1]),
+      month: Number(isoDateOnlyMatch[2]),
+      day: Number(isoDateOnlyMatch[3]),
+    };
+  }
+
+  const slashParts = trimmed.split("/");
+  if (slashParts.length === 3) {
+    const first = Number(slashParts[0]);
+    const second = Number(slashParts[1]);
+    const year = Number(slashParts[2]);
+    if (
+      Number.isFinite(first) &&
+      Number.isFinite(second) &&
+      Number.isFinite(year)
+    ) {
+      // Support both M/D/YYYY and D/M/YYYY.
+      const month = first > 12 ? second : first;
+      const day = first > 12 ? first : second;
+      return { year, month, day };
+    }
+  }
+
+  return null;
+}
+
+function parseFlexibleDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  const trimmed = dateStr.trim();
+
+  const dateOnlyParts = parseDateOnlyParts(trimmed);
+  if (dateOnlyParts) {
+    const parsed = new Date(
+      Date.UTC(dateOnlyParts.year, dateOnlyParts.month - 1, dateOnlyParts.day, 12, 0, 0)
+    );
+    if (!isNaN(parsed.getTime())) return parsed;
+  }
+
+  const iso = new Date(trimmed);
+  if (!isNaN(iso.getTime())) return iso;
+
+  return null;
+}
+
+function toEdmontonDayKey(value: Date): number {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: EDMONTON_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) return NaN;
+  return Number(`${year}${month}${day}`);
+}
+
+function parseInputDayKey(value: string): number | null {
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return Number(`${match[1]}${match[2]}${match[3]}`);
 }
 
 function autoFitColumns(
@@ -347,6 +428,7 @@ function ExpandedRowContent({ row }: { row: Row<UserReportRow> }) {
 
 export default function ReportsPage() {
   const [data, setData] = useState<UserReportRow[]>([]);
+  const [allCards, setAllCards] = useState<ReportCardRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -356,11 +438,41 @@ export default function ReportsPage() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [flagFilter, setFlagFilter] = useState<"all" | "flagged" | "not_flagged">("all");
   const [statusFilter, setStatusFilter] = useState<("Active" | "Inactive")[]>([]);
+  const [currentCardFilter, setCurrentCardFilter] = useState<"all" | "has_current" | "no_current">("all");
+  const [cardStatusFilter, setCardStatusFilter] = useState<string[]>([]);
+  const [cardDepartmentFilter, setCardDepartmentFilter] = useState<string[]>([]);
+  const [activityEventFilter, setActivityEventFilter] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  const [dateField, setDateField] = useState<
+    "registered" | "card_allocation" | "card_issue" | "activity" | "flagged"
+  >("registered");
+  const [datePreset, setDatePreset] = useState<
+    "none" | "today" | "last7" | "last30" | "thisMonth" | "lastMonth"
+  >("none");
   const filterRef = useRef<HTMLDivElement>(null);
 
   const [exporting, setExporting] = useState<"all" | "cards" | "activity" | null>(null);
+  const availableCardStatuses = useMemo(
+    () => Array.from(new Set(allCards.map((card) => card.status).filter(Boolean))).sort(),
+    [allCards]
+  );
+
+  const availableCardDepartments = useMemo(
+    () => Array.from(new Set(allCards.map((card) => card.department).filter(Boolean))).sort(),
+    [allCards]
+  );
+
+  const availableActivityEvents = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          data.flatMap((user) => user.activityHistory.map((entry) => entry.event).filter(Boolean))
+        )
+      ).sort(),
+    [data]
+  );
+
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -374,8 +486,9 @@ export default function ReportsPage() {
 
   useEffect(() => {
     fetchReportData()
-      .then((users) => {
-        setData(users);
+      .then((reportData) => {
+        setData(reportData.users);
+        setAllCards(reportData.cards);
         setLoading(false);
       })
       .catch((err) => {
@@ -409,44 +522,147 @@ export default function ReportsPage() {
       result = result.filter((u) => statusFilter.includes(u.status as "Active" | "Inactive"));
     }
 
-    if (dateFrom) {
-      const from = new Date(dateFrom);
-      from.setHours(0, 0, 0, 0);
-      result = result.filter((u) => {
-        if (!u.createdAt) return false;
-        return new Date(u.createdAt) >= from;
-      });
+    if (currentCardFilter === "has_current") {
+      result = result.filter((u) => Boolean(u.currentArcCard));
+    } else if (currentCardFilter === "no_current") {
+      result = result.filter((u) => !u.currentArcCard);
     }
 
-    if (dateTo) {
-      const to = new Date(dateTo);
-      to.setHours(23, 59, 59, 999);
+    if (cardStatusFilter.length > 0) {
+      const selectedStatuses = new Set(cardStatusFilter);
+      result = result.filter((u) =>
+        u.cardHistory.some((card) => selectedStatuses.has(card.status))
+      );
+    }
+
+    if (cardDepartmentFilter.length > 0) {
+      const selectedDepartments = new Set(cardDepartmentFilter);
+      result = result.filter((u) =>
+        u.cardHistory.some((card) => selectedDepartments.has(card.department))
+      );
+    }
+
+    if (activityEventFilter.length > 0) {
+      const selectedEvents = new Set(activityEventFilter);
+      result = result.filter((u) =>
+        u.activityHistory.some((entry) => selectedEvents.has(entry.event))
+      );
+    }
+
+    if (dateFrom || dateTo) {
+      const fromDayKey = parseInputDayKey(dateFrom);
+      const toDayKey = parseInputDayKey(dateTo);
+      const inRange = (dateStr: string) => {
+        const parsed = parseFlexibleDate(dateStr);
+        if (!parsed) return false;
+        const dayKey = toEdmontonDayKey(parsed);
+        if (Number.isNaN(dayKey)) return false;
+        if (fromDayKey !== null && dayKey < fromDayKey) return false;
+        if (toDayKey !== null && dayKey > toDayKey) return false;
+        return true;
+      };
+
       result = result.filter((u) => {
-        if (!u.createdAt) return false;
-        return new Date(u.createdAt) <= to;
+        if (dateField === "registered") {
+          return inRange(u.createdAt);
+        }
+        if (dateField === "flagged") {
+          return !!u.bannedAt && inRange(u.bannedAt);
+        }
+        if (dateField === "card_allocation") {
+          return u.cardHistory.some((card) => inRange(card.allocationDate));
+        }
+        if (dateField === "card_issue") {
+          return u.cardHistory.some((card) =>
+            card.issueDates.some((issueDate) => inRange(issueDate))
+          );
+        }
+        return u.activityHistory.some((activity) => inRange(activity.date));
       });
     }
 
     return result;
-  }, [data, searchQuery, flagFilter, statusFilter, dateFrom, dateTo]);
+  }, [
+    data,
+    searchQuery,
+    flagFilter,
+    statusFilter,
+    currentCardFilter,
+    cardStatusFilter,
+    cardDepartmentFilter,
+    activityEventFilter,
+    dateFrom,
+    dateTo,
+    dateField,
+  ]);
 
   const activeFilterCount =
     (flagFilter !== "all" ? 1 : 0) +
     statusFilter.length +
+    (currentCardFilter !== "all" ? 1 : 0) +
+    cardStatusFilter.length +
+    cardDepartmentFilter.length +
+    activityEventFilter.length +
     (dateFrom ? 1 : 0) +
     (dateTo ? 1 : 0);
 
   const clearAllFilters = () => {
     setFlagFilter("all");
     setStatusFilter([]);
+    setCurrentCardFilter("all");
+    setCardStatusFilter([]);
+    setCardDepartmentFilter([]);
+    setActivityEventFilter([]);
     setDateFrom("");
     setDateTo("");
+    setDateField("registered");
+    setDatePreset("none");
     setSearchQuery("");
+  };
+
+  const applyDatePreset = (
+    preset: "today" | "last7" | "last30" | "thisMonth" | "lastMonth"
+  ) => {
+    const now = new Date();
+    const start = new Date(now);
+    const end = new Date(now);
+
+    if (preset === "today") {
+      // start/end are today
+    } else if (preset === "last7") {
+      start.setDate(now.getDate() - 6);
+    } else if (preset === "last30") {
+      start.setDate(now.getDate() - 29);
+    } else if (preset === "thisMonth") {
+      start.setDate(1);
+    } else if (preset === "lastMonth") {
+      start.setMonth(now.getMonth() - 1, 1);
+      end.setDate(0);
+    }
+
+    const toInput = (date: Date) => {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
+    };
+    setDateFrom(toInput(start));
+    setDateTo(toInput(end));
+    setDatePreset(preset);
   };
 
   const toggleStatusFilter = (s: "Active" | "Inactive") => {
     setStatusFilter((prev) =>
       prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
+    );
+  };
+
+  const toggleStringFilter = (
+    value: string,
+    setter: (updater: (prev: string[]) => string[]) => void
+  ) => {
+    setter((prev) =>
+      prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]
     );
   };
 
@@ -465,7 +681,9 @@ export default function ReportsPage() {
       "Date of Birth": u.dateOfBirth || "",
       Address: u.address || "",
       "Postal Code": u.postalCode || "",
-      "Total Cards": u.totalCardsIssued,
+      "Cards owned (complete history)": u.totalCardsIssued,
+      "Current ARC Card": u.currentArcCard || "",
+      "Current Department of ARC Card": u.currentArcCardDepartment || "",
       "Activity Events": u.activityHistory.length,
       Notes: u.notes || "",
       Registered: u.createdAt ? formatDate(u.createdAt) : "",
@@ -475,26 +693,129 @@ export default function ReportsPage() {
     XLSX.utils.book_append_sheet(wb, ws, "Users");
   };
 
+  const buildExportInfoSheet = (
+    XLSX: XLSXModule,
+    wb: XLSXNS.WorkBook,
+    scope: "All" | "Cards" | "Activity"
+  ) => {
+    const dateFieldLabel: Record<typeof dateField, string> = {
+      registered: "Registered Date",
+      card_allocation: "Card Allocation Date",
+      card_issue: "Card Issue Date",
+      activity: "Activity Date",
+      flagged: "Flagged Date",
+    };
+    const presetLabel: Record<typeof datePreset, string> = {
+      none: "Custom / None",
+      today: "Today",
+      last7: "Last 7 Days",
+      last30: "Last 30 Days",
+      thisMonth: "This Month",
+      lastMonth: "Last Month",
+    };
+    const rows: Array<Record<string, string | number>> = [
+      { Field: "Export Scope", Value: scope },
+      { Field: "Generated At", Value: new Date().toISOString() },
+      { Field: "Total Rows (Users Table)", Value: filteredData.length },
+      { Field: "Search Query", Value: searchQuery || "None" },
+      { Field: "Flag Filter", Value: flagFilter },
+      {
+        Field: "Status Filter",
+        Value: statusFilter.length > 0 ? statusFilter.join(", ") : "All",
+      },
+      { Field: "Current Card Filter", Value: currentCardFilter },
+      {
+        Field: "Card Status Filter",
+        Value: cardStatusFilter.length > 0 ? cardStatusFilter.join(", ") : "All",
+      },
+      {
+        Field: "Card Department Filter",
+        Value: cardDepartmentFilter.length > 0 ? cardDepartmentFilter.join(", ") : "All",
+      },
+      {
+        Field: "Activity Event Filter",
+        Value: activityEventFilter.length > 0 ? activityEventFilter.join(", ") : "All",
+      },
+      { Field: "Date Field", Value: dateFieldLabel[dateField] },
+      { Field: "Date Preset", Value: presetLabel[datePreset] },
+      { Field: "Date From", Value: dateFrom || "None" },
+      { Field: "Date To", Value: dateTo || "None" },
+    ];
+    const ws = XLSX.utils.json_to_sheet(rows);
+    autoFitColumns(ws, rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Export Info");
+  };
+
   const buildCardSheet = (XLSX: XLSXModule, wb: XLSXNS.WorkBook) => {
-    const cardRows: Record<string, string | number>[] = [];
-    for (const u of filteredData) {
-      for (const c of u.cardHistory) {
-        cardRows.push({
-          "First Name": u.firstName,
-          "Last Name": u.lastName,
-          "Card Number": c.cardNumber,
-          Department: c.department,
-          "Card Status": c.status,
-          "Allocation Date": c.allocationDate,
-          "Security Code": c.securityCode,
-          "Issue Dates": c.issueDates.join(", "),
-        });
-      }
+    const filteredCardIdsFromUsers = new Set(
+      filteredData.flatMap((user) => user.cardHistory.map((card) => card.cardId))
+    );
+    let cardsForExport = allCards.filter((card) =>
+      filteredCardIdsFromUsers.has(card.cardId)
+    );
+
+    if (cardStatusFilter.length > 0) {
+      const selectedStatuses = new Set(cardStatusFilter);
+      cardsForExport = cardsForExport.filter((card) =>
+        selectedStatuses.has(card.status)
+      );
     }
+
+    if (cardDepartmentFilter.length > 0) {
+      const selectedDepartments = new Set(cardDepartmentFilter);
+      cardsForExport = cardsForExport.filter((card) =>
+        selectedDepartments.has(card.department)
+      );
+    }
+
+    if ((dateFrom || dateTo) && dateField === "card_allocation") {
+      const fromDayKey = parseInputDayKey(dateFrom);
+      const toDayKey = parseInputDayKey(dateTo);
+      cardsForExport = cardsForExport.filter((card) => {
+        const parsed = parseFlexibleDate(card.allocationDate);
+        if (!parsed) return false;
+        const dayKey = toEdmontonDayKey(parsed);
+        if (Number.isNaN(dayKey)) return false;
+        if (fromDayKey !== null && dayKey < fromDayKey) return false;
+        if (toDayKey !== null && dayKey > toDayKey) return false;
+        return true;
+      });
+    }
+
+    if ((dateFrom || dateTo) && dateField === "card_issue") {
+      const fromDayKey = parseInputDayKey(dateFrom);
+      const toDayKey = parseInputDayKey(dateTo);
+      cardsForExport = cardsForExport.filter((card) =>
+        card.issueDates.some((issueDate) => {
+          const parsed = parseFlexibleDate(issueDate);
+          if (!parsed) return false;
+          const dayKey = toEdmontonDayKey(parsed);
+          if (Number.isNaN(dayKey)) return false;
+          if (fromDayKey !== null && dayKey < fromDayKey) return false;
+          if (toDayKey !== null && dayKey > toDayKey) return false;
+          return true;
+        })
+      );
+    }
+
+    const cardRows: Record<string, string | number>[] = cardsForExport.map((c) => ({
+      "Card ID": c.cardId,
+      "Card Number": c.cardNumber,
+      "Security Code": c.securityCode,
+      Department: c.department,
+      "Card Status": c.status,
+      "Allocation Date": c.allocationDate,
+      "Current User ID": c.currentUserId || "",
+      "Current User Name": c.currentUserName || "",
+      "Issue Dates": c.issueDates.join(", "),
+      Notes: c.notes || "",
+      "Created At": c.createdAt || "",
+      "Updated At": c.updatedAt || "",
+    }));
     const ws = XLSX.utils.json_to_sheet(
       cardRows.length > 0
         ? cardRows
-        : [{ Info: "No card history for the current filter" }]
+        : [{ Info: "No cards found." }]
     );
     if (cardRows.length > 0) autoFitColumns(ws, cardRows);
     XLSX.utils.book_append_sheet(wb, ws, "Card History");
@@ -538,6 +859,7 @@ export default function ReportsPage() {
     try {
       const XLSX = await import("xlsx");
       const wb = XLSX.utils.book_new();
+      buildExportInfoSheet(XLSX, wb, "All");
       buildUserSheet(XLSX, wb);
       buildCardSheet(XLSX, wb);
       buildActivitySheet(XLSX, wb);
@@ -554,6 +876,7 @@ export default function ReportsPage() {
     try {
       const XLSX = await import("xlsx");
       const wb = XLSX.utils.book_new();
+      buildExportInfoSheet(XLSX, wb, "Cards");
       buildCardSheet(XLSX, wb);
       downloadWorkbook(XLSX, wb, "cards");
     } catch {
@@ -568,6 +891,7 @@ export default function ReportsPage() {
     try {
       const XLSX = await import("xlsx");
       const wb = XLSX.utils.book_new();
+      buildExportInfoSheet(XLSX, wb, "Activity");
       buildActivitySheet(XLSX, wb);
       downloadWorkbook(XLSX, wb, "activity");
     } catch {
@@ -667,6 +991,30 @@ export default function ReportsPage() {
         cell: ({ getValue }) => <StatusChip status={getValue<string>()} />,
       },
       {
+        id: "currentArcCard",
+        accessorKey: "currentArcCard",
+        header: ({ column }) => (
+          <SortableHeader
+            label="Current ARC Card"
+            sorted={column.getIsSorted()}
+            onClick={column.getToggleSortingHandler()}
+          />
+        ),
+        cell: ({ getValue }) => (
+          <span className="font-mono text-gray-800 text-xs">{getValue<string>() || "—"}</span>
+        ),
+      },
+      {
+        id: "currentArcCardDepartment",
+        accessorKey: "currentArcCardDepartment",
+        header: () => (
+          <span className="text-xs font-bold text-gray-900">Current Card Dept.</span>
+        ),
+        cell: ({ getValue }) => (
+          <span className="text-gray-800 text-xs">{getValue<string>() || "—"}</span>
+        ),
+      },
+      {
         accessorKey: "banned",
         header: ({ column }) => (
           <SortableHeader
@@ -688,7 +1036,7 @@ export default function ReportsPage() {
         accessorKey: "totalCardsIssued",
         header: ({ column }) => (
           <SortableHeader
-            label="Cards"
+            label="Cards Owned (Complete History)"
             sorted={column.getIsSorted()}
             onClick={column.getToggleSortingHandler()}
           />
@@ -754,6 +1102,8 @@ export default function ReportsPage() {
     email: "180px",
     phoneNumber: "120px",
     status: "90px",
+    currentArcCard: "140px",
+    currentArcCardDepartment: "140px",
     banned: "140px",
     totalCardsIssued: "70px",
     activityCount: "80px",
@@ -854,20 +1204,82 @@ export default function ReportsPage() {
                   {/* Date range filter */}
                   <div className="mb-4">
                     <h4 className="text-sm font-medium text-gray-700 mb-2">
-                      Registered Between
+                      Date Filter
                     </h4>
+                    <div className="mb-2">
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Filter by date field
+                      </label>
+                      <select
+                        value={dateField}
+                        onChange={(e) =>
+                          setDateField(
+                            e.target.value as
+                              | "registered"
+                              | "card_allocation"
+                              | "card_issue"
+                              | "activity"
+                              | "flagged"
+                          )
+                        }
+                        className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                      >
+                        <option value="registered">Registered Date</option>
+                        <option value="card_allocation">Card Allocation Date</option>
+                        <option value="card_issue">Card Issue Date</option>
+                        <option value="activity">Activity Date</option>
+                        <option value="flagged">Flagged Date</option>
+                      </select>
+                    </div>
+                    <div className="mb-2">
+                      <label className="block text-xs text-gray-500 mb-1">
+                        Quick presets
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(
+                          [
+                            ["today", "Today"],
+                            ["last7", "Last 7d"],
+                            ["last30", "Last 30d"],
+                            ["thisMonth", "This Month"],
+                            ["lastMonth", "Last Month"],
+                          ] as const
+                        ).map(([preset, label]) => (
+                          <button
+                            key={preset}
+                            onClick={() => applyDatePreset(preset)}
+                            className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                              datePreset === preset
+                                ? "bg-cyan-100 text-cyan-700 ring-2 ring-offset-1 ring-cyan-500"
+                                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      Custom range
+                    </label>
                     <div className="flex items-center gap-2">
                       <input
                         type="date"
                         value={dateFrom}
-                        onChange={(e) => setDateFrom(e.target.value)}
+                        onChange={(e) => {
+                          setDateFrom(e.target.value);
+                          setDatePreset("none");
+                        }}
                         className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       />
                       <span className="text-gray-400 text-xs">to</span>
                       <input
                         type="date"
                         value={dateTo}
-                        onChange={(e) => setDateTo(e.target.value)}
+                        onChange={(e) => {
+                          setDateTo(e.target.value);
+                          setDatePreset("none");
+                        }}
                         className="flex-1 border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       />
                     </div>
@@ -902,7 +1314,7 @@ export default function ReportsPage() {
                   </div>
 
                   {/* Account Status filter */}
-                  <div>
+                  <div className="mb-4">
                     <h4 className="text-sm font-medium text-gray-700 mb-2">
                       Account Status
                     </h4>
@@ -918,6 +1330,106 @@ export default function ReportsPage() {
                           }`}
                         >
                           {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Current card filter */}
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">
+                      Current ARC Card
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {(
+                        [
+                          ["all", "All"],
+                          ["has_current", "Has Current Card"],
+                          ["no_current", "No Current Card"],
+                        ] as const
+                      ).map(([opt, label]) => (
+                        <button
+                          key={opt}
+                          onClick={() => setCurrentCardFilter(opt)}
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            currentCardFilter === opt
+                              ? "bg-cyan-100 text-cyan-700 ring-2 ring-offset-1 ring-cyan-500"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Card status filter */}
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">
+                      Card Status History
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {availableCardStatuses.map((status) => (
+                        <button
+                          key={status}
+                          onClick={() =>
+                            toggleStringFilter(status, setCardStatusFilter)
+                          }
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            cardStatusFilter.includes(status)
+                              ? "bg-cyan-100 text-cyan-700 ring-2 ring-offset-1 ring-cyan-500"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          {status}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Card department filter */}
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">
+                      Card Department History
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {availableCardDepartments.map((department) => (
+                        <button
+                          key={department}
+                          onClick={() =>
+                            toggleStringFilter(department, setCardDepartmentFilter)
+                          }
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            cardDepartmentFilter.includes(department)
+                              ? "bg-cyan-100 text-cyan-700 ring-2 ring-offset-1 ring-cyan-500"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          {department}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Activity event filter */}
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">
+                      Activity Event Type
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {availableActivityEvents.map((eventName) => (
+                        <button
+                          key={eventName}
+                          onClick={() =>
+                            toggleStringFilter(eventName, setActivityEventFilter)
+                          }
+                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                            activityEventFilter.includes(eventName)
+                              ? "bg-cyan-100 text-cyan-700 ring-2 ring-offset-1 ring-cyan-500"
+                              : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                          }`}
+                        >
+                          {eventName}
                         </button>
                       ))}
                     </div>

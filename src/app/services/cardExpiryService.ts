@@ -131,7 +131,7 @@ export async function expireOverdueArcCards(db: Firestore) {
       {
         arcCardNumber: admin.firestore.FieldValue.delete(),
         passesIssued: admin.firestore.FieldValue.arrayUnion(cardSnap.id),
-        updatedAt: new Date().toISOString(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true },
     );
@@ -181,7 +181,7 @@ export async function expireOverdueArcCards(db: Firestore) {
       {
         arcCardNumber: admin.firestore.FieldValue.delete(),
         passesIssued: admin.firestore.FieldValue.arrayUnion(cardDoc.id),
-        updatedAt: new Date().toISOString(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true },
     );

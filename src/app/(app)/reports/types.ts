@@ -44,17 +44,40 @@ export interface UserReportRow {
   notes: string;
   createdAt: string;
   totalCardsIssued: number;
+  currentArcCard: string;
+  currentArcCardDepartment: string;
   cardHistory: CardHistoryEntry[];
   activityHistory: ActivityEntry[];
 }
 
 export interface CardHistoryEntry {
+  cardId: string;
   cardNumber: string;
   department: string;
   status: string;
   allocationDate: string;
   securityCode: string;
+  notes?: string;
+  currentUserId?: string | null;
+  currentUserName?: string;
+  createdAt?: string;
+  updatedAt?: string;
   issueDates: string[];
+}
+
+export interface ReportCardRow {
+  cardId: string;
+  cardNumber: string;
+  securityCode: string;
+  department: string;
+  status: string;
+  allocationDate: string;
+  currentUserId: string | null;
+  currentUserName: string;
+  issueDates: string[];
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ActivityEntry {
