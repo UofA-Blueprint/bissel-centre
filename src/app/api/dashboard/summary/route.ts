@@ -20,19 +20,18 @@ export async function GET() {
       .auth()
       .verifySessionCookie(sessionCookie, true);
 
-    // IT admins are directed to their own dashboard.
-    if (decodedClaims.admin === true) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    const isAdmin = decodedClaims.admin === true;
 
-    const staffDoc = await app
-      .firestore()
-      .collection("administrative_staff")
-      .doc(decodedClaims.uid)
-      .get();
+    if (!isAdmin) {
+      const staffDoc = await app
+        .firestore()
+        .collection("administrative_staff")
+        .doc(decodedClaims.uid)
+        .get();
 
-    if (!staffDoc.exists) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      if (!staffDoc.exists) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
     }
 
     const summary = await getDashboardSummaryForViewer({

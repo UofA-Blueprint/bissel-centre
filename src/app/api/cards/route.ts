@@ -61,7 +61,7 @@ function normalizeDateOnlyInput(value: unknown): string {
   return raw;
 }
 
-async function verifyStaffAccess() {
+async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("session")?.value;
 
@@ -74,8 +74,14 @@ async function verifyStaffAccess() {
   const app = await initAdmin();
   const decodedClaims = await app.auth().verifySessionCookie(sessionCookie, true);
 
-  // IT Admins are intentionally restricted from staff cards access.
+  const db = app.firestore();
+
+  // IT Admins are allowed for read endpoints in "view as" mode; write endpoints
+  // omit the flag and continue to reject.
   if (decodedClaims.admin === true) {
+    if (options?.allowAdmin) {
+      return { app, db, role: "admin" as const };
+    }
     return {
       error: NextResponse.json(
         { error: "Forbidden - Staff access only" },
@@ -84,7 +90,6 @@ async function verifyStaffAccess() {
     };
   }
 
-  const db = app.firestore();
   const staffDoc = await db.collection("administrative_staff").doc(decodedClaims.uid).get();
 
   if (!staffDoc.exists) {
@@ -96,7 +101,7 @@ async function verifyStaffAccess() {
     };
   }
 
-  return { app, db };
+  return { app, db, role: "staff" as const };
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -141,7 +146,7 @@ async function fetchUserNamesByIds(
 // GET /api/cards - Fetch all cards
 export async function GET() {
   try {
-    const access = await verifyStaffAccess();
+    const access = await verifyStaffAccess({ allowAdmin: true });
     if ("error" in access) {
       return access.error;
     }
