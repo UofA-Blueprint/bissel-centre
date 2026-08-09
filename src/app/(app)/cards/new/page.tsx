@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import BackNavigation from "@/app/components/BackNavigation";
+import { useIsViewOnly } from "../../ViewModeContext";
 import {
   CardStatus,
   CardDepartment,
@@ -66,6 +67,15 @@ function DeptPill({ value }: { value: CardDepartment }) {
 
 export default function NewAllocationPage() {
   const router = useRouter();
+  const isViewOnly = useIsViewOnly();
+
+  // IT admins in "view as" mode can't allocate cards; send them back to the
+  // read-only list rather than let them fill in a form that would 403. The
+  // early-return happens below the hook declarations so hook order stays
+  // stable across renders.
+  useEffect(() => {
+    if (isViewOnly) router.replace("/cards");
+  }, [isViewOnly, router]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<DraftCard[]>([]);
@@ -195,6 +205,8 @@ export default function NewAllocationPage() {
       setSubmitting(false);
     }
   };
+
+  if (isViewOnly) return null;
 
   return (
     <div className="space-y-6">

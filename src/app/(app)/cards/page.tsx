@@ -156,16 +156,24 @@ function StatusSelect({
   value,
   onChange,
   className = "",
+  disabled = false,
+  disabledReason,
 }: {
   value: CardStatus;
   onChange: (next: CardStatus) => void;
   className?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as CardStatus)}
-      className={`rounded-md border border-gray-300 bg-white px-2 py-1 text-sm ${className}`}
+      disabled={disabled}
+      title={disabled ? disabledReason : undefined}
+      className={`rounded-md border border-gray-300 bg-white px-2 py-1 text-sm ${
+        disabled ? "cursor-not-allowed opacity-60" : ""
+      } ${className}`}
     >
       {STATUS_OPTIONS.map((s) => (
         <option key={s} value={s}>
@@ -175,6 +183,11 @@ function StatusSelect({
     </select>
   );
 }
+
+const VIEW_ONLY_CARDS_TIP =
+  "Sign in as administrative staff to change card status.";
+const VIEW_ONLY_NEW_ALLOCATION_TIP =
+  "Sign in as administrative staff to allocate new cards.";
 
 export default function CardsPage() {
   const isViewOnly = useIsViewOnly();
@@ -353,6 +366,8 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
           <StatusSelect
             value={getValue<CardStatus>()}
             onChange={(next) => void updateCardStatus(row.original.id, next)}
+            disabled={isViewOnly}
+            disabledReason={VIEW_ONLY_CARDS_TIP}
           />
         ),
       },
@@ -409,7 +424,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
         cell: ({ getValue }) => <span className="text-gray-500">{getValue<string>()}</span>,
       },
     ],
-    []
+    [isViewOnly]
   );
 
   const table = useReactTable({
@@ -527,13 +542,25 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
               )}
             </button>
 
-            <Link
-              href="/cards/new"
-              className="flex flex-1 items-center justify-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors sm:flex-none"
-            >
-              <Plus className="h-4 w-4" strokeWidth={3} />
-              New Allocation
-            </Link>
+            {isViewOnly ? (
+              <button
+                type="button"
+                disabled
+                title={VIEW_ONLY_NEW_ALLOCATION_TIP}
+                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-gray-300 px-4 py-2 text-sm font-semibold text-white shadow-sm cursor-not-allowed sm:flex-none"
+              >
+                <Plus className="h-4 w-4" strokeWidth={3} />
+                New Allocation
+              </button>
+            ) : (
+              <Link
+                href="/cards/new"
+                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors sm:flex-none"
+              >
+                <Plus className="h-4 w-4" strokeWidth={3} />
+                New Allocation
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -715,6 +742,8 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
                         void updateCardStatus(selectedCard.id, next)
                       }
                       className="w-full"
+                      disabled={isViewOnly}
+                      disabledReason={VIEW_ONLY_CARDS_TIP}
                     />
                   </div>
                 </div>
