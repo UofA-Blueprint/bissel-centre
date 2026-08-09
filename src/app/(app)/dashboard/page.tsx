@@ -214,8 +214,19 @@ export default function DashboardPage() {
           className="max-w-7xl mx-auto mb-4 sm:mb-6 sticky top-0 z-20 lg:static lg:z-auto lg:shrink-0"
         >
           <button
-            className="flex items-center gap-1 whitespace-nowrap hover:opacity-75 transition-opacity"
-            onClick={() => setIsModalOpen(true)}
+            className={`flex items-center gap-1 whitespace-nowrap transition-opacity ${
+              isViewOnly ? "cursor-not-allowed opacity-40" : "hover:opacity-75"
+            }`}
+            onClick={() => {
+              if (isViewOnly) return;
+              setIsModalOpen(true);
+            }}
+            disabled={isViewOnly}
+            title={
+              isViewOnly
+                ? "Sign in as administrative staff to add recipients."
+                : undefined
+            }
           >
             <span className="text-sm">＋ New Recipient </span>
           </button>
