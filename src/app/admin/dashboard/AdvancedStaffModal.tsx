@@ -26,8 +26,16 @@ import {
 import Link from "next/link";
 import {
     getAdministrativeStaffSummary,
+    getStaffAuditEntries,
+    getStaffBans,
+    getStaffIssues,
+    getStaffRecipients,
     updateAdministrativeStaff,
     type AdministrativeStaffSummary,
+    type StaffAuditRow,
+    type StaffBanRow,
+    type StaffIssueRow,
+    type StaffRecipientRow,
 } from "../actions";
 
 export interface StaffRow {
@@ -272,45 +280,419 @@ function OverviewPane({
     );
 }
 
-function PlaceholderPane({
+function TablePaneShell({
     title,
     linkHref,
     icon: Icon,
+    loading,
+    error,
+    empty,
+    children,
 }: {
     title: string;
     linkHref: string | null;
     icon: React.ComponentType<{ size?: number; className?: string }>;
+    loading: boolean;
+    error: string | null;
+    empty: boolean;
+    children: React.ReactNode;
 }) {
     return (
         <div className="flex h-full flex-col">
-            <div className="mb-6 flex items-center justify-between">
-                <div>
-                    <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
-                        {title}
-                    </h3>
-                    <div className="mt-3 h-px bg-gray-200" />
-                </div>
+            <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
+                    {title}
+                </h3>
                 {linkHref && (
                     <Link
                         href={linkHref}
-                        className="rounded-lg border border-primary/40 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/5"
+                        className="shrink-0 rounded-lg border border-primary/40 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/5"
                     >
                         Open in another view →
                     </Link>
                 )}
             </div>
 
-            <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center">
-                <Icon className="text-gray-300" size={48} />
-                <div className="text-sm font-medium text-gray-600">
-                    Data table lands here
+            {loading ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-gray-100 bg-white text-sm text-gray-400">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Loading…
                 </div>
-                <div className="max-w-sm text-xs text-gray-500">
-                    Read-only list of items this staff member touched. Coming
-                    online in the next iteration.
+            ) : error ? (
+                <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {error}
                 </div>
-            </div>
+            ) : empty ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-gray-200 bg-white p-10 text-center">
+                    <Icon className="text-gray-300" size={48} />
+                    <div className="text-sm font-medium text-gray-600">
+                        Nothing to show
+                    </div>
+                    <div className="max-w-sm text-xs text-gray-500">
+                        This staff member has no {title.toLowerCase()} on
+                        record.
+                    </div>
+                </div>
+            ) : (
+                <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
+                    {children}
+                </div>
+            )}
         </div>
+    );
+}
+
+function TinyTable<T>({
+    rows,
+    columns,
+    rowKey,
+}: {
+    rows: T[];
+    columns: Array<{
+        header: string;
+        cell: (row: T) => React.ReactNode;
+        className?: string;
+    }>;
+    rowKey: (row: T) => string;
+}) {
+    return (
+        <table className="min-w-full divide-y divide-gray-100 text-sm">
+            <thead className="bg-gray-50">
+                <tr>
+                    {columns.map((c) => (
+                        <th
+                            key={c.header}
+                            className={`px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-500 ${
+                                c.className ?? ""
+                            }`}
+                        >
+                            {c.header}
+                        </th>
+                    ))}
+                </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+                {rows.map((row) => (
+                    <tr key={rowKey(row)} className="hover:bg-gray-50">
+                        {columns.map((c) => (
+                            <td
+                                key={c.header}
+                                className={`px-3 py-2 text-gray-700 ${c.className ?? ""}`}
+                            >
+                                {c.cell(row)}
+                            </td>
+                        ))}
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+    );
+}
+
+function formatShortDate(iso: string | null): string {
+    if (!iso) return "—";
+    try {
+        return new Intl.DateTimeFormat("en-US", {
+            month: "short",
+            day: "numeric",
+            year: "2-digit",
+        }).format(new Date(iso));
+    } catch {
+        return iso ?? "—";
+    }
+}
+
+function RecipientsPane({
+    staffId,
+    linkHref,
+}: {
+    staffId: string;
+    linkHref: string | null;
+}) {
+    const [rows, setRows] = useState<StaffRecipientRow[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        getStaffRecipients(staffId)
+            .then((r) => {
+                if (!cancelled) setRows(r);
+            })
+            .catch((e) => {
+                if (!cancelled)
+                    setError(e instanceof Error ? e.message : "Failed to load");
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [staffId]);
+
+    return (
+        <TablePaneShell
+            title="Recipients registered"
+            linkHref={linkHref}
+            icon={Users}
+            loading={rows === null && !error}
+            error={error}
+            empty={rows !== null && rows.length === 0}
+        >
+            {rows && (
+                <TinyTable
+                    rows={rows}
+                    rowKey={(r) => r.id}
+                    columns={[
+                        {
+                            header: "Name",
+                            cell: (r) => (
+                                <span className="font-medium text-gray-900">
+                                    {r.firstName} {r.lastName}
+                                </span>
+                            ),
+                        },
+                        {
+                            header: "Email",
+                            cell: (r) => r.email || "—",
+                        },
+                        {
+                            header: "Registered",
+                            cell: (r) => formatShortDate(r.createdAt),
+                        },
+                        {
+                            header: "Status",
+                            cell: (r) =>
+                                r.banned ? (
+                                    <span className="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-medium text-red-700">
+                                        Flagged
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center rounded-full bg-green-50 px-2 py-0.5 text-[11px] font-medium text-green-700">
+                                        Active
+                                    </span>
+                                ),
+                        },
+                    ]}
+                />
+            )}
+        </TablePaneShell>
+    );
+}
+
+function CardsPane({
+    staffId,
+    linkHref,
+}: {
+    staffId: string;
+    linkHref: string | null;
+}) {
+    const [rows, setRows] = useState<StaffIssueRow[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        getStaffIssues(staffId)
+            .then((r) => {
+                if (!cancelled) setRows(r);
+            })
+            .catch((e) => {
+                if (!cancelled)
+                    setError(e instanceof Error ? e.message : "Failed to load");
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [staffId]);
+
+    return (
+        <TablePaneShell
+            title="Cards issued"
+            linkHref={linkHref}
+            icon={CreditCard}
+            loading={rows === null && !error}
+            error={error}
+            empty={rows !== null && rows.length === 0}
+        >
+            {rows && (
+                <TinyTable
+                    rows={rows}
+                    rowKey={(r) => r.id}
+                    columns={[
+                        {
+                            header: "Card #",
+                            cell: (r) => (
+                                <span className="font-mono text-xs">
+                                    {r.cardNumber || "—"}
+                                </span>
+                            ),
+                        },
+                        {
+                            header: "Recipient",
+                            cell: (r) => r.userName || "—",
+                        },
+                        {
+                            header: "Department",
+                            cell: (r) => r.department || "—",
+                        },
+                        {
+                            header: "Issued",
+                            cell: (r) => formatShortDate(r.issueDate),
+                        },
+                        {
+                            header: "Returned",
+                            cell: (r) =>
+                                r.returnedAt ? (
+                                    <span className="text-gray-500">
+                                        {formatShortDate(r.returnedAt)}
+                                    </span>
+                                ) : (
+                                    <span className="text-green-700">
+                                        Still out
+                                    </span>
+                                ),
+                        },
+                    ]}
+                />
+            )}
+        </TablePaneShell>
+    );
+}
+
+function AuditPane({
+    staffId,
+    linkHref,
+}: {
+    staffId: string;
+    linkHref: string | null;
+}) {
+    const [rows, setRows] = useState<StaffAuditRow[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        getStaffAuditEntries(staffId)
+            .then((r) => {
+                if (!cancelled) setRows(r);
+            })
+            .catch((e) => {
+                if (!cancelled)
+                    setError(e instanceof Error ? e.message : "Failed to load");
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [staffId]);
+
+    return (
+        <TablePaneShell
+            title="Audit log entries"
+            linkHref={linkHref}
+            icon={HistoryIcon}
+            loading={rows === null && !error}
+            error={error}
+            empty={rows !== null && rows.length === 0}
+        >
+            {rows && (
+                <TinyTable
+                    rows={rows}
+                    rowKey={(r) => r.id}
+                    columns={[
+                        {
+                            header: "When",
+                            cell: (r) => formatShortDate(r.date),
+                        },
+                        {
+                            header: "Event",
+                            cell: (r) => (
+                                <span className="font-medium text-gray-900">
+                                    {r.event || "—"}
+                                </span>
+                            ),
+                        },
+                        {
+                            header: "User",
+                            cell: (r) => r.userName || "—",
+                        },
+                        {
+                            header: "Notes",
+                            cell: (r) => (
+                                <span className="line-clamp-2 text-xs text-gray-600">
+                                    {r.notes || r.reason || "—"}
+                                </span>
+                            ),
+                        },
+                    ]}
+                />
+            )}
+        </TablePaneShell>
+    );
+}
+
+function BansPane({
+    staffId,
+    linkHref,
+}: {
+    staffId: string;
+    linkHref: string | null;
+}) {
+    const [rows, setRows] = useState<StaffBanRow[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        getStaffBans(staffId)
+            .then((r) => {
+                if (!cancelled) setRows(r);
+            })
+            .catch((e) => {
+                if (!cancelled)
+                    setError(e instanceof Error ? e.message : "Failed to load");
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [staffId]);
+
+    return (
+        <TablePaneShell
+            title="Bans placed"
+            linkHref={linkHref}
+            icon={ShieldAlert}
+            loading={rows === null && !error}
+            error={error}
+            empty={rows !== null && rows.length === 0}
+        >
+            {rows && (
+                <TinyTable
+                    rows={rows}
+                    rowKey={(r) => r.id}
+                    columns={[
+                        {
+                            header: "User",
+                            cell: (r) => (
+                                <span className="font-medium text-gray-900">
+                                    {r.userName || "—"}
+                                </span>
+                            ),
+                        },
+                        {
+                            header: "Reason",
+                            cell: (r) => r.banReason || "—",
+                        },
+                        {
+                            header: "When",
+                            cell: (r) => formatShortDate(r.bannedAt),
+                        },
+                        {
+                            header: "Notes",
+                            cell: (r) => (
+                                <span className="line-clamp-2 text-xs text-gray-600">
+                                    {r.notes || "—"}
+                                </span>
+                            ),
+                        },
+                    ]}
+                />
+            )}
+        </TablePaneShell>
     );
 }
 
@@ -506,31 +888,27 @@ export function AdvancedStaffModal({
                                 />
                             )}
                             {section === "recipients" && (
-                                <PlaceholderPane
-                                    title="Recipients registered"
+                                <RecipientsPane
+                                    staffId={staff.id}
                                     linkHref={openLink}
-                                    icon={Users}
                                 />
                             )}
                             {section === "cards" && (
-                                <PlaceholderPane
-                                    title="Cards issued"
+                                <CardsPane
+                                    staffId={staff.id}
                                     linkHref={openLink}
-                                    icon={CreditCard}
                                 />
                             )}
                             {section === "audit" && (
-                                <PlaceholderPane
-                                    title="Audit log entries"
+                                <AuditPane
+                                    staffId={staff.id}
                                     linkHref={openLink}
-                                    icon={HistoryIcon}
                                 />
                             )}
                             {section === "bans" && (
-                                <PlaceholderPane
-                                    title="Bans placed"
+                                <BansPane
+                                    staffId={staff.id}
                                     linkHref={openLink}
-                                    icon={ShieldAlert}
                                 />
                             )}
                         </section>
