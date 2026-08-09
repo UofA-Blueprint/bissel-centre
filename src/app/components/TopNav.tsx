@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, ChevronDown, LogOut, Menu, X } from "lucide-react";
+import { Bell, ChevronDown, Eye, LogOut, Menu, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -27,6 +27,7 @@ export default function TopNav({
   homeHref = "/dashboard",
   logoutRedirect = "/",
   activeHref,
+  viewOnly = false,
 }: {
   user: NavUser;
   navItems?: { label: string; href: string }[];
@@ -34,6 +35,9 @@ export default function TopNav({
   logoutRedirect?: string;
   /** Force which nav item is highlighted (overrides the pathname match). */
   activeHref?: string;
+  /** When true, render a "(View only)" badge next to the logo — the current
+   *  viewer is an IT admin looking at staff pages, not a staff member. */
+  viewOnly?: boolean;
 }) {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -84,7 +88,7 @@ export default function TopNav({
       <div className="px-4 sm:px-6 lg:px-16">
         <div className="flex items-center justify-between h-16 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:h-20">
           {/* Logo */}
-          <div className="flex items-center lg:justify-self-start">
+          <div className="flex items-center gap-2 lg:justify-self-start">
             <Link href={homeHref}>
               <Image
                 src="/logo.png"
@@ -95,6 +99,15 @@ export default function TopNav({
                 priority
               />
             </Link>
+            {viewOnly && (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-800"
+                title="You are signed in as an IT admin. Staff pages are read-only."
+              >
+                <Eye size={12} />
+                View only
+              </span>
+            )}
           </div>
 
           {/* Centered Nav (desktop) */}
