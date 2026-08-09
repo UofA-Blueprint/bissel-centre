@@ -16,6 +16,7 @@ import Image from "next/image";
 import { ChevronDown, Loader2, Pencil, Trash2, X } from "lucide-react";
 import TopNav from "@/app/components/TopNav";
 import SearchBar from "@/app/components/SearchBar";
+import { AdvancedStaffModal, type StaffRow } from "./AdvancedStaffModal";
 
 interface User {
     id: string;
@@ -410,6 +411,7 @@ export default function AdminDashboardPage() {
     const [pendingDelete, setPendingDelete] = useState<User | null>(null);
     const [deleteBusy, setDeleteBusy] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
+    const [advancedStaff, setAdvancedStaff] = useState<User | null>(null);
     const router = useRouter();
 
     useEffect(() => {
@@ -453,13 +455,33 @@ export default function AdminDashboardPage() {
         setSearchResults(results);
     }, [searchQuery, users]);
 
-    const handleSavedUser = useCallback((next: User) => {
-        setUsers((prev) => prev.map((u) => (u.id === next.id ? next : u)));
+    const handleSavedUser = useCallback((next: StaffRow) => {
+        setUsers((prev) =>
+            prev.map((u) =>
+                u.id === next.id
+                    ? {
+                          ...u,
+                          firstName: next.firstName,
+                          secondName: next.secondName,
+                          email: next.email,
+                      }
+                    : u,
+            ),
+        );
+        setAdvancedStaff((prev) =>
+            prev && prev.id === next.id
+                ? {
+                      ...prev,
+                      firstName: next.firstName,
+                      secondName: next.secondName,
+                      email: next.email,
+                  }
+                : prev,
+        );
     }, []);
 
     const handleOpenAdvanced = useCallback((user: User) => {
-        // Phase 3 wires the advanced modal. For now, expand the row.
-        console.info("Advanced edit for", user.id);
+        setAdvancedStaff(user);
     }, []);
 
     const handleConfirmDelete = useCallback(async () => {
@@ -560,6 +582,25 @@ export default function AdminDashboardPage() {
                     </div>
                 )}
             </div>
+
+            <AdvancedStaffModal
+                open={advancedStaff !== null}
+                staff={advancedStaff}
+                onClose={() => setAdvancedStaff(null)}
+                onSaved={handleSavedUser}
+                onDeleteRequested={(s) => {
+                    setDeleteError(null);
+                    setPendingDelete({
+                        id: s.id,
+                        firstName: s.firstName,
+                        secondName: s.secondName,
+                        email: s.email,
+                        createdAt: new Date(),
+                        createdBy: "",
+                    });
+                    setAdvancedStaff(null);
+                }}
+            />
 
             {pendingDelete && (
                 <DeleteConfirmModal
