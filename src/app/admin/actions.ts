@@ -3,6 +3,7 @@
 
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { cookies } from "next/headers";
+import { FieldValue } from "firebase-admin/firestore";
 import { hashITIDNumber } from "@/utils/hashITIDNumber";
 import { randomBytes } from "crypto";
 
@@ -164,6 +165,157 @@ export const deleteAdministrativeStaff = async (id: string) => {
 
   return { success: true };
 }
+
+export interface UpdateAdministrativeStaffInput {
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+}
+
+export const updateAdministrativeStaff = async (
+  id: string,
+  input: UpdateAdministrativeStaffInput
+): Promise<{ success: true }> => {
+  const session = await getAdminSession();
+  if (!session) {
+    throw new Error("Unauthorized: IT admin session required");
+  }
+
+  const firstName = input.firstName?.trim();
+  const lastName = input.lastName?.trim();
+  const email = input.email?.trim().toLowerCase();
+
+  if (firstName !== undefined && firstName.length === 0) {
+    throw new Error("First name cannot be empty");
+  }
+  if (lastName !== undefined && lastName.length === 0) {
+    throw new Error("Last name cannot be empty");
+  }
+  if (email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error("Invalid email address");
+  }
+
+  const admin = await initAdmin();
+  const db = admin.firestore();
+  const staffRef = db.collection("administrative_staff").doc(id);
+
+  const snapshot = await staffRef.get();
+  if (!snapshot.exists) {
+    throw new Error("Administrative staff not found");
+  }
+  const current = snapshot.data() ?? {};
+
+  const nextFirstName = firstName ?? current.firstName ?? "";
+  const nextLastName = lastName ?? current.lastName ?? current.secondName ?? "";
+
+  const firestorePatch: Record<string, unknown> = {
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  if (firstName !== undefined) firestorePatch.firstName = firstName;
+  if (lastName !== undefined) firestorePatch.lastName = lastName;
+  if (email !== undefined) firestorePatch.email = email;
+
+  const authPatch: { email?: string; displayName?: string } = {};
+  if (email !== undefined) authPatch.email = email;
+  if (firstName !== undefined || lastName !== undefined) {
+    authPatch.displayName = `${nextFirstName} ${nextLastName}`.trim();
+  }
+
+  if (Object.keys(authPatch).length > 0) {
+    try {
+      await admin.auth().updateUser(id, authPatch);
+    } catch (error: any) {
+      if (error?.code === "auth/email-already-exists") {
+        throw new Error("Email is already in use by another account");
+      }
+      if (error?.code === "auth/user-not-found") {
+        throw new Error(
+          "Auth account missing for this staff record — email/name changes cannot be applied"
+        );
+      }
+      throw error;
+    }
+  }
+
+  await staffRef.update(firestorePatch);
+  return { success: true };
+};
+
+export interface AdministrativeStaffSummary {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  displayName: string;
+  onboardingStatus: string;
+  createdAt: string | null;
+  inviteAcceptedAt: string | null;
+  photoURL: string;
+  authEmailVerified: boolean;
+  counts: {
+    recipientsRegistered: number;
+    cardsIssued: number;
+    bansPlaced: number;
+    auditEntries: number;
+  };
+}
+
+export const getAdministrativeStaffSummary = async (
+  id: string
+): Promise<AdministrativeStaffSummary> => {
+  const session = await getAdminSession();
+  if (!session) {
+    throw new Error("Unauthorized: IT admin session required");
+  }
+
+  const admin = await initAdmin();
+  const db = admin.firestore();
+
+  const staffRef = db.collection("administrative_staff").doc(id);
+  const snapshot = await staffRef.get();
+  if (!snapshot.exists) {
+    throw new Error("Administrative staff not found");
+  }
+  const data = snapshot.data() ?? {};
+
+  const [
+    recipientsSnap,
+    issuesSnap,
+    bansSnap,
+    auditSnap,
+    authRecord,
+  ] = await Promise.all([
+    db.collection("users").where("createdBy", "==", id).count().get(),
+    db.collection("issues").where("issuedBy", "==", id).count().get(),
+    db.collection("banned_users").where("bannedBy", "==", id).count().get(),
+    db.collection("history").where("modifiedBy", "==", id).count().get(),
+    admin.auth().getUser(id).catch(() => null),
+  ]);
+
+  const firstName = (data.firstName ?? "") as string;
+  const lastName = (data.lastName ?? data.secondName ?? "") as string;
+
+  return {
+    id: snapshot.id,
+    firstName,
+    lastName,
+    email: (data.email ?? authRecord?.email ?? "") as string,
+    displayName:
+      authRecord?.displayName ?? `${firstName} ${lastName}`.trim(),
+    onboardingStatus: (data.onboardingStatus ?? "unknown") as string,
+    createdAt: data.createdAt?.toDate?.().toISOString() ?? null,
+    inviteAcceptedAt:
+      data.inviteAcceptedAt?.toDate?.().toISOString() ?? null,
+    photoURL: authRecord?.photoURL ?? "",
+    authEmailVerified: authRecord?.emailVerified ?? false,
+    counts: {
+      recipientsRegistered: recipientsSnap.data().count,
+      cardsIssued: issuesSnap.data().count,
+      bansPlaced: bansSnap.data().count,
+      auditEntries: auditSnap.data().count,
+    },
+  };
+};
 
 
 export const setUserAsAdmin = async (email: string) => {
