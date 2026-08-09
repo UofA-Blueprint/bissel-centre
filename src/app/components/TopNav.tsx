@@ -21,6 +21,10 @@ const NAV_ITEMS = [
   { label: "Admin", href: "/it-admin" },
 ];
 
+// Nav items that are read-only for IT admins in "view as" mode. Used to draw
+// the tinted "View only" band above just these tabs (Admin is fully editable).
+const STAFF_ONLY_HREFS = new Set(["/dashboard", "/cards", "/reports"]);
+
 export default function TopNav({
   user,
   navItems = NAV_ITEMS,
@@ -88,7 +92,7 @@ export default function TopNav({
       <div className="px-4 sm:px-6 lg:px-16">
         <div className="flex items-center justify-between h-16 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:h-20">
           {/* Logo */}
-          <div className="flex items-center gap-2 lg:justify-self-start">
+          <div className="flex items-center lg:justify-self-start">
             <Link href={homeHref}>
               <Image
                 src="/logo.png"
@@ -99,33 +103,66 @@ export default function TopNav({
                 priority
               />
             </Link>
-            {viewOnly && (
-              <span
-                className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-800"
-                title="You are signed in as an IT admin. Staff pages are read-only."
-              >
-                <Eye size={12} />
-                View only
-              </span>
-            )}
           </div>
 
-          {/* Centered Nav (desktop) */}
+          {/* Centered Nav (desktop) — the first three tabs (Dashboard/Cards/
+              Reports) live in a tinted band that carries the "View only"
+              banner when the viewer is an IT admin. Admin stays outside the
+              band because it is fully editable. */}
           <div className="hidden lg:flex lg:justify-center self-stretch">
-            <nav className="flex h-full">
-              {navItems.map(({ label, href }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`px-8 flex items-center text-lg border-t-4 border-t-transparent border-b-4 ${
-                    isActive(href)
-                      ? "border-primary text-gray-900 font-bold"
-                      : "border-transparent text-gray-500 font-semibold hover:text-gray-700 hover:border-b-gray-300"
-                  }`}
-                >
-                  {label}
-                </Link>
-              ))}
+            <nav className="flex h-full items-stretch">
+              <div
+                className={`relative flex h-full ${
+                  viewOnly
+                    ? "bg-amber-50/70 rounded-b-md"
+                    : ""
+                }`}
+              >
+                {viewOnly && (
+                  <div
+                    className="absolute -top-1 left-0 right-0 flex justify-center pointer-events-none"
+                    aria-hidden="true"
+                  >
+                    <span
+                      className="inline-flex items-center gap-1 rounded-b-md bg-amber-200/90 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-900 shadow-sm"
+                      title="You are signed in as an IT admin. These pages are read-only."
+                    >
+                      <Eye size={10} />
+                      View only
+                    </span>
+                  </div>
+                )}
+                {navItems
+                  .filter((item) => STAFF_ONLY_HREFS.has(item.href))
+                  .map(({ label, href }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className={`px-8 flex items-center text-lg border-t-4 border-t-transparent border-b-4 ${
+                        isActive(href)
+                          ? "border-primary text-gray-900 font-bold"
+                          : "border-transparent text-gray-500 font-semibold hover:text-gray-700 hover:border-b-gray-300"
+                      }`}
+                    >
+                      {label}
+                    </Link>
+                  ))}
+              </div>
+              {navItems
+                .filter((item) => !STAFF_ONLY_HREFS.has(item.href))
+                .map(({ label, href }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`px-8 flex items-center text-lg border-t-4 border-t-transparent border-b-4 ${
+                      isActive(href)
+                        ? "border-primary text-gray-900 font-bold"
+                        : "border-transparent text-gray-500 font-semibold hover:text-gray-700 hover:border-b-gray-300"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                ))}
             </nav>
           </div>
 

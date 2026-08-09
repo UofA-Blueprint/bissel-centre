@@ -235,7 +235,24 @@ export async function GET() {
         });
       }
     } else {
-      // Pre-migration: use old schema
+      // Pre-migration: use old schema for passRecipient/issueDates, but still
+      // pull the `issues` collection opportunistically so the `issuedByAny`
+      // filter used by the IT-admin "view as staff" dropdown works even when
+      // the migration marker was never written.
+      const issuesSnapshot = await db.collection("issues").get().catch(() => null);
+
+      const issuedByCard = new Map<string, Set<string>>();
+      if (issuesSnapshot) {
+        for (const issueDoc of issuesSnapshot.docs) {
+          const issue = issueDoc.data();
+          const cardId = issue.cardId as string | undefined;
+          const issuedBy = issue.issuedBy as string | undefined;
+          if (!cardId || !issuedBy) continue;
+          if (!issuedByCard.has(cardId)) issuedByCard.set(cardId, new Set());
+          issuedByCard.get(cardId)!.add(issuedBy);
+        }
+      }
+
       const neededUserIds = new Set<string>();
       for (const doc of cardsSnapshot.docs) {
         const data = doc.data();
@@ -248,7 +265,7 @@ export async function GET() {
 
       for (const doc of cardsSnapshot.docs) {
         const data = doc.data();
-        
+
         let passRecipient = data.passRecipient || "";
         const holderId = data.currentUserId || data.userId;
         if (holderId && !passRecipient) {
@@ -265,6 +282,7 @@ export async function GET() {
           securityCode: data.securityCode || "",
           passRecipient,
           issueDates: data.issueDates || [],
+          issuedByAny: Array.from(issuedByCard.get(doc.id) ?? []),
           notes: data.notes || "",
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
