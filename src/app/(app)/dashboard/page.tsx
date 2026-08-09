@@ -3,13 +3,15 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Fuse from "fuse.js";
 import { Flag } from "lucide-react";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
 import SearchBar from "@/app/components/SearchBar";
 import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
+import StaffSelector from "../StaffSelector";
+import { useIsViewOnly } from "../ViewModeContext";
 
 interface StatCardProps {
   icon: string;
@@ -58,6 +60,9 @@ let dashboardSummaryCache: {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isViewOnly = useIsViewOnly();
+  const createdByFilter = searchParams.get("createdBy");
   const [stats, setStats] = useState([
     { icon: "/card.svg", number: 0, label: "Available Cards" },
     { icon: "/checkmark.svg", number: 0, label: "Active Cards" },
@@ -143,19 +148,23 @@ export default function DashboardPage() {
   }, [router, refreshNonce]);
 
   useEffect(() => {
+    const filtered = createdByFilter
+      ? users.filter((u) => u.createdBy === createdByFilter)
+      : users;
+
     if (!searchQuery.trim()) {
-      setSearchResults(users);
+      setSearchResults(filtered);
       return;
     }
 
-    const fuse = new Fuse(users, {
+    const fuse = new Fuse(filtered, {
       keys: ["firstName", "secondName", "email"],
       threshold: 0.3,
     });
 
     const results = fuse.search(searchQuery).map((r) => r.item);
     setSearchResults(results);
-  }, [searchQuery, users]);
+  }, [searchQuery, users, createdByFilter]);
 
   const handleGoToCards = () => {
     router.push("/cards");
@@ -172,6 +181,18 @@ export default function DashboardPage() {
   return (
     <main className="lg:h-screen lg:flex lg:flex-col">
       <div className="p-6 bg-gray-100 min-h-screen px-4 sm:px-8 md:px-16 lg:px-24 lg:min-h-0 lg:flex-1 lg:flex lg:flex-col lg:overflow-hidden">
+        {isViewOnly && (
+          <div className="max-w-7xl mx-auto w-full mb-3 flex items-center justify-between gap-3">
+            <StaffSelector queryParam="createdBy" label="Recipients by" />
+            {createdByFilter && (
+              <span className="text-xs text-gray-500">
+                {searchResults.length} recipient
+                {searchResults.length === 1 ? "" : "s"} match this filter
+              </span>
+            )}
+          </div>
+        )}
+
         {/* Stats Section */}
         <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-4 sm:gap-4 sm:overflow-visible mb-4 sm:mb-6 max-w-7xl mx-auto w-full lg:shrink-0">
           {stats.map((stat, index) => (

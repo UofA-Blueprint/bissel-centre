@@ -12,8 +12,11 @@ import {
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, ChevronUp, Filter, Plus, Search, X } from "lucide-react";
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import BackNavigation from "@/app/components/BackNavigation";
+import StaffSelector from "../StaffSelector";
+import { useIsViewOnly } from "../ViewModeContext";
 import {
   CardStatus,
   CardDepartment,
@@ -35,6 +38,7 @@ type CardRow = {
   securityCode: string;
   passRecipient: string;
   issueDates: string[];
+  issuedByAny: string[];
   notes: string;
 };
 
@@ -77,6 +81,7 @@ async function fetchCards(): Promise<{
     securityCode: string;
     passRecipient: string;
     issueDates: string[];
+    issuedByAny?: string[];
     notes: string;
   }) => ({
     id: card.id,
@@ -88,6 +93,7 @@ async function fetchCards(): Promise<{
     securityCode: card.securityCode,
     passRecipient: card.passRecipient,
     issueDates: card.issueDates,
+    issuedByAny: card.issuedByAny ?? [],
     notes: card.notes,
   })),
     monthlyUnloadSchedule: data.monthlyUnloadSchedule ?? {
@@ -211,6 +217,9 @@ function StatusSelect({
 }
 
 export default function CardsPage() {
+  const isViewOnly = useIsViewOnly();
+  const searchParams = useSearchParams();
+  const issuedByFilter = searchParams.get("issuedBy");
   const [data, setData] = useState<CardRow[]>([]);
   const [monthlyUnloadSchedule, setMonthlyUnloadSchedule] =
     useState<MonthlyUnloadSchedule>({
@@ -440,8 +449,15 @@ const saveMonthlyUnloadSchedule = async () => {
       result = result.filter((card) => departmentFilters.includes(card.department));
     }
 
+    // Apply IT-admin "view as staff" filter — cards this staff has issued.
+    if (issuedByFilter) {
+      result = result.filter((card) =>
+        card.issuedByAny.includes(issuedByFilter)
+      );
+    }
+
     return result;
-  }, [data, searchQuery, statusFilters, departmentFilters]);
+  }, [data, searchQuery, statusFilters, departmentFilters, issuedByFilter]);
 
   const toggleStatusFilter = (status: CardStatus) => {
     setStatusFilters((prev) =>
@@ -676,6 +692,18 @@ const saveMonthlyUnloadSchedule = async () => {
           </div>
         </div>
       </div>
+
+      {isViewOnly && (
+        <div className="flex items-center justify-between gap-3">
+          <StaffSelector queryParam="issuedBy" label="Cards issued by" />
+          {issuedByFilter && (
+            <span className="text-xs text-gray-500">
+              {filteredData.length} card
+              {filteredData.length === 1 ? "" : "s"} match this filter
+            </span>
+          )}
+        </div>
+      )}
 
       {/* --- Toolbar: full-width search + actions (sticky, hide-on-scroll on mobile) --- */}
       <div

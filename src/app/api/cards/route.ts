@@ -166,7 +166,7 @@ export async function GET() {
       const issuesSnapshot = await db.collection("issues").get();
       
       // Group issues by cardId
-      const issuesByCard = new Map<string, Array<{ userId: string; issueDate: string; returnedAt: unknown }>>();
+      const issuesByCard = new Map<string, Array<{ userId: string; issueDate: string; returnedAt: unknown; issuedBy?: string }>>();
       for (const issueDoc of issuesSnapshot.docs) {
         const issue = issueDoc.data();
         const cardId = issue.cardId;
@@ -177,6 +177,7 @@ export async function GET() {
           userId: issue.userId,
           issueDate: issue.issueDate,
           returnedAt: issue.returnedAt,
+          issuedBy: issue.issuedBy,
         });
       }
 
@@ -198,14 +199,22 @@ export async function GET() {
       for (const doc of cardsSnapshot.docs) {
         const data = doc.data();
         const cardIssues = issuesByCard.get(doc.id) || [];
-        
+
         // Get issue dates sorted by date desc
         const issueDates = cardIssues
           .map(i => i.issueDate)
           .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
+        const issuedByAny = Array.from(
+          new Set(
+            cardIssues
+              .map((i) => i.issuedBy)
+              .filter((v): v is string => typeof v === "string" && v.length > 0)
+          )
+        );
+
         // Get passRecipient from currentUserId
-        const passRecipient = data.currentUserId 
+        const passRecipient = data.currentUserId
           ? userNames.get(data.currentUserId) || ""
           : "";
 
@@ -219,6 +228,7 @@ export async function GET() {
           securityCode: data.securityCode || "",
           passRecipient,
           issueDates,
+          issuedByAny,
           notes: data.notes || "",
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
