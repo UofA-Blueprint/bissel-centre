@@ -89,6 +89,19 @@ export default function TopNav({
 
   return (
     <div className="bg-white shadow-sm border-b">
+      {viewOnly && (
+        <div className="bg-amber-100 border-b border-amber-200">
+          <div className="px-4 sm:px-6 lg:px-16">
+            <div className="mx-auto flex max-w-7xl items-center justify-center gap-2 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-900">
+              <Eye size={12} />
+              <span>View only</span>
+              <span className="text-amber-800/80 normal-case tracking-normal font-medium">
+                — Dashboard, Cards and Reports are read-only for IT admins
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="px-4 sm:px-6 lg:px-16">
         <div className="flex items-center justify-between h-16 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:h-20">
           {/* Logo */}
@@ -105,33 +118,14 @@ export default function TopNav({
             </Link>
           </div>
 
-          {/* Centered Nav (desktop) — the first three tabs (Dashboard/Cards/
-              Reports) live in a tinted band that carries the "View only"
-              banner when the viewer is an IT admin. Admin stays outside the
-              band because it is fully editable. */}
+          {/* Centered Nav (desktop). When viewing as IT admin, the three
+              staff tabs (Dashboard/Cards/Reports) get a subtle amber tint so
+              it's obvious at a glance which tabs are read-only. Admin stays
+              untinted because it is fully editable. The prominent banner
+              above the header already announces the mode. */}
           <div className="hidden lg:flex lg:justify-center self-stretch">
             <nav className="flex h-full items-stretch">
-              <div
-                className={`relative flex h-full ${
-                  viewOnly
-                    ? "bg-amber-50/70 rounded-b-md"
-                    : ""
-                }`}
-              >
-                {viewOnly && (
-                  <div
-                    className="absolute -top-1 left-0 right-0 flex justify-center pointer-events-none"
-                    aria-hidden="true"
-                  >
-                    <span
-                      className="inline-flex items-center gap-1 rounded-b-md bg-amber-200/90 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-900 shadow-sm"
-                      title="You are signed in as an IT admin. These pages are read-only."
-                    >
-                      <Eye size={10} />
-                      View only
-                    </span>
-                  </div>
-                )}
+              <div className={`flex h-full ${viewOnly ? "bg-amber-50/70" : ""}`}>
                 {navItems
                   .filter((item) => STAFF_ONLY_HREFS.has(item.href))
                   .map(({ label, href }) => (
