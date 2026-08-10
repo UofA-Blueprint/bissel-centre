@@ -20,19 +20,22 @@ export interface RegistrationFormData {
 export function validateRegistrationForm(
   formData: RegistrationFormData,
 ): Record<string, string> {
+  const firstName = formData.firstName.trim();
+  const lastName = formData.lastName.trim();
+
   const errors: Record<string, string> = {
-    firstName: formData.firstName.trim() ? "" : "First name is required",
-    lastName: formData.lastName.trim() ? "" : "Last name is required",
+    firstName: firstName ? "" : "First name is required",
+    lastName: lastName ? "" : "Last name is required",
     identificationNumber: formData.identificationNumber.trim()
       ? ""
       : "Identification number is required",
     email: formData.email.trim() ? "" : "Email is required",
   };
 
-  if (formData.firstName && !/^[A-Za-z]+$/.test(formData.firstName)) {
+  if (firstName && !/^[A-Za-z]+$/.test(formData.firstName)) {
     errors.firstName = "First name must contain only letters";
   }
-  if (formData.lastName && !/^[A-Za-z]+$/.test(formData.lastName)) {
+  if (lastName && !/^[A-Za-z]+$/.test(formData.lastName)) {
     errors.lastName = "Last name must contain only letters";
   }
 

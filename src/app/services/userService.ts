@@ -37,7 +37,7 @@ export interface User {
 
 export interface ArcCard {
   id: string;
-  userId: string;
+  currentUserId: string;
   allocationDate: string;
   department: string;
   arcCardNumber: string;
@@ -140,7 +140,7 @@ export async function getArcCardsByUserId(userId: string): Promise<ArcCard[]> {
   try {
     // Temporarily removed orderBy to avoid index requirement
     // TODO: Create Firebase composite index, then restore: orderBy("issuedAt", "desc")
-    const q = query(collection(db, "arc_cards"), where("userId", "==", userId));
+    const q = query(collection(db, "arc_cards"), where("currentUserId", "==", userId));
     const querySnapshot = await getDocs(q);
     return querySnapshot.docs.map((doc) => ({
       id: doc.id,
