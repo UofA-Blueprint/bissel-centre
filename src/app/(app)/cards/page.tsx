@@ -27,6 +27,7 @@ import {
 
 type CardRow = {
   id: string;
+  currentUserId?: string | null;
   allocationDate: string;
   status: CardStatus;
   department: CardDepartment;
@@ -35,6 +36,15 @@ type CardRow = {
   passRecipient: string;
   issueDates: string[];
   notes: string;
+};
+
+type MonthlyUnloadSchedule = {
+  enabled: boolean;
+  dayOfMonth: number;
+  time24: string;
+  timezone: string;
+  lastRunMonthKey?: string;
+  lastRunAt?: string | null;
 };
 
 const STATUS_MEANINGS: Record<CardStatus, string> = {
@@ -47,14 +57,19 @@ const STATUS_MEANINGS: Record<CardStatus, string> = {
 
 // --- API Fetch Function ---
 
-async function fetchCards(): Promise<CardRow[]> {
+async function fetchCards(): Promise<{
+  cards: CardRow[];
+  monthlyUnloadSchedule: MonthlyUnloadSchedule;
+}> {
   const response = await fetch("/api/cards");
   if (!response.ok) {
     throw new Error("Failed to fetch cards");
   }
   const data = await response.json();
-  return data.cards.map((card: {
+  return {
+    cards: data.cards.map((card: {
     id: string;
+    currentUserId?: string | null;
     allocationDate: string;
     status: CardStatus;
     department: CardDepartment;
@@ -65,6 +80,7 @@ async function fetchCards(): Promise<CardRow[]> {
     notes: string;
   }) => ({
     id: card.id,
+    currentUserId: card.currentUserId || null,
     allocationDate: card.allocationDate,
     status: card.status,
     department: card.department,
@@ -73,7 +89,16 @@ async function fetchCards(): Promise<CardRow[]> {
     passRecipient: card.passRecipient,
     issueDates: card.issueDates,
     notes: card.notes,
-  }));
+  })),
+    monthlyUnloadSchedule: data.monthlyUnloadSchedule ?? {
+      enabled: false,
+      dayOfMonth: 1,
+      time24: "00:00",
+      timezone: "America/Edmonton",
+      lastRunMonthKey: undefined,
+      lastRunAt: null,
+    },
+  };
 }
 
 // --- Styles ---
@@ -124,6 +149,7 @@ const MONTHS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
+const EDMONTON_TIMEZONE = "America/Edmonton";
 
 // Normalize inconsistent date strings (YYYY-MM-DD or M/D/YYYY) to "Mon D, YYYY".
 function formatDate(value: string): string {
@@ -144,6 +170,20 @@ function formatDate(value: string): string {
   }
   if (m < 1 || m > 12) return value;
   return `${MONTHS[m - 1]} ${d}, ${y}`;
+}
+
+function formatDateTime(value: string): string {
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: EDMONTON_TIMEZONE,
+  }).format(parsed);
 }
 
 function StatusSelect({
@@ -172,6 +212,18 @@ function StatusSelect({
 
 export default function CardsPage() {
   const [data, setData] = useState<CardRow[]>([]);
+  const [monthlyUnloadSchedule, setMonthlyUnloadSchedule] =
+    useState<MonthlyUnloadSchedule>({
+      enabled: false,
+      dayOfMonth: 1,
+      time24: "00:00",
+      timezone: "America/Edmonton",
+      lastRunMonthKey: undefined,
+      lastRunAt: null,
+    });
+  const [scheduleDayInput, setScheduleDayInput] = useState("1");
+  const [scheduleTimeInput, setScheduleTimeInput] = useState("00:00");
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -225,10 +277,105 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
             status: nextStatus,
             // Keep recipient display in sync with server unlink behavior.
             passRecipient: nextStatus === "Active" ? card.passRecipient : "",
+            currentUserId: nextStatus === "Active" ? card.currentUserId : null,
           }
         : card
     ),
   );
+};
+
+const forceUnassignCard = async (cardId: string, cardLabel: string) => {
+  const firstRes = await fetch("/api/cards", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "FORCE_UNASSIGN",
+      id: cardId,
+      confirmDangerous: false,
+    }),
+  });
+  const firstPayload = await firstRes.json().catch(() => ({}));
+  if (firstRes.status === 409 && firstPayload?.requiresConfirmation) {
+    const reasonText = Array.isArray(firstPayload.reasons)
+      ? firstPayload.reasons.map((r: string) => `- ${r}`).join("\n")
+      : "";
+    const ok = window.confirm(
+      `Warning: You are force unassigning this card.\n\n` +
+        `Card: ${cardLabel}\n\n` +
+        `${firstPayload.warning ?? ""}\n\n` +
+        `${reasonText}\n\n` +
+        `Continue?`,
+    );
+    if (!ok) return;
+    const secondRes = await fetch("/api/cards", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "FORCE_UNASSIGN",
+        id: cardId,
+        confirmDangerous: true,
+      }),
+    });
+    if (!secondRes.ok) {
+      const secondPayload = await secondRes.json().catch(() => ({}));
+      throw new Error(secondPayload.error || "Failed to force unassign card");
+    }
+  } else if (!firstRes.ok) {
+    throw new Error(firstPayload.error || "Failed to force unassign card");
+  }
+
+  setData((prev) =>
+    prev.map((card) =>
+      card.id === cardId
+        ? {
+            ...card,
+            status: "Unattributed",
+            passRecipient: "",
+            currentUserId: null,
+          }
+        : card,
+    ),
+  );
+};
+
+const saveMonthlyUnloadSchedule = async () => {
+  const parsedDay = Number(scheduleDayInput);
+  if (!Number.isInteger(parsedDay) || parsedDay < 1 || parsedDay > 31) {
+    setError("Monthly unload day must be between 1 and 31.");
+    return;
+  }
+  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(scheduleTimeInput)) {
+    setError("Monthly unload time must be in HH:mm format.");
+    return;
+  }
+
+  try {
+    setError(null);
+    setIsSavingSchedule(true);
+    const response = await fetch("/api/cards", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "UPDATE_MONTHLY_UNLOAD_SCHEDULE",
+        dayOfMonth: parsedDay,
+        time24: scheduleTimeInput,
+        enabled: true,
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || "Failed to save monthly unload schedule");
+    }
+    if (payload?.monthlyUnloadSchedule) {
+      setMonthlyUnloadSchedule(payload.monthlyUnloadSchedule as MonthlyUnloadSchedule);
+      setScheduleDayInput(String(payload.monthlyUnloadSchedule.dayOfMonth));
+      setScheduleTimeInput(String(payload.monthlyUnloadSchedule.time24));
+    }
+  } catch (err) {
+    setError(err instanceof Error ? err.message : "Failed to save monthly unload schedule");
+  } finally {
+    setIsSavingSchedule(false);
+  }
 };
 
   // Hide the sticky search/pagination bars on scroll-down; reveal on scroll-up or tap.
@@ -254,8 +401,11 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
 
   useEffect(() => {
     fetchCards()
-      .then((cards) => {
-        setData(cards);
+      .then((payload) => {
+        setData(payload.cards);
+        setMonthlyUnloadSchedule(payload.monthlyUnloadSchedule);
+        setScheduleDayInput(String(payload.monthlyUnloadSchedule.dayOfMonth));
+        setScheduleTimeInput(String(payload.monthlyUnloadSchedule.time24));
         setLoading(false);
       })
       .catch((err) => {
@@ -392,6 +542,29 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
         header: () => <span className="text-xs font-bold text-gray-900">Notes</span>,
         cell: ({ getValue }) => <span className="text-gray-500">{getValue<string>()}</span>,
       },
+      {
+        id: "actions",
+        header: () => <span className="text-xs font-bold text-gray-900">Actions</span>,
+        cell: ({ row }) => {
+          const card = row.original;
+          const canForceUnassign = Boolean(card.currentUserId);
+          return (
+            <button
+              type="button"
+              disabled={!canForceUnassign}
+              onClick={() =>
+                void forceUnassignCard(
+                  card.id,
+                  `${card.final7Digits || "Unknown"} (${card.passRecipient || "No recipient"})`,
+                )
+              }
+              className="rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+            >
+              Force Unassign
+            </button>
+          );
+        },
+      },
     ],
     []
   );
@@ -427,6 +600,7 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
     passRecipient: "200px",
     allocationDateDisplay: "180px",
     notes: "100px",
+    actions: "130px",
   };
 
   if (loading) {
@@ -450,6 +624,58 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
       <BackNavigation href="/dashboard" label="Back to Staff Dashboard" />
       {/* --- Title --- */}
       <h1 className="text-2xl font-bold text-gray-900">ARC Card Master List</h1>
+      <p className="rounded-lg border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs sm:text-sm text-cyan-900">
+        Card statuses: <strong>Active</strong> = assigned and usable, <strong>Unloaded</strong> = assigned or unassigned but not loaded, <strong>Unattributed</strong> = unassigned, <strong>Expired</strong> = no longer valid, <strong>Cancelled</strong> = retired card.
+      </p>
+
+      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-900">
+              Monthly Auto-Unload Schedule (Edmonton Time)
+            </h2>
+            <p className="text-xs text-gray-500">
+              On the chosen day/time each month, all cards automatically become Unloaded. Assigned users stay linked unless Force Unassign is used.
+            </p>
+            <p className="mt-1 text-xs text-gray-500">
+              Last run: {monthlyUnloadSchedule.lastRunAt ? formatDateTime(monthlyUnloadSchedule.lastRunAt) : "Never"}
+            </p>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Saved schedule: Day {monthlyUnloadSchedule.dayOfMonth} at {monthlyUnloadSchedule.time24} ({monthlyUnloadSchedule.timezone})
+            </p>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col">
+              <span className="text-xs text-gray-600">Day of month</span>
+              <input
+                type="number"
+                min={1}
+                max={31}
+                value={scheduleDayInput}
+                onChange={(e) => setScheduleDayInput(e.target.value)}
+                className="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="flex flex-col">
+              <span className="text-xs text-gray-600">Time (24h)</span>
+              <input
+                type="time"
+                value={scheduleTimeInput}
+                onChange={(e) => setScheduleTimeInput(e.target.value)}
+                className="w-28 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() => void saveMonthlyUnloadSchedule()}
+              disabled={isSavingSchedule}
+              className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSavingSchedule ? "Saving..." : "Save Schedule"}
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* --- Toolbar: full-width search + actions (sticky, hide-on-scroll on mobile) --- */}
       <div
@@ -689,6 +915,21 @@ const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
                       className="w-full"
                     />
                   </div>
+                </div>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    disabled={!selectedCard.currentUserId}
+                    onClick={() =>
+                      void forceUnassignCard(
+                        selectedCard.id,
+                        `${selectedCard.final7Digits || "Unknown"} (${selectedCard.passRecipient || "No recipient"})`,
+                      )
+                    }
+                    className="w-full rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-gray-100 disabled:text-gray-400"
+                  >
+                    Force Unassign User
+                  </button>
                 </div>
 
                 <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">

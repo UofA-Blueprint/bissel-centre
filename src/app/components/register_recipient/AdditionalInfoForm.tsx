@@ -14,7 +14,6 @@ export type AdditionalInfoData = {
   secondMostCommonReason: string;
   housingOption: string;
   arcCardDigits?: string;
-  arcCardDurationMonths?: string;
   notes?: string;
 };
 type Props = {
@@ -69,9 +68,6 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
     );
     const [arcCardDigits, setArcCardDigits] = useState(
       initialData.arcCardDigits ?? "",
-    );
-    const [arcCardDurationMonths, setArcCardDurationMonths] = useState(
-      initialData.arcCardDurationMonths ?? "",
     );
     const [arcCardSuggestions, setArcCardSuggestions] = useState<string[]>([]);
     const [isSearchingArcCards, setIsSearchingArcCards] = useState(false);
@@ -158,7 +154,6 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
       secondMostCommonReason,
       housingOption,
       arcCardDigits: arcCardDigits.trim(),
-      arcCardDurationMonths: arcCardDurationMonths.trim(),
       notes: notes.trim(),
     });
 
@@ -178,19 +173,6 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
 
       if (!isArcCardConfirmed) {
         return "Please select an ARC card from the search suggestions.";
-      }
-
-      if (!data.arcCardDurationMonths) {
-        return "ARC Card Issue Duration is required.";
-      }
-
-      const durationNum = Number(data.arcCardDurationMonths);
-      if (
-        !Number.isInteger(durationNum) ||
-        durationNum < 1 ||
-        durationNum > 12
-      ) {
-        return "ARC Card Issue Duration must be an integer between 1 and 12 months.";
       }
 
       return null;
@@ -339,29 +321,6 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
                     )}
                   </div>
                 )}
-            </label>
-            <label className="flex flex-col">
-              <span className="text-sm mb-1">
-                ARC Card Issue Duration <span className="text-red-500">*</span>
-              </span>
-              <input
-                value={arcCardDurationMonths}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setArcCardDurationMonths(value);
-                }}
-                type="number"
-                name="arcCardDurationMonths"
-                inputMode="numeric"
-                min="1"
-                max="12"
-                maxLength={2}
-                placeholder="Enter 1-12 months"
-                className="mt-1 text-sm font-normal border rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              <span className="mt-1 text-xs text-gray-500">
-                Enter a number between 1 and 12 months
-              </span>
             </label>
             <label className="flex flex-col">
               <span className="text-sm mb-1">Other/Notes</span>

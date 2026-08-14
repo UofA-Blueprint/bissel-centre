@@ -5,7 +5,10 @@ import { initAdmin } from "@/app/services/firebaseAdmin";
 import admin from "firebase-admin";
 import { ArcCard, ArcCardInput } from "@/app/(app)/cards/types";
 import { cookies } from "next/headers";
-import { expireOverdueArcCards } from "@/app/services/cardExpiryService";
+import {
+  getMonthlyUnloadSchedule,
+  updateMonthlyUnloadSchedule,
+} from "@/app/services/cardExpiryService";
 
 const EDMONTON_TIMEZONE = "America/Edmonton";
 
@@ -144,11 +147,6 @@ export async function GET() {
     }
     const { db } = access;
 
-    // Do not block cards response on maintenance.
-    void expireOverdueArcCards(db).catch((expiryError) => {
-      console.error("Card expiry sync failed:", expiryError);
-    });
-
     const [cardsSnapshot, migrationDoc] = await Promise.all([
       db.collection("arc_cards").get(),
       // Check if migration has been run by looking for issues collection
@@ -259,7 +257,8 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ cards });
+    const monthlyUnloadSchedule = await getMonthlyUnloadSchedule(db);
+    return NextResponse.json({ cards, monthlyUnloadSchedule });
   } catch (error) {
     console.error("Error fetching cards:", error);
     return NextResponse.json(
@@ -339,12 +338,126 @@ export async function PATCH(request: NextRequest){
     const {db} = access;
 
     const body = (await request.json()) as {
+      action?: "UPDATE_STATUS" | "FORCE_UNASSIGN" | "UPDATE_MONTHLY_UNLOAD_SCHEDULE";
       id?: string;
       status?: string;
       confirmDangerous?: boolean;
+      dayOfMonth?: number;
+      time24?: string;
+      enabled?: boolean;
     }
 
-    const {id, status, confirmDangerous = false} = body;
+    const {
+      action = "UPDATE_STATUS",
+      id,
+      status,
+      confirmDangerous = false,
+      dayOfMonth,
+      time24,
+      enabled,
+    } = body;
+
+    if (action === "UPDATE_MONTHLY_UNLOAD_SCHEDULE") {
+      if (!Number.isInteger(dayOfMonth) || typeof time24 !== "string") {
+        return NextResponse.json(
+          { error: "dayOfMonth and time24 are required for schedule updates" },
+          { status: 400 },
+        );
+      }
+      try {
+        const validatedDayOfMonth = Number(dayOfMonth);
+        const schedule = await updateMonthlyUnloadSchedule(db, {
+          dayOfMonth: validatedDayOfMonth,
+          time24,
+          enabled,
+        });
+        return NextResponse.json({ success: true, monthlyUnloadSchedule: schedule });
+      } catch (error) {
+        return NextResponse.json(
+          { error: error instanceof Error ? error.message : "Invalid schedule" },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (!id) {
+      return NextResponse.json(
+        { error: "Card id is required" },
+        { status: 400 },
+      );
+    }
+
+    if (action === "FORCE_UNASSIGN") {
+      const cardRef = db.collection("arc_cards").doc(id);
+      const cardSnap = await cardRef.get();
+      if (!cardSnap.exists) {
+        return NextResponse.json({ error: "Card not found" }, { status: 404 });
+      }
+      const cardData = cardSnap.data() as {
+        currentUserId?: string | null;
+        status?: string;
+      };
+      const currentUserId = cardData.currentUserId ?? null;
+      if (!currentUserId) {
+        return NextResponse.json({ success: true, alreadyUnassigned: true });
+      }
+      if (!confirmDangerous) {
+        return NextResponse.json(
+          {
+            error: "Dangerous force unassign",
+            requiresConfirmation: true,
+            warning:
+              "This will unassign the recipient from the card and set the card to Unattributed.",
+            reasons: [
+              "Active assignment history will be closed for this card/user.",
+              "The user will no longer have this as their current ARC card.",
+            ],
+          },
+          { status: 409 },
+        );
+      }
+
+      await db.runTransaction(async (tx) => {
+        const freshCardSnap = await tx.get(cardRef);
+        if (!freshCardSnap.exists) {
+          throw new Error("Card not found");
+        }
+        const freshCardData = freshCardSnap.data() as { currentUserId?: string | null };
+        const holderId = freshCardData.currentUserId ?? null;
+        if (!holderId) return;
+
+        const userRef = db.collection("users").doc(holderId);
+        const userSnap = await tx.get(userRef);
+        const openIssueQuery = db
+          .collection("issues")
+          .where("cardId", "==", cardRef.id)
+          .where("userId", "==", holderId)
+          .where("returnedAt", "==", null)
+          .limit(1);
+        const openIssueSnap = await tx.get(openIssueQuery);
+
+        if (userSnap.exists) {
+          tx.update(userRef, {
+            arcCardNumber: admin.firestore.FieldValue.delete(),
+            passesIssued: admin.firestore.FieldValue.arrayUnion(cardRef.id),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          });
+        }
+        if (!openIssueSnap.empty) {
+          tx.update(openIssueSnap.docs[0].ref, {
+            returnedAt: admin.firestore.FieldValue.serverTimestamp(),
+            closedCardStatus: "Unattributed",
+          });
+        }
+        tx.update(cardRef, {
+          status: "Unattributed",
+          currentUserId: null,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      });
+
+      return NextResponse.json({ success: true });
+    }
 
     if (!id || !status){
       return NextResponse.json(

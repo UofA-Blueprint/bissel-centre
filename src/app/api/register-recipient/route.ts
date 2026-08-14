@@ -64,7 +64,6 @@ export async function POST(request: NextRequest) {
         secondMostCommonReason?: string;
         housingOption?: string;
         arcCardDigits?: string;
-        arcCardDurationMonths?: string;
         notes?: string;
       };
       photoUpload?: {
@@ -113,7 +112,6 @@ export async function POST(request: NextRequest) {
     const arcCardDigits = String(additionalInfo?.arcCardDigits || "")
       .replace(/\D/g, "")
       .trim();
-    const arcCardDurationMonths = Number(additionalInfo?.arcCardDurationMonths);
 
     // Encrypt phone number before storing
     const encryptedPhone = encryptPhone(personalDetails.phone || null);
@@ -152,17 +150,6 @@ export async function POST(request: NextRequest) {
     if (!arcCardDigits){
       await userRef.set(userData)
     }else{
-      if (
-        !Number.isInteger(arcCardDurationMonths) ||
-        arcCardDurationMonths < 1 ||
-        arcCardDurationMonths > 12
-      ) {
-        return NextResponse.json(
-          { error: "ARC card issue duration must be between 1 and 12 months" },
-          { status: 400 },
-        );
-      }
-
       try {
         await db.runTransaction(async(tx) => {
           const cardQuery = db
@@ -197,12 +184,9 @@ export async function POST(request: NextRequest) {
           const issueTimestamp = Timestamp.now();
           const issueDate = issueTimestamp.toDate();
           const issueDateString = formatEdmontonDate(issueDate);
-          const expiresAtDate = new Date(issueDate);
-          expiresAtDate.setMonth(expiresAtDate.getMonth() + arcCardDurationMonths);
 
-          // Defensive cleanup: older data may still contain open issues for this
-          // same card. Close them before creating the new active issue so expiry
-          // maintenance cannot immediately re-expire this reassigned card.
+          // Defensive cleanup: older data may still contain stale open issues for
+          // this same card. Close them before creating the new active issue.
           const staleOpenIssuesQuery = db
             .collection("issues")
             .where("cardId", "==", cardDoc.id)
@@ -237,7 +221,6 @@ export async function POST(request: NextRequest) {
             issuedBy: createdByUid,
             notes: additionalInfo?.notes || "",
             returnedAt: null,
-            expiresAt: Timestamp.fromDate(expiresAtDate),
             userId: userRef.id,
           });
         });

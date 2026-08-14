@@ -143,16 +143,6 @@ const ReviewDetails: React.FC<Props> = ({
             label="ARC Card Number"
             value={additionalInfo?.arcCardDigits}
           />
-          <DetailItem
-            label="ARC Card Issue Duration"
-            value={
-              additionalInfo?.arcCardDurationMonths
-                ? `${additionalInfo.arcCardDurationMonths} month${
-                    additionalInfo.arcCardDurationMonths === "1" ? "" : "s"
-                  }`
-                : undefined
-            }
-          />
           <DetailItem label="Other/Notes" value={additionalInfo?.notes} />
         </div>
       </div>
