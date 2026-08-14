@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     const app = await initAdmin();
     const db = app.firestore();
 
-    // 3) Run expiry sync logic (you already created/are creating this service)
+    // 3) Run monthly unload sync logic
     const result = await expireOverdueArcCards(db);
 
     // 4) Return useful debug info
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error("Expire cards cron failed:", error);
     return NextResponse.json(
-      { error: "Failed to expire overdue cards" },
+      { error: "Failed to run monthly ARC card unload" },
       { status: 500 },
     );
   }

@@ -332,6 +332,8 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
   const cardStatusText =
     arcCardStatus === "Active"
       ? "Card Active"
+      : arcCardStatus === "Unloaded"
+        ? "Card Assigned but Unloaded"
       : arcCardStatus === "Expired"
         ? "Card Expired"
         : "No Active Card";

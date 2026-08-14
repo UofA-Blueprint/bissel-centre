@@ -1,83 +1,159 @@
 import "server-only";
 
 import admin from "firebase-admin";
-import { Firestore, Timestamp } from "firebase-admin/firestore";
+import { Firestore } from "firebase-admin/firestore";
 
-type ArcCardDoc = {
-  status?: string;
-  currentUserId?: string | null;
+const EDMONTON_TIMEZONE = "America/Edmonton";
+const MONTHLY_UNLOAD_SETTINGS_COLLECTION = "app_settings";
+const MONTHLY_UNLOAD_SETTINGS_DOC = "arc_card_monthly_unload";
+
+export type MonthlyUnloadSchedule = {
+  enabled: boolean;
+  dayOfMonth: number;
+  time24: string; // HH:mm in Edmonton local time.
+  timezone: string;
+  lastRunMonthKey?: string;
+  lastRunAt?: string | null;
 };
 
-export async function expireOverdueArcCards(db: Firestore) {
-  const now = Timestamp.now();
+function getEdmontonNowParts() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: EDMONTON_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
 
-  // Open issues that should already be expired.
-  const overdueIssuesSnapshot = await db
-    .collection("issues")
-    .where("returnedAt", "==", null)
-    .where("expiresAt", "<=", now)
-    .get();
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((part) => part.type === type)?.value || "";
 
-  if (overdueIssuesSnapshot.empty) {
-    return {
-      overdueIssueCount: 0,
-      uniqueCardCount: 0,
-      updatedCardCount: 0,
-    };
+  return {
+    year: Number(get("year")),
+    month: Number(get("month")),
+    day: Number(get("day")),
+    hour: Number(get("hour")),
+    minute: Number(get("minute")),
+  };
+}
+
+function parseTime24(value: string): { hour: number; minute: number } | null {
+  const match = String(value || "").match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  if (!match) return null;
+  return {
+    hour: Number(match[1]),
+    minute: Number(match[2]),
+  };
+}
+
+export function getDefaultMonthlyUnloadSchedule(): MonthlyUnloadSchedule {
+  return {
+    enabled: false,
+    dayOfMonth: 1,
+    time24: "00:00",
+    timezone: EDMONTON_TIMEZONE,
+    lastRunMonthKey: undefined,
+    lastRunAt: null,
+  };
+}
+
+export async function getMonthlyUnloadSchedule(
+  db: Firestore,
+): Promise<MonthlyUnloadSchedule> {
+  const settingsRef = db
+    .collection(MONTHLY_UNLOAD_SETTINGS_COLLECTION)
+    .doc(MONTHLY_UNLOAD_SETTINGS_DOC);
+  const snap = await settingsRef.get();
+  if (!snap.exists) return getDefaultMonthlyUnloadSchedule();
+
+  const data = snap.data() as Partial<MonthlyUnloadSchedule> | undefined;
+  const parsedTime = parseTime24(String(data?.time24 || ""));
+
+  return {
+    enabled: Boolean(data?.enabled),
+    dayOfMonth: Math.min(31, Math.max(1, Number(data?.dayOfMonth || 1))),
+    time24: parsedTime
+      ? `${String(parsedTime.hour).padStart(2, "0")}:${String(parsedTime.minute).padStart(2, "0")}`
+      : "00:00",
+    timezone: EDMONTON_TIMEZONE,
+    lastRunMonthKey:
+      typeof data?.lastRunMonthKey === "string" ? data.lastRunMonthKey : undefined,
+    lastRunAt:
+      typeof data?.lastRunAt === "string" ? data.lastRunAt : null,
+  };
+}
+
+export async function updateMonthlyUnloadSchedule(
+  db: Firestore,
+  input: { dayOfMonth: number; time24: string; enabled?: boolean },
+): Promise<MonthlyUnloadSchedule> {
+  const parsedTime = parseTime24(input.time24);
+  if (!parsedTime) {
+    throw new Error("Time must be in HH:mm format.");
+  }
+  if (!Number.isInteger(input.dayOfMonth) || input.dayOfMonth < 1 || input.dayOfMonth > 31) {
+    throw new Error("Day of month must be between 1 and 31.");
   }
 
-  // Track overdue holders by card so we only expire the card that is
-  // currently assigned to that same user (prevents stale issue drift).
-  const overdueUserIdsByCard = new Map<string, Set<string>>();
-  const overdueIssueRefsByCardAndUser = new Map<
-    string,
-    admin.firestore.DocumentReference[]
-  >();
-  for (const issueDoc of overdueIssuesSnapshot.docs) {
-    const issue = issueDoc.data() as { cardId?: string; userId?: string };
-    const cardId = String(issue.cardId || "").trim();
-    const userId = String(issue.userId || "").trim();
-    if (!cardId || !userId) continue;
-    if (!overdueUserIdsByCard.has(cardId)) {
-      overdueUserIdsByCard.set(cardId, new Set<string>());
-    }
-    overdueUserIdsByCard.get(cardId)!.add(userId);
-
-    const key = `${cardId}::${userId}`;
-    const refs = overdueIssueRefsByCardAndUser.get(key) ?? [];
-    refs.push(issueDoc.ref);
-    overdueIssueRefsByCardAndUser.set(key, refs);
+  const settingsRef = db
+    .collection(MONTHLY_UNLOAD_SETTINGS_COLLECTION)
+    .doc(MONTHLY_UNLOAD_SETTINGS_DOC);
+  const current = await getMonthlyUnloadSchedule(db);
+  const next: MonthlyUnloadSchedule = {
+    ...current,
+    enabled: input.enabled ?? true,
+    dayOfMonth: input.dayOfMonth,
+    time24: `${String(parsedTime.hour).padStart(2, "0")}:${String(parsedTime.minute).padStart(2, "0")}`,
+    timezone: EDMONTON_TIMEZONE,
+  };
+  const scheduleWritePayload: Record<string, unknown> = {
+    enabled: next.enabled,
+    dayOfMonth: next.dayOfMonth,
+    time24: next.time24,
+    timezone: next.timezone,
+    lastRunAt: next.lastRunAt ?? null,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (typeof next.lastRunMonthKey === "string" && next.lastRunMonthKey.length > 0) {
+    scheduleWritePayload.lastRunMonthKey = next.lastRunMonthKey;
   }
 
-  // Get unique card ids from overdue issues.
-  const cardIds = Array.from(
-    new Set(
-      overdueIssuesSnapshot.docs
-        .map((doc) => String(doc.data().cardId || "").trim())
-        .filter((id) => id.length > 0),
-    ),
+  await settingsRef.set(
+    scheduleWritePayload,
+    { merge: true },
   );
+  return next;
+}
 
-  if (cardIds.length === 0) {
-    return {
-      overdueIssueCount: overdueIssuesSnapshot.size,
-      uniqueCardCount: 0,
-      updatedCardCount: 0,
-    };
+async function runMonthlyUnload(
+  db: Firestore,
+  schedule: MonthlyUnloadSchedule,
+): Promise<{ ran: boolean; updatedCardCount: number; monthKey: string }> {
+  const now = getEdmontonNowParts();
+  const monthKey = `${String(now.year).padStart(4, "0")}-${String(now.month).padStart(2, "0")}`;
+  const scheduleTime = parseTime24(schedule.time24) ?? { hour: 0, minute: 0 };
+  const isScheduledDay = now.day === schedule.dayOfMonth;
+  const hasReachedTime =
+    now.hour > scheduleTime.hour ||
+    (now.hour === scheduleTime.hour && now.minute >= scheduleTime.minute);
+
+  // Run only on the configured calendar day once the configured time is reached.
+  if (
+    !schedule.enabled ||
+    !isScheduledDay ||
+    !hasReachedTime ||
+    schedule.lastRunMonthKey === monthKey
+  ) {
+    return { ran: false, updatedCardCount: 0, monthKey };
   }
 
-  const cardRefs = cardIds.map((id) => db.collection("arc_cards").doc(id));
-  const cardSnapshots = await db.getAll(...cardRefs);
-
-  // Batch updates (chunked for Firestore limits).
-  let updatedCardCount = 0;
-  let detachedCardCount = 0;
-  let closedIssueCount = 0;
-  let reconciledInconsistentCount = 0;
+  const cardsSnapshot = await db.collection("arc_cards").get();
   let batch = db.batch();
   let opsInBatch = 0;
-  const processedCardUserKeys = new Set<string>();
-  const maybeCommitBatch = async () => {
+  let updatedCardCount = 0;
+  const maybeCommit = async () => {
     if (opsInBatch >= 400) {
       await batch.commit();
       batch = db.batch();
@@ -85,140 +161,49 @@ export async function expireOverdueArcCards(db: Firestore) {
     }
   };
 
-  for (const cardSnap of cardSnapshots) {
-    if (!cardSnap.exists) continue;
-
-    const card = cardSnap.data() as ArcCardDoc;
-
-    // Extra safety: only expire if the card's current holder matches an
-    // overdue open issue holder for this same card.
-    const currentUserId = String(card.currentUserId || "").trim();
-    if (!currentUserId) continue;
-    const overdueUserIds = overdueUserIdsByCard.get(cardSnap.id);
-    if (!overdueUserIds?.has(currentUserId)) continue;
-
-    const issueKey = `${cardSnap.id}::${currentUserId}`;
-    const matchingIssueRefs = overdueIssueRefsByCardAndUser.get(issueKey) ?? [];
-    if (matchingIssueRefs.length === 0) continue;
-    processedCardUserKeys.add(issueKey);
-
-    const cardUpdate: {
-      currentUserId: null;
-      updatedAt: admin.firestore.FieldValue;
-      status?: string;
-    } = {
-      currentUserId: null,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    };
-
-    // For true active assignments that are overdue, mark status Expired.
-    // For already non-active statuses, keep the manual status and only detach.
-    if (card.status === "Active") {
-      cardUpdate.status = "Expired";
-      updatedCardCount += 1;
-    }
-
-    batch.update(cardSnap.ref, {
-      ...cardUpdate,
-    });
-    opsInBatch += 1;
-    await maybeCommitBatch();
-
-    // Keep user mirror fields in sync when auto-expiring/detaching.
-    const userRef = db.collection("users").doc(currentUserId);
-    batch.set(
-      userRef,
-      {
-        arcCardNumber: admin.firestore.FieldValue.delete(),
-        passesIssued: admin.firestore.FieldValue.arrayUnion(cardSnap.id),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-    opsInBatch += 1;
-    await maybeCommitBatch();
-
-    for (const issueRef of matchingIssueRefs) {
-      batch.update(issueRef, {
-        returnedAt: admin.firestore.FieldValue.serverTimestamp(),
-        closedCardStatus: "Expired",
-      });
-      opsInBatch += 1;
-      closedIssueCount += 1;
-      await maybeCommitBatch();
-    }
-
-    detachedCardCount += 1;
-  }
-
-  // Self-heal pass for already-bad states from prior drift:
-  // any non-Active card that still has a current holder must be detached.
-  const assignedCardsSnapshot = await db
-    .collection("arc_cards")
-    .where("currentUserId", "!=", null)
-    .get();
-
-  for (const cardDoc of assignedCardsSnapshot.docs) {
-    const data = cardDoc.data() as ArcCardDoc;
-    const currentUserId = String(data.currentUserId || "").trim();
-    if (!currentUserId) continue;
-    if (data.status === "Active") continue;
-
-    const cardUserKey = `${cardDoc.id}::${currentUserId}`;
-    if (processedCardUserKeys.has(cardUserKey)) continue;
-    processedCardUserKeys.add(cardUserKey);
-
-    batch.update(cardDoc.ref, {
-      currentUserId: null,
+  for (const doc of cardsSnapshot.docs) {
+    const status = String((doc.data() as { status?: unknown }).status || "");
+    if (status === "Unloaded") continue;
+    batch.update(doc.ref, {
+      status: "Unloaded",
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     });
     opsInBatch += 1;
-    await maybeCommitBatch();
-
-    const userRef = db.collection("users").doc(currentUserId);
-    batch.set(
-      userRef,
-      {
-        arcCardNumber: admin.firestore.FieldValue.delete(),
-        passesIssued: admin.firestore.FieldValue.arrayUnion(cardDoc.id),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      },
-      { merge: true },
-    );
-    opsInBatch += 1;
-    await maybeCommitBatch();
-
-    const openIssueSnap = await db
-      .collection("issues")
-      .where("cardId", "==", cardDoc.id)
-      .where("userId", "==", currentUserId)
-      .where("returnedAt", "==", null)
-      .get();
-
-    for (const issueDoc of openIssueSnap.docs) {
-      batch.update(issueDoc.ref, {
-        returnedAt: admin.firestore.FieldValue.serverTimestamp(),
-        closedCardStatus: data.status || "Unattributed",
-      });
-      opsInBatch += 1;
-      closedIssueCount += 1;
-      await maybeCommitBatch();
-    }
-
-    detachedCardCount += 1;
-    reconciledInconsistentCount += 1;
+    updatedCardCount += 1;
+    await maybeCommit();
   }
+
+  const settingsRef = db
+    .collection(MONTHLY_UNLOAD_SETTINGS_COLLECTION)
+    .doc(MONTHLY_UNLOAD_SETTINGS_DOC);
+  batch.set(
+    settingsRef,
+    {
+      lastRunMonthKey: monthKey,
+      lastRunAt: new Date().toISOString(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    },
+    { merge: true },
+  );
+  opsInBatch += 1;
 
   if (opsInBatch > 0) {
     await batch.commit();
   }
 
+  return { ran: true, updatedCardCount, monthKey };
+}
+
+export async function expireOverdueArcCards(db: Firestore) {
+  // Backward-compatible function name: now handles monthly unload schedule.
+  const schedule = await getMonthlyUnloadSchedule(db);
+  const result = await runMonthlyUnload(db, schedule);
   return {
-    overdueIssueCount: overdueIssuesSnapshot.size,
-    uniqueCardCount: cardIds.length,
-    updatedCardCount,
-    detachedCardCount,
-    closedIssueCount,
-    reconciledInconsistentCount,
+    mode: "monthly_unload",
+    timezone: EDMONTON_TIMEZONE,
+    schedule,
+    ran: result.ran,
+    ranForMonthKey: result.monthKey,
+    updatedCardCount: result.updatedCardCount,
   };
 }

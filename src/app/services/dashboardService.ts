@@ -125,6 +125,7 @@ export async function getDashboardSummaryForViewer(viewer: {
   const latestIssueReturnedAtByUserId = new Map<string, unknown>();
   const latestIssueClosedStatusByUserId = new Map<string, string | undefined>();
   const activeCardByUserId = new Map<string, "Active">();
+  const unloadedAssignedCardByUserId = new Map<string, "Unloaded">();
   const cardStatusByCardId = new Map<string, string>();
 
   for (const cardDoc of cardsSnapshot.docs) {
@@ -133,6 +134,8 @@ export async function getDashboardSummaryForViewer(viewer: {
     cardStatusByCardId.set(cardDoc.id, status);
     if (status === "Active" && cardData.currentUserId) {
       activeCardByUserId.set(cardData.currentUserId, "Active");
+    } else if (status === "Unloaded" && cardData.currentUserId) {
+      unloadedAssignedCardByUserId.set(cardData.currentUserId, "Unloaded");
     }
   }
 
@@ -173,10 +176,13 @@ export async function getDashboardSummaryForViewer(viewer: {
     const latestIssueReturnedAt = latestIssueReturnedAtByUserId.get(doc.id);
     const latestIssueClosedStatus = latestIssueClosedStatusByUserId.get(doc.id);
     const hasActiveCard = activeCardByUserId.has(doc.id);
+    const hasUnloadedAssignedCard = unloadedAssignedCardByUserId.has(doc.id);
     const userAccountStatus = data.status === "Inactive" ? "Inactive" : "Active";
     let cardStatusForDashboard: DashboardUser["arcCardStatus"] = undefined;
     if (hasActiveCard) {
       cardStatusForDashboard = "Active";
+    } else if (hasUnloadedAssignedCard) {
+      cardStatusForDashboard = "Unloaded";
     } else if (latestIssueReturnedAt && latestIssueClosedStatus === "Expired") {
       cardStatusForDashboard = "Expired";
     } else if (!latestIssueReturnedAt && latestIssueCardStatus === "Expired") {
