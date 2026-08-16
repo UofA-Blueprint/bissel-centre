@@ -1,7 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { initAdmin } from "@/app/services/firebaseAdmin";
-import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
 
 export default async function CardsLayout({
   children,
@@ -21,21 +20,19 @@ export default async function CardsLayout({
     redirect("/login");
   }
 
-  // IT admins are not staff: show the same notice as the dashboard instead of
-  // rendering the cards content.
-  if (decodedClaims.admin === true) {
-    return <StaffOnlyNotice />;
-  }
+  // IT admins get read-only access to the cards page — the page itself renders
+  // the "View only" nav banner and disables every mutation control. Staff who
+  // aren't in administrative_staff still get bounced back to /login.
+  if (decodedClaims.admin !== true) {
+    const staffDoc = await admin
+      .firestore()
+      .collection("administrative_staff")
+      .doc(decodedClaims.uid)
+      .get();
 
-  // Ensure this is a regular administrative staff member.
-  const staffDoc = await admin
-    .firestore()
-    .collection("administrative_staff")
-    .doc(decodedClaims.uid)
-    .get();
-
-  if (!staffDoc.exists) {
-    redirect("/login");
+    if (!staffDoc.exists) {
+      redirect("/login");
+    }
   }
 
   return (

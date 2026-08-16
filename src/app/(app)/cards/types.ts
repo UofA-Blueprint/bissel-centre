@@ -82,6 +82,9 @@ export interface ArcCard {
   // Derived at query time from issues collection:
   passRecipient?: string;
   issueDates?: string[];
+  // Unique set of staff UIDs who have ever issued this card — used for the
+  // IT-admin "view as staff" filter on /cards.
+  issuedByAny?: string[];
 }
 
 export interface ArcCardInput {

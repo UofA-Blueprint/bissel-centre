@@ -43,6 +43,16 @@ export async function POST(request: NextRequest) {
     const decodedClaims = await adminApp
       .auth()
       .verifySessionCookie(sessionCookie, true);
+
+    // IT admins are in read-only "view as" mode on staff pages; they cannot
+    // create recipients even by bypassing the UI.
+    if (decodedClaims.admin === true) {
+      return NextResponse.json(
+        { error: "Forbidden - Staff access only" },
+        { status: 403 },
+      );
+    }
+
     const createdByUid = decodedClaims.uid;
 
     const body = await request.json();

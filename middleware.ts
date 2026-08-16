@@ -134,12 +134,11 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Staff route access: administrative staff only
+  // Staff route access: administrative staff can operate normally; IT admins are
+  // allowed through in read-only "view as" mode (the pages themselves lock down
+  // mutations and surface the (View only) header badge).
   if (isStaffRoute) {
-    if (isAdminUser) {
-      return NextResponse.redirect(new URL("/admin/dashboard", request.url));
-    }
-    if (!isStaffUser) {
+    if (!isAdminUser && !isStaffUser) {
       return NextResponse.redirect(new URL("/login", request.url));
     }
   }
