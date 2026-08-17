@@ -72,6 +72,7 @@ export default function DashboardPage() {
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -194,7 +195,10 @@ export default function DashboardPage() {
         >
           <button
             className="flex items-center gap-1 whitespace-nowrap hover:opacity-75 transition-opacity"
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => {
+              setEditingUserId(null);
+              setIsModalOpen(true);
+            }}
           >
             <span className="text-sm">＋ New Recipient </span>
           </button>
@@ -240,7 +244,14 @@ export default function DashboardPage() {
             <>
               <div className="flex flex-wrap gap-2 sm:gap-4 justify-center">
                 {searchResults.map((user) => (
-                  <UserCard key={user.id} user={user} />
+                  <UserCard
+                    key={user.id}
+                    user={user}
+                    onEdit={() => {
+                      setEditingUserId(user.id);
+                      setIsModalOpen(true);
+                    }}
+                  />
                 ))}
               </div>
 
@@ -261,7 +272,12 @@ export default function DashboardPage() {
       </div>
       <RegisterRecipientModal
         open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        mode={editingUserId ? "edit" : "create"}
+        recipientId={editingUserId ?? undefined}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingUserId(null);
+        }}
         onSuccess={() => {
           setIsLoading(true);
           setRefreshNonce((prev) => prev + 1);
@@ -322,7 +338,7 @@ const UserCardSkeleton: React.FC = () => {
   );
 };
 
-const UserCard: React.FC<{ user: User }> = ({ user }) => {
+const UserCard: React.FC<{ user: User; onEdit: () => void }> = ({ user, onEdit }) => {
   const isBanned = user.banned;
   const arcCardStatus = user.arcCardStatus;
   const [imgError, setImgError] = useState(false);
@@ -377,6 +393,14 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
           </div>
         </div>
       </div>
+      <button
+        type="button"
+        onClick={onEdit}
+        className="ml-3 shrink-0 rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-primary hover:bg-gray-50"
+        aria-label={`Edit ${user.firstName} ${user.secondName}`}
+      >
+        Edit
+      </button>
     </div>
   );
 };

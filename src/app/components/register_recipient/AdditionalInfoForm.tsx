@@ -20,6 +20,7 @@ type Props = {
   onSubmit: (data: AdditionalInfoData) => void;
   onError?: (msg: string | null) => void;
   initialData?: Partial<AdditionalInfoData>;
+  requireArcCard?: boolean;
 };
 
 type ArcCardSearchResponse = {
@@ -55,7 +56,7 @@ const housingOptions = [
 ];
 
 const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
-  ({ onSubmit, onError, initialData = {} }, ref) => {
+  ({ onSubmit, onError, initialData = {}, requireArcCard = true }, ref) => {
     const [journey, setJourney] = useState(initialData.journey ?? "");
     const [mostCommonReason, setMostCommonReason] = useState(
       initialData.mostCommonReason ?? "",
@@ -167,11 +168,11 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
         return "Please fill out all required fields.";
       }
 
-      if (!data.arcCardDigits) {
+      if (requireArcCard && !data.arcCardDigits) {
         return "ARC Card Number is required.";
       }
 
-      if (!isArcCardConfirmed) {
+      if (requireArcCard && !isArcCardConfirmed) {
         return "Please select an ARC card from the search suggestions.";
       }
 
@@ -246,81 +247,84 @@ const AdditionalInfoForm = forwardRef<{ submit: () => void }, Props>(
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
             <label className="flex flex-col relative">
-              <span className="text-sm mb-1">
-                ARC ID Number <span className="text-red-500">*</span>
-              </span>
-              <input
-                value={arcCardDigits}
-                onChange={(e) => {
-                  const digitsOnlyValue = e.target.value.replace(/\D/g, "");
-                  setArcCardDigits(digitsOnlyValue);
-                  setIsArcCardConfirmed(false);
-                  setShowArcCardSuggestions(true);
-                  setHasArcCardSearchCompleted(false);
-                  if (arcCardLookupError) {
-                    setArcCardLookupError(null);
-                  }
-                }}
-                onFocus={() => setShowArcCardSuggestions(true)}
-                onBlur={() => {
-                  window.setTimeout(() => {
-                    setShowArcCardSuggestions(false);
-                  }, 100);
-                }}
-                type="text"
-                name="arcPassId"            // avoid “card” and “number” in name
-                id="arcPassId"
-                inputMode="numeric"
-                //autoComplete="off"
-                autoComplete="new-password"
-                placeholder="Type at least 3 digits to search"
-                className="mt-1 text-sm font-normal border rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              {normalizedArcCard.length > 0 && normalizedArcCard.length < 3 && (
-                <span className="mt-1 text-xs text-gray-500">
-                  Enter at least 3 digits to see matching ARC Passes.
-                </span>
-              )}
-              {isSearchingArcCards && (
-                <span className="mt-1 text-xs text-gray-500">
-                  Searching ARC Passes...
-                </span>
-              )}
-              {arcCardLookupError && (
-                <span className="mt-1 text-xs text-red-600">
-                  {arcCardLookupError}
-                </span>
-              )}
-              {showArcCardSuggestions &&
-                normalizedArcCard.length >= 3 &&
-                !isSearchingArcCards &&
-                !arcCardLookupError && (
-                  <div className="absolute z-20 mt-[78px] w-full rounded-lg border bg-white shadow-lg max-h-52 overflow-y-auto">
-                    {arcCardSuggestions.length === 0 &&
-                    hasArcCardSearchCompleted ? (
-                      <div className="px-3 py-2 text-sm text-gray-500">
-                        No matching ARC Passes found.
+              {requireArcCard && (
+                <>
+                  <span className="text-sm mb-1">
+                    ARC ID Number <span className="text-red-500">*</span>
+                  </span>
+                  <input
+                    value={arcCardDigits}
+                    onChange={(e) => {
+                      const digitsOnlyValue = e.target.value.replace(/\D/g, "");
+                      setArcCardDigits(digitsOnlyValue);
+                      setIsArcCardConfirmed(false);
+                      setShowArcCardSuggestions(true);
+                      setHasArcCardSearchCompleted(false);
+                      if (arcCardLookupError) {
+                        setArcCardLookupError(null);
+                      }
+                    }}
+                    onFocus={() => setShowArcCardSuggestions(true)}
+                    onBlur={() => {
+                      window.setTimeout(() => {
+                        setShowArcCardSuggestions(false);
+                      }, 100);
+                    }}
+                    type="text"
+                    name="arcPassId"
+                    id="arcPassId"
+                    inputMode="numeric"
+                    autoComplete="new-password"
+                    placeholder="Type at least 3 digits to search"
+                    className="mt-1 text-sm font-normal border rounded-lg px-3 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                  {normalizedArcCard.length > 0 && normalizedArcCard.length < 3 && (
+                    <span className="mt-1 text-xs text-gray-500">
+                      Enter at least 3 digits to see matching ARC Passes.
+                    </span>
+                  )}
+                  {isSearchingArcCards && (
+                    <span className="mt-1 text-xs text-gray-500">
+                      Searching ARC Passes...
+                    </span>
+                  )}
+                  {arcCardLookupError && (
+                    <span className="mt-1 text-xs text-red-600">
+                      {arcCardLookupError}
+                    </span>
+                  )}
+                  {showArcCardSuggestions &&
+                    normalizedArcCard.length >= 3 &&
+                    !isSearchingArcCards &&
+                    !arcCardLookupError && (
+                      <div className="absolute z-20 mt-[78px] w-full rounded-lg border bg-white shadow-lg max-h-52 overflow-y-auto">
+                        {arcCardSuggestions.length === 0 &&
+                        hasArcCardSearchCompleted ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            No matching ARC Passes found.
+                          </div>
+                        ) : (
+                          arcCardSuggestions.map((cardNumber) => (
+                            <button
+                              key={cardNumber}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                setArcCardDigits(cardNumber);
+                                setIsArcCardConfirmed(true);
+                                setShowArcCardSuggestions(false);
+                                setArcCardLookupError(null);
+                              }}
+                            >
+                              {cardNumber}
+                            </button>
+                          ))
+                        )}
                       </div>
-                    ) : (
-                      arcCardSuggestions.map((cardNumber) => (
-                        <button
-                          key={cardNumber}
-                          type="button"
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            setArcCardDigits(cardNumber);
-                            setIsArcCardConfirmed(true);
-                            setShowArcCardSuggestions(false);
-                            setArcCardLookupError(null);
-                          }}
-                        >
-                          {cardNumber}
-                        </button>
-                      ))
                     )}
-                  </div>
-                )}
+                </>
+              )}
             </label>
             <label className="flex flex-col">
               <span className="text-sm mb-1">Other/Notes</span>

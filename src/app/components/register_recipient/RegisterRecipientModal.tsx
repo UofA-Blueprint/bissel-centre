@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import RegisterRecipientForm, {
   RecipientFormData,
@@ -12,6 +12,8 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onSuccess?: () => void;
+  mode?: "create" | "edit";
+  recipientId?: string;
 };
 
 type FormData = {
@@ -20,7 +22,13 @@ type FormData = {
   photoUpload?: PhotoUploadData;
 };
 
-const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) => {
+const RegisterRecipientModal: React.FC<Props> = ({
+  open,
+  onClose,
+  onSuccess,
+  mode = "create",
+  recipientId,
+}) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
@@ -31,6 +39,40 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [formData, setFormData] = useState<FormData>({});
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const isEditMode = mode === "edit";
+
+  useEffect(() => {
+    if (!open || !isEditMode || !recipientId) return;
+
+    let cancelled = false;
+    setIsLoadingProfile(true);
+    setErrorMessage(null);
+    fetch(`/api/recipients/${recipientId}`)
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Failed to load recipient");
+        return data as FormData;
+      })
+      .then((data) => {
+        if (cancelled) return;
+        setFormData(data);
+        setCurrentPage(1);
+        setCompletedSteps(new Set());
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setErrorMessage(error instanceof Error ? error.message : "Failed to load recipient");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingProfile(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isEditMode, recipientId]);
 
   const hasFormData = () => {
     return (
@@ -85,13 +127,16 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
     try {
       setErrorMessage(null);
 
-      const response = await fetch("/api/register-recipient", {
-        method: "POST",
+      const response = await fetch(
+        isEditMode ? `/api/recipients/${recipientId}` : "/api/register-recipient",
+        {
+        method: isEditMode ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(formData),
-      });
+        },
+      );
 
       if (!response.ok) {
         const error = await response.json();
@@ -112,7 +157,9 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Failed to register recipient. Please try again.",
+          : isEditMode
+            ? "Failed to update recipient. Please try again."
+            : "Failed to register recipient. Please try again.",
       );
       submittingRef.current = false;
       setIsSubmitting(false);
@@ -225,6 +272,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
             onSubmit={handleAdditionalInfoSubmit}
             onError={setErrorMessage}
             initialData={formData.additionalInfo}
+            requireArcCard={!isEditMode}
           />
         );
       case 3:
@@ -243,6 +291,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
             goToPersonal={() => handleGoToStep(1)}
             goToAdditionalInfo={() => handleGoToStep(2)}
             goToPhotoUpload={() => handleGoToStep(3)}
+            showArcCard={!isEditMode}
           />
         );
       default:
@@ -262,7 +311,7 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
           {/* Modal Header */}
           <div className="flex-shrink-0 flex items-start justify-between bg-offWhite p-4 rounded-t-lg border-b-2">
             <DialogTitle className="text-lg font-medium">
-              New Recipient
+              {isEditMode ? "Edit Recipient" : "New Recipient"}
             </DialogTitle>
             <button
               type="button"
@@ -285,7 +334,13 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
 
             {/* Form (larger column) */}
             <section className="md:col-span-3 overflow-y-auto p-4">
-              {renderCurrentPage()}
+              {isLoadingProfile ? (
+                <div className="flex h-full items-center justify-center text-gray-500">
+                  Loading recipient...
+                </div>
+              ) : (
+                renderCurrentPage()
+              )}
             </section>
           </div>
           {/* Modal Footer */}
@@ -311,8 +366,8 @@ const RegisterRecipientModal: React.FC<Props> = ({ open, onClose, onSuccess }) =
             >
               {currentPage === 4
                 ? isSubmitting
-                  ? "Finishing..."
-                  : "Finish Registration"
+                  ? isEditMode ? "Saving..." : "Finishing..."
+                  : isEditMode ? "Save Changes" : "Finish Registration"
                 : "Continue →"}
             </button>
           </div>
