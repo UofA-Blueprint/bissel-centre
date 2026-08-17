@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { cookies } from "next/headers";
 import { encryptPhone } from "@/utils/phoneEncryption";
 import admin from "firebase-admin";
+import { getStaffAccess } from "@/app/api/_lib/staffAccess";
 
 const MAX_PICTURE_FIELD_BYTES = 1_000_000; // Firestore field value must stay < ~1,048,487 bytes.
 const EDMONTON_TIMEZONE = "America/Edmonton";
@@ -28,22 +28,16 @@ function formatEdmontonDate(date: Date): string {
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify user session
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("session")?.value;
-
-    if (!sessionCookie) {
+    const access = await getStaffAccess();
+    if ("error" in access) {
       return NextResponse.json(
-        { error: "Unauthorized - No session found" },
-        { status: 401 },
+        { error: access.error },
+        { status: access.status },
       );
     }
 
-    const adminApp = await initAdmin();
-    const decodedClaims = await adminApp
-      .auth()
-      .verifySessionCookie(sessionCookie, true);
-    const createdByUid = decodedClaims.uid;
+    const adminApp = access.app;
+    const createdByUid = access.uid;
 
     const body = await request.json();
     const { personalDetails, additionalInfo, photoUpload } = body as {
