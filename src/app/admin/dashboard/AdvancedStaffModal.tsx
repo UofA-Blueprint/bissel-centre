@@ -41,7 +41,7 @@ import {
 export interface StaffRow {
     id: string;
     firstName: string;
-    secondName: string;
+    lastName: string;
     email: string;
 }
 
@@ -104,7 +104,7 @@ function OverviewPane({
     onSaved: (next: StaffRow) => void;
 }) {
     const [firstName, setFirstName] = useState(staff.firstName);
-    const [lastName, setLastName] = useState(staff.secondName);
+    const [lastName, setLastName] = useState(staff.lastName);
     const [email, setEmail] = useState(staff.email);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -112,14 +112,14 @@ function OverviewPane({
 
     useEffect(() => {
         setFirstName(staff.firstName);
-        setLastName(staff.secondName);
+        setLastName(staff.lastName);
         setEmail(staff.email);
         setError(null);
-    }, [staff.firstName, staff.secondName, staff.email]);
+    }, [staff.firstName, staff.lastName, staff.email]);
 
     const dirty =
         firstName.trim() !== staff.firstName ||
-        lastName.trim() !== staff.secondName ||
+        lastName.trim() !== staff.lastName ||
         email.trim().toLowerCase() !== staff.email.toLowerCase();
     const canSave = dirty && !saving && firstName.trim() && lastName.trim();
 
@@ -135,7 +135,7 @@ function OverviewPane({
             onSaved({
                 ...staff,
                 firstName: firstName.trim(),
-                secondName: lastName.trim(),
+                lastName: lastName.trim(),
                 email: email.trim().toLowerCase(),
             });
             setSavedFlash(true);
@@ -862,7 +862,7 @@ export function AdvancedStaffModal({
                                 </div>
                                 <div className="min-w-0 flex-1">
                                     <div className="truncate text-xl font-bold text-gray-900">
-                                        {staff.firstName} {staff.secondName}
+                                        {staff.firstName} {staff.lastName}
                                     </div>
                                     <div className="truncate text-sm text-gray-500">
                                         {staff.email || "No email"}

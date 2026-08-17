@@ -131,13 +131,16 @@ export const getAdministrativeStaff = async () => {
 
   return snapshot.docs.map((doc) => {
     const data = doc.data();
+    const normalizedLastName = data.lastName ?? data.secondName ?? "";
     return {
       id: doc.id,
       createdAt: data.createdAt?.toDate?.() ?? null,
       createdBy: data.createdBy ?? "",
       email: data.email ?? "",
       firstName: data.firstName ?? "",
-      secondName: data.secondName ?? data.lastName ?? "",
+      lastName: normalizedLastName,
+      // Keep the legacy key while the rest of the app migrates.
+      secondName: normalizedLastName,
     };
   });
 };
@@ -212,7 +215,11 @@ export const updateAdministrativeStaff = async (
     updatedAt: FieldValue.serverTimestamp(),
   };
   if (firstName !== undefined) firestorePatch.firstName = firstName;
-  if (lastName !== undefined) firestorePatch.lastName = lastName;
+  if (lastName !== undefined) {
+    firestorePatch.lastName = lastName;
+    // Keep legacy field in sync to avoid stale reads in older code paths.
+    firestorePatch.secondName = lastName;
+  }
   if (email !== undefined) firestorePatch.email = email;
 
   const authPatch: { email?: string; displayName?: string } = {};

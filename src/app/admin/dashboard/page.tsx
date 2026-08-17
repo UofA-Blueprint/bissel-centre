@@ -24,7 +24,7 @@ interface User {
     createdBy: string;
     email: string;
     firstName: string;
-    secondName: string;
+    lastName: string;
 }
 
 interface Session {
@@ -100,7 +100,7 @@ function AdminStaffRow({
     onOpenAdvanced: (user: User) => void;
 }) {
     const [firstName, setFirstName] = useState(user.firstName);
-    const [lastName, setLastName] = useState(user.secondName);
+    const [lastName, setLastName] = useState(user.lastName);
     const [email, setEmail] = useState(user.email);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -113,10 +113,10 @@ function AdminStaffRow({
     // the parent replaces the row's data).
     useEffect(() => {
         setFirstName(user.firstName);
-        setLastName(user.secondName);
+        setLastName(user.lastName);
         setEmail(user.email);
         setError(null);
-    }, [user.firstName, user.secondName, user.email]);
+    }, [user.firstName, user.lastName, user.email]);
 
     useEffect(() => {
         if (!expanded || summary) return;
@@ -138,7 +138,7 @@ function AdminStaffRow({
 
     const dirty =
         firstName.trim() !== user.firstName ||
-        lastName.trim() !== user.secondName ||
+        lastName.trim() !== user.lastName ||
         email.trim().toLowerCase() !== user.email.toLowerCase();
 
     const canSave = dirty && !saving && firstName.trim() && lastName.trim();
@@ -155,7 +155,7 @@ function AdminStaffRow({
             onSaved({
                 ...user,
                 firstName: firstName.trim(),
-                secondName: lastName.trim(),
+                lastName: lastName.trim(),
                 email: email.trim().toLowerCase(),
             });
         } catch (e) {
@@ -184,7 +184,7 @@ function AdminStaffRow({
                     </div>
                     <div className="min-w-0 flex-1">
                         <div className="truncate text-base font-semibold text-gray-900 sm:text-lg">
-                            {user.firstName} {user.secondName}
+                            {user.firstName} {user.lastName}
                         </div>
                         <div className="truncate text-xs text-gray-500 sm:text-sm">
                             {user.email || "No email"}
@@ -367,7 +367,7 @@ function DeleteConfirmModal({
                 <p className="mb-6 text-sm text-gray-600">
                     Delete{" "}
                     <span className="font-semibold text-gray-900">
-                        {user.firstName} {user.secondName}
+                        {user.firstName} {user.lastName}
                     </span>{" "}
                     ({user.email || "no email"})?
                 </p>
@@ -447,7 +447,7 @@ export default function AdminDashboardPage() {
         }
 
         const fuse = new Fuse(users, {
-            keys: ["firstName", "secondName", "email"],
+            keys: ["firstName", "lastName", "email"],
             threshold: 0.3,
         });
 
@@ -462,7 +462,7 @@ export default function AdminDashboardPage() {
                     ? {
                           ...u,
                           firstName: next.firstName,
-                          secondName: next.secondName,
+                          lastName: next.lastName,
                           email: next.email,
                       }
                     : u,
@@ -473,7 +473,7 @@ export default function AdminDashboardPage() {
                 ? {
                       ...prev,
                       firstName: next.firstName,
-                      secondName: next.secondName,
+                      lastName: next.lastName,
                       email: next.email,
                   }
                 : prev,
@@ -593,7 +593,7 @@ export default function AdminDashboardPage() {
                     setPendingDelete({
                         id: s.id,
                         firstName: s.firstName,
-                        secondName: s.secondName,
+                        lastName: s.lastName,
                         email: s.email,
                         createdAt: new Date(),
                         createdBy: "",

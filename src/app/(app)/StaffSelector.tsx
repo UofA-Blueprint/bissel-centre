@@ -47,7 +47,7 @@ export default function StaffSelector({
                     rows.map((r) => ({
                         id: r.id,
                         firstName: r.firstName,
-                        lastName: r.secondName,
+                        lastName: r.lastName ?? r.secondName ?? "",
                         email: r.email,
                     })),
                 );
