@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import BackNavigation from "@/app/components/BackNavigation";
+import { useIsViewOnly } from "../../ViewModeContext";
 import {
   CardStatus,
   CardDepartment,
@@ -66,6 +67,15 @@ function DeptPill({ value }: { value: CardDepartment }) {
 
 export default function NewAllocationPage() {
   const router = useRouter();
+  const isViewOnly = useIsViewOnly();
+
+  // IT admins in "view as" mode can't allocate cards; send them back to the
+  // read-only list rather than let them fill in a form that would 403. The
+  // early-return happens below the hook declarations so hook order stays
+  // stable across renders.
+  useEffect(() => {
+    if (isViewOnly) router.replace("/cards");
+  }, [isViewOnly, router]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<DraftCard[]>([]);
@@ -196,15 +206,17 @@ export default function NewAllocationPage() {
     }
   };
 
+  if (isViewOnly) return null;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 px-2 sm:px-0">
       <BackNavigation href="/cards" label="Back to ARC Card List" />
-      <header className="flex items-center justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-primary text-sm font-medium">New Allocation</div>
         <button 
           onClick={handleSubmit}
           disabled={submitting}
-          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-md hover:bg-opacity-90 disabled:opacity-50 disabled:cursor-not-allowed sm:w-auto"
         >
           {submitting ? "Submitting..." : "Submit →"}
         </button>
@@ -216,8 +228,8 @@ export default function NewAllocationPage() {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
+      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+        <table className="min-w-[860px] divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr className="text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
               <th className="px-4 py-3">No.</th>
@@ -298,7 +310,7 @@ export default function NewAllocationPage() {
       <button
         type="button"
         onClick={addRow}
-        className="flex items-center gap-2 text-primary text-sm font-semibold hover:underline"
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-primary/30 bg-white px-4 py-2 text-primary text-sm font-semibold hover:bg-primary/5 sm:w-auto sm:justify-start sm:border-none sm:bg-transparent sm:px-0 sm:py-0 sm:hover:bg-transparent sm:hover:underline"
       >
         <span className="text-lg">+</span>
         Add Card

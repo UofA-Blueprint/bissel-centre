@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, ChevronDown, LogOut, Menu, X } from "lucide-react";
+import { Bell, ChevronDown, Eye, LogOut, Menu, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -21,12 +21,17 @@ const NAV_ITEMS = [
   { label: "Admin", href: "/it-admin" },
 ];
 
+// Nav items that are read-only for IT admins in "view as" mode. Used to draw
+// the tinted "View only" band above just these tabs (Admin is fully editable).
+const STAFF_ONLY_HREFS = new Set(["/dashboard", "/cards", "/reports"]);
+
 export default function TopNav({
   user,
   navItems = NAV_ITEMS,
   homeHref = "/dashboard",
   logoutRedirect = "/",
   activeHref,
+  viewOnly = false,
 }: {
   user: NavUser;
   navItems?: { label: string; href: string }[];
@@ -34,6 +39,9 @@ export default function TopNav({
   logoutRedirect?: string;
   /** Force which nav item is highlighted (overrides the pathname match). */
   activeHref?: string;
+  /** When true, render a "(View only)" badge next to the logo — the current
+   *  viewer is an IT admin looking at staff pages, not a staff member. */
+  viewOnly?: boolean;
 }) {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -81,6 +89,19 @@ export default function TopNav({
 
   return (
     <div className="bg-white shadow-sm border-b">
+      {viewOnly && (
+        <div className="bg-amber-100 border-b border-amber-200">
+          <div className="px-4 sm:px-6 lg:px-16">
+            <div className="mx-auto flex max-w-7xl items-center justify-center gap-2 py-1 text-[11px] font-bold uppercase tracking-wider text-amber-900">
+              <Eye size={12} />
+              <span>View only</span>
+              <span className="text-amber-800/80 normal-case tracking-normal font-medium">
+                — Dashboard, Cards and Reports are read-only for IT admins
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="px-4 sm:px-6 lg:px-16">
         <div className="flex items-center justify-between h-16 lg:grid lg:grid-cols-[1fr_auto_1fr] lg:h-20">
           {/* Logo */}
@@ -97,22 +118,45 @@ export default function TopNav({
             </Link>
           </div>
 
-          {/* Centered Nav (desktop) */}
+          {/* Centered Nav (desktop). When viewing as IT admin, the three
+              staff tabs (Dashboard/Cards/Reports) get a subtle amber tint so
+              it's obvious at a glance which tabs are read-only. Admin stays
+              untinted because it is fully editable. The prominent banner
+              above the header already announces the mode. */}
           <div className="hidden lg:flex lg:justify-center self-stretch">
-            <nav className="flex h-full">
-              {navItems.map(({ label, href }) => (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`px-8 flex items-center text-lg border-t-4 border-t-transparent border-b-4 ${
-                    isActive(href)
-                      ? "border-primary text-gray-900 font-bold"
-                      : "border-transparent text-gray-500 font-semibold hover:text-gray-700 hover:border-b-gray-300"
-                  }`}
-                >
-                  {label}
-                </Link>
-              ))}
+            <nav className="flex h-full items-stretch">
+              <div className={`flex h-full ${viewOnly ? "bg-amber-50/70" : ""}`}>
+                {navItems
+                  .filter((item) => STAFF_ONLY_HREFS.has(item.href))
+                  .map(({ label, href }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className={`px-8 flex items-center text-lg border-t-4 border-t-transparent border-b-4 ${
+                        isActive(href)
+                          ? "border-primary text-gray-900 font-bold"
+                          : "border-transparent text-gray-500 font-semibold hover:text-gray-700 hover:border-b-gray-300"
+                      }`}
+                    >
+                      {label}
+                    </Link>
+                  ))}
+              </div>
+              {navItems
+                .filter((item) => !STAFF_ONLY_HREFS.has(item.href))
+                .map(({ label, href }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className={`px-8 flex items-center text-lg border-t-4 border-t-transparent border-b-4 ${
+                      isActive(href)
+                        ? "border-primary text-gray-900 font-bold"
+                        : "border-transparent text-gray-500 font-semibold hover:text-gray-700 hover:border-b-gray-300"
+                    }`}
+                  >
+                    {label}
+                  </Link>
+                ))}
             </nav>
           </div>
 

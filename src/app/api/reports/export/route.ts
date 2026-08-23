@@ -21,22 +21,20 @@ async function verifyStaffAccess() {
     .auth()
     .verifySessionCookie(sessionCookie, true);
 
+  const db = app.firestore();
+
+  // IT admins are allowed to export in "view as" mode — same read scope they
+  // already have on the reports page.
   if (decodedClaims.admin === true) {
-    return {
-      error: NextResponse.json(
-        { error: "Forbidden - Staff access only" },
-        { status: 403 }
-      ),
-    };
+    return { app, db };
   }
 
-  const db = app.firestore();
   const staffDoc = await db
     .collection("administrative_staff")
     .doc(decodedClaims.uid)
     .get();
 
-  if (!staffDoc.exists) {
+  if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
     return {
       error: NextResponse.json(
         { error: "Forbidden - Staff access only" },

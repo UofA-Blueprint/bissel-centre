@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import TopNav, { NavUser } from "@/app/components/TopNav";
+import { ViewModeProvider } from "./ViewModeContext";
 
 export default async function AppLayout({
   children,
@@ -14,11 +15,23 @@ export default async function AppLayout({
   }
 
   let user: NavUser;
+  let isAdmin = false;
   try {
     const admin = await initAdmin();
     const decodedClaims = await admin
       .auth()
       .verifySessionCookie(sessionCookie, true);
+    isAdmin = decodedClaims.admin === true;
+    if (!isAdmin) {
+      const staffDoc = await admin
+        .firestore()
+        .collection("administrative_staff")
+        .doc(decodedClaims.uid)
+        .get();
+      if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
+        redirect("/login");
+      }
+    }
     const userRecord = await admin.auth().getUser(decodedClaims.uid);
     user = {
       name: userRecord.displayName || "",
@@ -31,8 +44,10 @@ export default async function AppLayout({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <TopNav user={user} />
-      {children}
+      <TopNav user={user} viewOnly={isAdmin} />
+      <ViewModeProvider value={isAdmin ? "admin" : "staff"}>
+        {children}
+      </ViewModeProvider>
     </div>
   );
 }

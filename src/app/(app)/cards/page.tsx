@@ -14,6 +14,7 @@ import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/re
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import BackNavigation from "@/app/components/BackNavigation";
+import { useIsViewOnly } from "../ViewModeContext";
 import {
   CardStatus,
   CardDepartment,
@@ -35,6 +36,7 @@ type CardRow = {
   securityCode: string;
   passRecipient: string;
   issueDates: string[];
+  issuedByAny: string[];
   notes: string;
 };
 
@@ -77,6 +79,7 @@ async function fetchCards(): Promise<{
     securityCode: string;
     passRecipient: string;
     issueDates: string[];
+    issuedByAny?: string[];
     notes: string;
   }) => ({
     id: card.id,
@@ -88,6 +91,7 @@ async function fetchCards(): Promise<{
     securityCode: card.securityCode,
     passRecipient: card.passRecipient,
     issueDates: card.issueDates,
+    issuedByAny: card.issuedByAny ?? [],
     notes: card.notes,
   })),
     monthlyUnloadSchedule: data.monthlyUnloadSchedule ?? {
@@ -190,16 +194,24 @@ function StatusSelect({
   value,
   onChange,
   className = "",
+  disabled = false,
+  disabledReason,
 }: {
   value: CardStatus;
   onChange: (next: CardStatus) => void;
   className?: string;
+  disabled?: boolean;
+  disabledReason?: string;
 }) {
   return (
     <select
       value={value}
       onChange={(e) => onChange(e.target.value as CardStatus)}
-      className={`rounded-md border border-gray-300 bg-white px-2 py-1 text-sm ${className}`}
+      disabled={disabled}
+      title={disabled ? disabledReason : undefined}
+      className={`rounded-md border border-gray-300 bg-white px-2 py-1 text-sm ${
+        disabled ? "cursor-not-allowed opacity-60" : ""
+      } ${className}`}
     >
       {STATUS_OPTIONS.map((s) => (
         <option key={s} value={s}>
@@ -210,7 +222,13 @@ function StatusSelect({
   );
 }
 
+const VIEW_ONLY_CARDS_TIP =
+  "Sign in as administrative staff to change card status.";
+const VIEW_ONLY_NEW_ALLOCATION_TIP =
+  "Sign in as administrative staff to allocate new cards.";
+
 export default function CardsPage() {
+  const isViewOnly = useIsViewOnly();
   const [data, setData] = useState<CardRow[]>([]);
   const [monthlyUnloadSchedule, setMonthlyUnloadSchedule] =
     useState<MonthlyUnloadSchedule>({
@@ -487,6 +505,8 @@ const saveMonthlyUnloadSchedule = async () => {
           <StatusSelect
             value={getValue<CardStatus>()}
             onChange={(next) => void updateCardStatus(row.original.id, next)}
+            disabled={isViewOnly}
+            disabledReason={VIEW_ONLY_CARDS_TIP}
           />
         ),
       },
@@ -566,7 +586,7 @@ const saveMonthlyUnloadSchedule = async () => {
         },
       },
     ],
-    []
+    [isViewOnly]
   );
 
   const table = useReactTable({
@@ -725,13 +745,25 @@ const saveMonthlyUnloadSchedule = async () => {
               )}
             </button>
 
-            <Link
-              href="/cards/new"
-              className="flex flex-1 items-center justify-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors sm:flex-none"
-            >
-              <Plus className="h-4 w-4" strokeWidth={3} />
-              New Allocation
-            </Link>
+            {isViewOnly ? (
+              <button
+                type="button"
+                disabled
+                title={VIEW_ONLY_NEW_ALLOCATION_TIP}
+                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-gray-300 px-4 py-2 text-sm font-semibold text-white shadow-sm cursor-not-allowed sm:flex-none"
+              >
+                <Plus className="h-4 w-4" strokeWidth={3} />
+                New Allocation
+              </button>
+            ) : (
+              <Link
+                href="/cards/new"
+                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors sm:flex-none"
+              >
+                <Plus className="h-4 w-4" strokeWidth={3} />
+                New Allocation
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -913,6 +945,8 @@ const saveMonthlyUnloadSchedule = async () => {
                         void updateCardStatus(selectedCard.id, next)
                       }
                       className="w-full"
+                      disabled={isViewOnly}
+                      disabledReason={VIEW_ONLY_CARDS_TIP}
                     />
                   </div>
                 </div>

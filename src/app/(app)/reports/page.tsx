@@ -25,7 +25,10 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import StaffSelector from "../StaffSelector";
+import { useIsViewOnly } from "../ViewModeContext";
 import type {
   UserReportRow,
   CardHistoryEntry,
@@ -427,6 +430,10 @@ function ExpandedRowContent({ row }: { row: Row<UserReportRow> }) {
 // --- Main Page ---
 
 export default function ReportsPage() {
+  const isViewOnly = useIsViewOnly();
+  const searchParams = useSearchParams();
+  const modifiedByFilter = searchParams.get("modifiedBy");
+  const bannedByFilter = searchParams.get("bannedBy");
   const [data, setData] = useState<UserReportRow[]>([]);
   const [allCards, setAllCards] = useState<ReportCardRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -581,6 +588,17 @@ export default function ReportsPage() {
       });
     }
 
+    // IT-admin "view as staff" filters — keep users whose activity or ban was
+    // performed by the selected staff.
+    if (modifiedByFilter) {
+      result = result.filter((u) =>
+        u.activityHistory.some((a) => a.modifiedBy === modifiedByFilter)
+      );
+    }
+    if (bannedByFilter) {
+      result = result.filter((u) => u.bannedBy === bannedByFilter);
+    }
+
     return result;
   }, [
     data,
@@ -594,6 +612,8 @@ export default function ReportsPage() {
     dateFrom,
     dateTo,
     dateField,
+    modifiedByFilter,
+    bannedByFilter,
   ]);
 
   const activeFilterCount =
@@ -1136,6 +1156,18 @@ export default function ReportsPage() {
   return (
     <div className="space-y-4 px-2 py-3 sm:p-6 bg-gray-50 font-sans">
       {/* Header */}
+      {isViewOnly && (
+        <div className="flex flex-wrap items-center gap-3">
+          <StaffSelector queryParam="modifiedBy" label="Activity by" />
+          <StaffSelector queryParam="bannedBy" label="Flags by" />
+          {(modifiedByFilter || bannedByFilter) && (
+            <span className="text-xs text-gray-500">
+              {filteredData.length} recipient
+              {filteredData.length === 1 ? "" : "s"} match
+            </span>
+          )}
+        </div>
+      )}
       <header className="flex flex-col gap-3 pb-2 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">User Reports</h1>

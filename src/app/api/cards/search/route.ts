@@ -18,7 +18,21 @@ export async function GET(request: NextRequest) {
     }
 
     const app = await initAdmin();
-    await app.auth().verifySessionCookie(sessionCookie, true);
+    const decodedClaims = await app.auth().verifySessionCookie(sessionCookie, true);
+
+    if (decodedClaims.admin !== true) {
+      const staffDoc = await app
+        .firestore()
+        .collection("administrative_staff")
+        .doc(decodedClaims.uid)
+        .get();
+      if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
+        return NextResponse.json(
+          { error: "Forbidden - Staff access only" },
+          { status: 403 },
+        );
+      }
+    }
 
     const queryValue =
       request.nextUrl.searchParams.get("query")?.replace(/\D/g, "") ?? "";

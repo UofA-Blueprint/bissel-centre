@@ -10,7 +10,7 @@ import type {
   ReportCardRow,
 } from "@/app/(app)/reports/types";
 
-async function verifyStaffAccess() {
+async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("session")?.value;
 
@@ -25,7 +25,12 @@ async function verifyStaffAccess() {
     .auth()
     .verifySessionCookie(sessionCookie, true);
 
+  const db = app.firestore();
+
   if (decodedClaims.admin === true) {
+    if (options?.allowAdmin) {
+      return { app, db, role: "admin" as const };
+    }
     return {
       error: NextResponse.json(
         { error: "Forbidden - Staff access only" },
@@ -34,13 +39,12 @@ async function verifyStaffAccess() {
     };
   }
 
-  const db = app.firestore();
   const staffDoc = await db
     .collection("administrative_staff")
     .doc(decodedClaims.uid)
     .get();
 
-  if (!staffDoc.exists) {
+  if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
     return {
       error: NextResponse.json(
         { error: "Forbidden - Staff access only" },
@@ -49,12 +53,12 @@ async function verifyStaffAccess() {
     };
   }
 
-  return { app, db };
+  return { app, db, role: "staff" as const };
 }
 
 export async function GET() {
   try {
-    const access = await verifyStaffAccess();
+    const access = await verifyStaffAccess({ allowAdmin: true });
     if ("error" in access) return access.error;
     const { db } = access;
 

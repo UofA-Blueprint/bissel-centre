@@ -61,7 +61,7 @@ function normalizeDateOnlyInput(value: unknown): string {
   return raw;
 }
 
-async function verifyStaffAccess() {
+async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("session")?.value;
 
@@ -74,8 +74,14 @@ async function verifyStaffAccess() {
   const app = await initAdmin();
   const decodedClaims = await app.auth().verifySessionCookie(sessionCookie, true);
 
-  // IT Admins are intentionally restricted from staff cards access.
+  const db = app.firestore();
+
+  // IT Admins are allowed for read endpoints in "view as" mode; write endpoints
+  // omit the flag and continue to reject.
   if (decodedClaims.admin === true) {
+    if (options?.allowAdmin) {
+      return { app, db, role: "admin" as const };
+    }
     return {
       error: NextResponse.json(
         { error: "Forbidden - Staff access only" },
@@ -84,10 +90,9 @@ async function verifyStaffAccess() {
     };
   }
 
-  const db = app.firestore();
   const staffDoc = await db.collection("administrative_staff").doc(decodedClaims.uid).get();
 
-  if (!staffDoc.exists) {
+  if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
     return {
       error: NextResponse.json(
         { error: "Forbidden - Staff access only" },
@@ -96,7 +101,7 @@ async function verifyStaffAccess() {
     };
   }
 
-  return { app, db };
+  return { app, db, role: "staff" as const };
 }
 
 function chunk<T>(arr: T[], size: number): T[][] {
@@ -141,7 +146,7 @@ async function fetchUserNamesByIds(
 // GET /api/cards - Fetch all cards
 export async function GET() {
   try {
-    const access = await verifyStaffAccess();
+    const access = await verifyStaffAccess({ allowAdmin: true });
     if ("error" in access) {
       return access.error;
     }
@@ -161,7 +166,7 @@ export async function GET() {
       const issuesSnapshot = await db.collection("issues").get();
       
       // Group issues by cardId
-      const issuesByCard = new Map<string, Array<{ userId: string; issueDate: string; returnedAt: unknown }>>();
+      const issuesByCard = new Map<string, Array<{ userId: string; issueDate: string; returnedAt: unknown; issuedBy?: string }>>();
       for (const issueDoc of issuesSnapshot.docs) {
         const issue = issueDoc.data();
         const cardId = issue.cardId;
@@ -172,6 +177,7 @@ export async function GET() {
           userId: issue.userId,
           issueDate: issue.issueDate,
           returnedAt: issue.returnedAt,
+          issuedBy: issue.issuedBy,
         });
       }
 
@@ -193,14 +199,22 @@ export async function GET() {
       for (const doc of cardsSnapshot.docs) {
         const data = doc.data();
         const cardIssues = issuesByCard.get(doc.id) || [];
-        
+
         // Get issue dates sorted by date desc
         const issueDates = cardIssues
           .map(i => i.issueDate)
           .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
 
+        const issuedByAny = Array.from(
+          new Set(
+            cardIssues
+              .map((i) => i.issuedBy)
+              .filter((v): v is string => typeof v === "string" && v.length > 0)
+          )
+        );
+
         // Get passRecipient from currentUserId
-        const passRecipient = data.currentUserId 
+        const passRecipient = data.currentUserId
           ? userNames.get(data.currentUserId) || ""
           : "";
 
@@ -214,13 +228,31 @@ export async function GET() {
           securityCode: data.securityCode || "",
           passRecipient,
           issueDates,
+          issuedByAny,
           notes: data.notes || "",
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
         });
       }
     } else {
-      // Pre-migration: use old schema
+      // Pre-migration: use old schema for passRecipient/issueDates, but still
+      // pull the `issues` collection opportunistically so the `issuedByAny`
+      // filter used by the IT-admin "view as staff" dropdown works even when
+      // the migration marker was never written.
+      const issuesSnapshot = await db.collection("issues").get().catch(() => null);
+
+      const issuedByCard = new Map<string, Set<string>>();
+      if (issuesSnapshot) {
+        for (const issueDoc of issuesSnapshot.docs) {
+          const issue = issueDoc.data();
+          const cardId = issue.cardId as string | undefined;
+          const issuedBy = issue.issuedBy as string | undefined;
+          if (!cardId || !issuedBy) continue;
+          if (!issuedByCard.has(cardId)) issuedByCard.set(cardId, new Set());
+          issuedByCard.get(cardId)!.add(issuedBy);
+        }
+      }
+
       const neededUserIds = new Set<string>();
       for (const doc of cardsSnapshot.docs) {
         const data = doc.data();
@@ -233,7 +265,7 @@ export async function GET() {
 
       for (const doc of cardsSnapshot.docs) {
         const data = doc.data();
-        
+
         let passRecipient = data.passRecipient || "";
         const holderId = data.currentUserId || data.userId;
         if (holderId && !passRecipient) {
@@ -250,6 +282,7 @@ export async function GET() {
           securityCode: data.securityCode || "",
           passRecipient,
           issueDates: data.issueDates || [],
+          issuedByAny: Array.from(issuedByCard.get(doc.id) ?? []),
           notes: data.notes || "",
           createdAt: data.createdAt,
           updatedAt: data.updatedAt,
