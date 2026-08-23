@@ -53,6 +53,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const staffDoc = await adminApp
+      .firestore()
+      .collection("administrative_staff")
+      .doc(decodedClaims.uid)
+      .get();
+
+    if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
+      return NextResponse.json(
+        { error: "Forbidden - Staff access only" },
+        { status: 403 },
+      );
+    }
+
     const createdByUid = decodedClaims.uid;
 
     const body = await request.json();

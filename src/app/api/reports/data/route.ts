@@ -44,7 +44,7 @@ async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
     .doc(decodedClaims.uid)
     .get();
 
-  if (!staffDoc.exists) {
+  if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
     return {
       error: NextResponse.json(
         { error: "Forbidden - Staff access only" },

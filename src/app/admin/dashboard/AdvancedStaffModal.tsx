@@ -17,6 +17,7 @@ import {
     History as HistoryIcon,
     Loader2,
     MoreHorizontal,
+    RotateCcw,
     ShieldAlert,
     Trash2,
     User as UserIcon,
@@ -43,6 +44,7 @@ export interface StaffRow {
     firstName: string;
     lastName: string;
     email: string;
+    isDeleted?: boolean;
 }
 
 type Section = "overview" | "recipients" | "cards" | "audit" | "bans";
@@ -63,7 +65,7 @@ const SECTIONS: Array<{
 const SECTION_LINKS: Record<Section, ((uid: string) => string) | null> = {
     overview: null,
     recipients: (uid) => `/dashboard?createdBy=${encodeURIComponent(uid)}`,
-    cards: (uid) => `/cards?issuedBy=${encodeURIComponent(uid)}`,
+    cards: () => `/cards`,
     audit: (uid) => `/reports?modifiedBy=${encodeURIComponent(uid)}`,
     bans: (uid) => `/reports?bannedBy=${encodeURIComponent(uid)}`,
 };
@@ -702,12 +704,14 @@ export function AdvancedStaffModal({
     staff,
     onSaved,
     onDeleteRequested,
+    onReactivateRequested,
 }: {
     open: boolean;
     onClose: () => void;
     staff: StaffRow | null;
     onSaved: (next: StaffRow) => void;
     onDeleteRequested: (staff: StaffRow) => void;
+    onReactivateRequested: (staff: StaffRow) => void;
 }) {
     const [section, setSection] = useState<Section>("overview");
     const [summary, setSummary] = useState<AdministrativeStaffSummary | null>(
@@ -829,19 +833,37 @@ export function AdvancedStaffModal({
                                     >
                                         <PopoverPanel className="absolute bottom-full left-0 mb-2 w-56 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-lg">
                                             {({ close }) => (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        close();
-                                                        onDeleteRequested(
-                                                            staff,
-                                                        );
-                                                    }}
-                                                    className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
-                                                >
-                                                    <Trash2 size={14} />
-                                                    Delete account
-                                                </button>
+                                                <>
+                                                    {staff.isDeleted ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                close();
+                                                                onReactivateRequested(
+                                                                    staff,
+                                                                );
+                                                            }}
+                                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-emerald-700 hover:bg-emerald-50"
+                                                        >
+                                                            <RotateCcw size={14} />
+                                                            Reactivate account
+                                                        </button>
+                                                    ) : (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                close();
+                                                                onDeleteRequested(
+                                                                    staff,
+                                                                );
+                                                            }}
+                                                            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                            Deactivate account
+                                                        </button>
+                                                    )}
+                                                </>
                                             )}
                                         </PopoverPanel>
                                     </Transition>
@@ -918,11 +940,25 @@ export function AdvancedStaffModal({
                     <div className="border-t border-gray-100 p-3 md:hidden">
                         <button
                             type="button"
-                            onClick={() => onDeleteRequested(staff)}
-                            className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                            onClick={() =>
+                                staff.isDeleted
+                                    ? onReactivateRequested(staff)
+                                    : onDeleteRequested(staff)
+                            }
+                            className={`flex w-full items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium ${
+                                staff.isDeleted
+                                    ? "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                    : "border-red-200 text-red-600 hover:bg-red-50"
+                            }`}
                         >
-                            <Trash2 size={14} />
-                            Delete account
+                            {staff.isDeleted ? (
+                                <RotateCcw size={14} />
+                            ) : (
+                                <Trash2 size={14} />
+                            )}
+                            {staff.isDeleted
+                                ? "Reactivate account"
+                                : "Deactivate account"}
                         </button>
                     </div>
                     </>

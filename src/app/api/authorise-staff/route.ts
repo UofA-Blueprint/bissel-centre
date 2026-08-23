@@ -31,9 +31,9 @@ export async function POST(request: NextRequest) {
     const staffDocRef = db.collection("administrative_staff").doc(trustedUid);
     const staffDoc = await staffDocRef.get();
 
-    if (!staffDoc.exists) {
+    if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
       return NextResponse.json(
-        { error: "Staff member not found in administrative staff" },
+        { error: "Staff member is not active" },
         { status: 403 },
       );
     }
@@ -44,10 +44,12 @@ export async function POST(request: NextRequest) {
     if (staffData?.onboardingStatus === "invited") {
       await staffDocRef.update({
         onboardingStatus: "active",
+        accountStatus: "active",
         inviteAcceptedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
       // Update local staffData for response
       staffData.onboardingStatus = "active";
+      staffData.accountStatus = "active";
       staffData.inviteAcceptedAt = new Date(); // For client display only
     }
 

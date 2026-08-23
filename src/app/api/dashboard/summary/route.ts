@@ -29,7 +29,7 @@ export async function GET() {
         .doc(decodedClaims.uid)
         .get();
 
-      if (!staffDoc.exists) {
+      if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
     }

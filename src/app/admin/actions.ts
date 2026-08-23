@@ -120,7 +120,9 @@ export const listUsers = async () => {
   }
 };
 
-export const getAdministrativeStaff = async () => {
+export const getAdministrativeStaff = async (options?: {
+  includeDeactivated?: boolean;
+}) => {
   const session = await getAdminSession();
   if (!session) {
     throw new Error("Unauthorized: IT admin session required");
@@ -128,21 +130,27 @@ export const getAdministrativeStaff = async () => {
 
   const admin = await initAdmin();
   const snapshot = await admin.firestore().collection("administrative_staff").get();
+  const includeDeactivated = options?.includeDeactivated === true;
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    const normalizedLastName = data.lastName ?? data.secondName ?? "";
-    return {
-      id: doc.id,
-      createdAt: data.createdAt?.toDate?.() ?? null,
-      createdBy: data.createdBy ?? "",
-      email: data.email ?? "",
-      firstName: data.firstName ?? "",
-      lastName: normalizedLastName,
-      // Keep the legacy key while the rest of the app migrates.
-      secondName: normalizedLastName,
-    };
-  });
+  return snapshot.docs
+    .filter((doc) =>
+      includeDeactivated ? true : (doc.data().isDeleted ?? false) !== true
+    )
+    .map((doc) => {
+      const data = doc.data();
+      const normalizedLastName = data.lastName ?? data.secondName ?? "";
+      return {
+        id: doc.id,
+        createdAt: data.createdAt?.toDate?.() ?? null,
+        createdBy: data.createdBy ?? "",
+        email: data.email ?? "",
+        firstName: data.firstName ?? "",
+        lastName: normalizedLastName,
+        // Keep the legacy key while the rest of the app migrates.
+        secondName: normalizedLastName,
+        isDeleted: data.isDeleted === true,
+      };
+    });
 };
 
 export const deleteAdministrativeStaff = async (id: string) => {
@@ -154,20 +162,144 @@ export const deleteAdministrativeStaff = async (id: string) => {
   const admin = await initAdmin();
   const db = admin.firestore();
 
-  // Remove the user from Firebase Authentication first.
-  // If the auth user does not exist, we still continue deleting the staff record.
+  const staffRef = db.collection("administrative_staff").doc(id);
+  const staffSnap = await staffRef.get();
+  if (!staffSnap.exists) {
+    throw new Error("Administrative staff not found");
+  }
+
+  // Soft-delete pattern:
+  // - disable auth user to block login
+  // - keep staff doc and mark it deleted to preserve historical references
   try {
-    await admin.auth().deleteUser(id);
+    await admin.auth().updateUser(id, { disabled: true });
+    await admin.auth().revokeRefreshTokens(id);
   } catch (error: any) {
     if (error?.code !== "auth/user-not-found") {
       throw error;
     }
   }
 
-  await db.collection("administrative_staff").doc(id).delete();
+  await staffRef.update({
+    isDeleted: true,
+    deletedAt: FieldValue.serverTimestamp(),
+    deletedBy: session.uid,
+    accountStatus: "deactivated",
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
   return { success: true };
 }
+
+function generateTemporaryPassword(): string {
+  // Temporary secret keeps account protected until password reset completes.
+  return `${crypto.randomUUID()}A1!`;
+}
+
+async function sendPasswordSetupEmail(email: string): Promise<void> {
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing Firebase Web API key.");
+  }
+
+  const response = await fetch(
+    `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        requestType: "PASSWORD_RESET",
+        email,
+      }),
+    }
+  );
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    const firebaseMessage = payload?.error?.message;
+    throw new Error(
+      firebaseMessage
+        ? `Failed to send password setup email: ${firebaseMessage}`
+        : "Failed to send password setup email."
+    );
+  }
+}
+
+export const reactivateAdministrativeStaff = async (id: string) => {
+  const session = await getAdminSession();
+  if (!session) {
+    throw new Error("Unauthorized: IT admin session required");
+  }
+
+  const admin = await initAdmin();
+  const db = admin.firestore();
+  const staffRef = db.collection("administrative_staff").doc(id);
+  const staffSnap = await staffRef.get();
+
+  if (!staffSnap.exists) {
+    throw new Error("Administrative staff not found");
+  }
+
+  const staffData = staffSnap.data() ?? {};
+  if (staffData.isDeleted !== true) {
+    throw new Error("This staff member is already active");
+  }
+
+  const email = String(staffData.email ?? "").trim().toLowerCase();
+  const firstName = String(staffData.firstName ?? "").trim();
+  const lastName = String(staffData.lastName ?? staffData.secondName ?? "").trim();
+
+  if (!email) {
+    throw new Error(
+      "Staff email is missing. Add an email before reactivating this account."
+    );
+  }
+
+  const displayName = `${firstName} ${lastName}`.trim();
+  const temporaryPassword = generateTemporaryPassword();
+
+  try {
+    await admin.auth().updateUser(id, {
+      email,
+      displayName: displayName || undefined,
+      password: temporaryPassword,
+      disabled: true,
+    });
+  } catch (error: any) {
+    if (error?.code === "auth/user-not-found") {
+      await admin.auth().createUser({
+        uid: id,
+        email,
+        password: temporaryPassword,
+        displayName: displayName || undefined,
+        disabled: true,
+      });
+    } else if (error?.code === "auth/email-already-exists") {
+      throw new Error("Email is already in use by another account");
+    } else {
+      throw error;
+    }
+  }
+
+  await sendPasswordSetupEmail(email);
+  await admin.auth().updateUser(id, { disabled: false });
+  await admin.auth().revokeRefreshTokens(id);
+
+  await staffRef.update({
+    isDeleted: false,
+    accountStatus: "invited",
+    onboardingStatus: "invited",
+    inviteSentAt: FieldValue.serverTimestamp(),
+    inviteAcceptedAt: FieldValue.delete(),
+    reactivatedAt: FieldValue.serverTimestamp(),
+    reactivatedBy: session.uid,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  return { success: true };
+};
 
 export interface UpdateAdministrativeStaffInput {
   firstName?: string;

@@ -104,6 +104,10 @@ export default function LoginPage() {
           setError(
             "Access denied. This login is for administrative staff only.",
           );
+        } else if (err.message.includes("Staff member is not active")) {
+          setError(
+            "Your staff account has been deactivated. Please contact IT Admin.",
+          );
         } else if (err.message.includes("Staff authorization failed")) {
           setError(
             "Access denied. Please contact IT Admin if you need assistance.",

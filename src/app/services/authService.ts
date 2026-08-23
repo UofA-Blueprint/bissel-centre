@@ -32,6 +32,7 @@ interface StaffDocData {
   lastName?: string;
   createdBy: string;
   role?: string;
+  isDeleted?: boolean;
 }
 
 // Authentication service class
@@ -95,6 +96,9 @@ export class AuthService {
     }
 
     const staffData = staffDoc.data() as StaffDocData;
+    if (staffData.isDeleted === true) {
+      throw new Error("User not found in administrative staff");
+    }
 
     return {
       id: staffDoc.id,

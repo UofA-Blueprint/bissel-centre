@@ -30,7 +30,7 @@ export default async function CardsLayout({
       .doc(decodedClaims.uid)
       .get();
 
-    if (!staffDoc.exists) {
+    if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
       redirect("/login");
     }
   }

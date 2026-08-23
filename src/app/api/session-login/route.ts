@@ -35,9 +35,9 @@ export async function POST(req: NextRequest) {
     .doc(decodedToken.uid)
     .get();
 
-  if (!staffDoc.exists) {
+  if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
     return NextResponse.json(
-      { error: "Staff member not found in administrative staff" },
+      { error: "Staff member is not active" },
       { status: 403 }
     );
   }

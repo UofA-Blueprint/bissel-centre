@@ -25,7 +25,7 @@ export async function GET() {
         .collection("administrative_staff")
         .doc(decodedClaims.uid)
         .get();
-      isStaff = staffDoc.exists;
+      isStaff = staffDoc.exists && staffDoc.data()?.isDeleted !== true;
     }
 
     const userData = {

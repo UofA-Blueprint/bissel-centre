@@ -92,7 +92,7 @@ async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
 
   const staffDoc = await db.collection("administrative_staff").doc(decodedClaims.uid).get();
 
-  if (!staffDoc.exists) {
+  if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
     return {
       error: NextResponse.json(
         { error: "Forbidden - Staff access only" },

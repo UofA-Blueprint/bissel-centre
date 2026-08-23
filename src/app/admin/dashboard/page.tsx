@@ -6,6 +6,7 @@ import {
     getAdminSession,
     getAdministrativeStaff,
     deleteAdministrativeStaff,
+    reactivateAdministrativeStaff,
     updateAdministrativeStaff,
     getAdministrativeStaffSummary,
     type AdministrativeStaffSummary,
@@ -13,7 +14,7 @@ import {
 import Fuse from "fuse.js";
 import React from "react";
 import Image from "next/image";
-import { ChevronDown, Loader2, Pencil, Trash2, X } from "lucide-react";
+import { ChevronDown, Loader2, Pencil, RotateCcw, Trash2, X } from "lucide-react";
 import TopNav from "@/app/components/TopNav";
 import SearchBar from "@/app/components/SearchBar";
 import { AdvancedStaffModal, type StaffRow } from "./AdvancedStaffModal";
@@ -25,6 +26,7 @@ interface User {
     email: string;
     firstName: string;
     lastName: string;
+    isDeleted?: boolean;
 }
 
 interface Session {
@@ -89,6 +91,7 @@ function AdminStaffRow({
     expanded,
     onToggle,
     onDelete,
+    onReactivate,
     onSaved,
     onOpenAdvanced,
 }: {
@@ -96,6 +99,7 @@ function AdminStaffRow({
     expanded: boolean;
     onToggle: () => void;
     onDelete: () => void;
+    onReactivate: () => void;
     onSaved: (next: User) => void;
     onOpenAdvanced: (user: User) => void;
 }) {
@@ -189,6 +193,11 @@ function AdminStaffRow({
                         <div className="truncate text-xs text-gray-500 sm:text-sm">
                             {user.email || "No email"}
                         </div>
+                        {user.isDeleted && (
+                            <div className="mt-1 inline-flex rounded-full bg-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-700">
+                                Deactivated
+                            </div>
+                        )}
                     </div>
                     <ChevronDown
                         size={20}
@@ -207,14 +216,25 @@ function AdminStaffRow({
                     >
                         <Pencil size={16} />
                     </button>
-                    <button
-                        type="button"
-                        onClick={onDelete}
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100"
-                        title="Delete"
-                    >
-                        <Trash2 size={16} />
-                    </button>
+                    {user.isDeleted ? (
+                        <button
+                            type="button"
+                            onClick={onReactivate}
+                            className="flex h-9 w-9 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100"
+                            title="Reactivate"
+                        >
+                            <RotateCcw size={16} />
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={onDelete}
+                            className="flex h-9 w-9 items-center justify-center rounded-full bg-red-50 text-red-600 hover:bg-red-100"
+                            title="Deactivate"
+                        >
+                            <Trash2 size={16} />
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -347,7 +367,7 @@ function DeleteConfirmModal({
             <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
                 <div className="mb-4 flex items-start justify-between">
                     <h3 className="text-lg font-semibold text-red-600">
-                        Delete staff account
+                        Deactivate staff account
                     </h3>
                     <button
                         type="button"
@@ -359,13 +379,12 @@ function DeleteConfirmModal({
                     </button>
                 </div>
                 <div className="mb-4 rounded-md bg-red-50 px-4 py-3 text-sm text-red-800">
-                    ⚠️ This is permanent. It removes the login and their profile.
-                    Records they created (recipients, card issues, audit
-                    entries) stay in place but their references become
-                    unresolved.
+                    ⚠️ This deactivates the account and blocks future login.
+                    Historical records stay intact and continue to resolve to this
+                    staff member.
                 </div>
                 <p className="mb-6 text-sm text-gray-600">
-                    Delete{" "}
+                    Deactivate{" "}
                     <span className="font-semibold text-gray-900">
                         {user.firstName} {user.lastName}
                     </span>{" "}
@@ -392,7 +411,76 @@ function DeleteConfirmModal({
                         className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
                     >
                         {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                        {busy ? "Deleting…" : "Delete account"}
+                        {busy ? "Deactivating…" : "Deactivate account"}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ReactivateConfirmModal({
+    user,
+    onCancel,
+    onConfirm,
+    busy,
+    error,
+}: {
+    user: User;
+    onCancel: () => void;
+    onConfirm: () => void;
+    busy: boolean;
+    error: string | null;
+}) {
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+                <div className="mb-4 flex items-start justify-between">
+                    <h3 className="text-lg font-semibold text-emerald-700">
+                        Reactivate staff account
+                    </h3>
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        disabled={busy}
+                        className="text-gray-400 hover:text-gray-600 disabled:opacity-50"
+                    >
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="mb-4 rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                    This re-enables login and sends a password setup email so the
+                    staff member can choose a new password.
+                </div>
+                <p className="mb-6 text-sm text-gray-600">
+                    Reactivate{" "}
+                    <span className="font-semibold text-gray-900">
+                        {user.firstName} {user.lastName}
+                    </span>{" "}
+                    ({user.email || "no email"})?
+                </p>
+                {error && (
+                    <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+                        {error}
+                    </div>
+                )}
+                <div className="flex justify-end gap-3">
+                    <button
+                        type="button"
+                        onClick={onCancel}
+                        disabled={busy}
+                        className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onConfirm}
+                        disabled={busy}
+                        className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                        {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        {busy ? "Reactivating…" : "Reactivate account"}
                     </button>
                 </div>
             </div>
@@ -411,7 +499,11 @@ export default function AdminDashboardPage() {
     const [pendingDelete, setPendingDelete] = useState<User | null>(null);
     const [deleteBusy, setDeleteBusy] = useState(false);
     const [deleteError, setDeleteError] = useState<string | null>(null);
+    const [pendingReactivate, setPendingReactivate] = useState<User | null>(null);
+    const [reactivateBusy, setReactivateBusy] = useState(false);
+    const [reactivateError, setReactivateError] = useState<string | null>(null);
     const [advancedStaff, setAdvancedStaff] = useState<User | null>(null);
+    const [showDeactivated, setShowDeactivated] = useState(false);
     const router = useRouter();
 
     useEffect(() => {
@@ -424,7 +516,9 @@ export default function AdminDashboardPage() {
                 }
                 setSession(sessionResponse);
 
-                const users = await getAdministrativeStaff();
+                const users = await getAdministrativeStaff({
+                    includeDeactivated: showDeactivated,
+                });
                 setUsers(users);
                 setSearchResults(users);
             } catch (err) {
@@ -438,7 +532,7 @@ export default function AdminDashboardPage() {
         }
 
         fetchData();
-    }, [router]);
+    }, [router, showDeactivated]);
 
     useEffect(() => {
         if (!searchQuery.trim()) {
@@ -490,7 +584,13 @@ export default function AdminDashboardPage() {
         setDeleteError(null);
         try {
             await deleteAdministrativeStaff(pendingDelete.id);
-            setUsers((prev) => prev.filter((u) => u.id !== pendingDelete.id));
+            setUsers((prev) =>
+                showDeactivated
+                    ? prev.map((u) =>
+                          u.id === pendingDelete.id ? { ...u, isDeleted: true } : u,
+                      )
+                    : prev.filter((u) => u.id !== pendingDelete.id),
+            );
             setExpandedId((prev) =>
                 prev === pendingDelete.id ? null : prev,
             );
@@ -502,7 +602,33 @@ export default function AdminDashboardPage() {
         } finally {
             setDeleteBusy(false);
         }
-    }, [pendingDelete]);
+    }, [pendingDelete, showDeactivated]);
+
+    const handleConfirmReactivate = useCallback(async () => {
+        if (!pendingReactivate) return;
+        setReactivateBusy(true);
+        setReactivateError(null);
+        try {
+            await reactivateAdministrativeStaff(pendingReactivate.id);
+            setUsers((prev) =>
+                prev.map((u) =>
+                    u.id === pendingReactivate.id ? { ...u, isDeleted: false } : u,
+                ),
+            );
+            setAdvancedStaff((prev) =>
+                prev && prev.id === pendingReactivate.id
+                    ? { ...prev, isDeleted: false }
+                    : prev,
+            );
+            setPendingReactivate(null);
+        } catch (err) {
+            setReactivateError(
+                err instanceof Error ? err.message : "Failed to reactivate",
+            );
+        } finally {
+            setReactivateBusy(false);
+        }
+    }, [pendingReactivate]);
 
     if (loading) {
         return (
@@ -539,15 +665,15 @@ export default function AdminDashboardPage() {
                     placeholder="Search administrative staff..."
                     className="mx-auto mb-6 max-w-7xl"
                 >
-                    <button className="flex items-center gap-2">
-                        <Image
-                            src="/filter.svg"
-                            alt="Filter"
-                            width={16}
-                            height={16}
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                            type="checkbox"
+                            checked={showDeactivated}
+                            onChange={(e) => setShowDeactivated(e.target.checked)}
+                            className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                         />
-                        Filters
-                    </button>
+                        Show deactivated staff
+                    </label>
                 </SearchBar>
 
                 <div className="mx-auto flex max-w-7xl flex-col gap-3">
@@ -564,6 +690,10 @@ export default function AdminDashboardPage() {
                             onDelete={() => {
                                 setDeleteError(null);
                                 setPendingDelete(user);
+                            }}
+                            onReactivate={() => {
+                                setReactivateError(null);
+                                setPendingReactivate(user);
                             }}
                             onSaved={handleSavedUser}
                             onOpenAdvanced={handleOpenAdvanced}
@@ -600,6 +730,18 @@ export default function AdminDashboardPage() {
                     });
                     setAdvancedStaff(null);
                 }}
+                onReactivateRequested={(s) => {
+                    setReactivateError(null);
+                    setPendingReactivate({
+                        id: s.id,
+                        firstName: s.firstName,
+                        lastName: s.lastName,
+                        email: s.email,
+                        createdAt: new Date(),
+                        createdBy: "",
+                        isDeleted: true,
+                    });
+                }}
             />
 
             {pendingDelete && (
@@ -613,6 +755,20 @@ export default function AdminDashboardPage() {
                         setDeleteError(null);
                     }}
                     onConfirm={handleConfirmDelete}
+                />
+            )}
+
+            {pendingReactivate && (
+                <ReactivateConfirmModal
+                    user={pendingReactivate}
+                    busy={reactivateBusy}
+                    error={reactivateError}
+                    onCancel={() => {
+                        if (reactivateBusy) return;
+                        setPendingReactivate(null);
+                        setReactivateError(null);
+                    }}
+                    onConfirm={handleConfirmReactivate}
                 />
             )}
         </main>

@@ -22,6 +22,16 @@ export default async function AppLayout({
       .auth()
       .verifySessionCookie(sessionCookie, true);
     isAdmin = decodedClaims.admin === true;
+    if (!isAdmin) {
+      const staffDoc = await admin
+        .firestore()
+        .collection("administrative_staff")
+        .doc(decodedClaims.uid)
+        .get();
+      if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
+        redirect("/login");
+      }
+    }
     const userRecord = await admin.auth().getUser(decodedClaims.uid);
     user = {
       name: userRecord.displayName || "",
