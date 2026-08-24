@@ -4,7 +4,6 @@ import {
   ColumnDef,
   flexRender,
   getCoreRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   SortingState,
   useReactTable,
@@ -57,43 +56,75 @@ const STATUS_MEANINGS: Record<CardStatus, string> = {
   Cancelled: "Card is cancelled and should not be used.",
 };
 
-// --- API Fetch Function ---
+// --- API Fetch Function (server-side cursor pagination) ---
 
-async function fetchCards(): Promise<{
+const PAGE_SIZE = 15;
+
+type ApiCard = {
+  id: string;
+  currentUserId?: string | null;
+  allocationDate: string;
+  status: CardStatus;
+  department: CardDepartment;
+  arcCardNumber: string;
+  securityCode: string;
+  passRecipient: string;
+  issueDates: string[];
+  issuedByAny?: string[];
+  notes: string;
+};
+
+type CardsPageResponse = {
   cards: CardRow[];
+  nextCursor: string | null;
+  total: number | null;
+  totalAll: number;
   monthlyUnloadSchedule: MonthlyUnloadSchedule;
-}> {
-  const response = await fetch("/api/cards");
+  searchMode: boolean;
+};
+
+const mapCard = (card: ApiCard): CardRow => ({
+  id: card.id,
+  currentUserId: card.currentUserId || null,
+  allocationDate: card.allocationDate,
+  status: card.status,
+  department: card.department,
+  final7Digits: card.arcCardNumber?.slice(-7) ?? "",
+  securityCode: card.securityCode,
+  passRecipient: card.passRecipient,
+  issueDates: card.issueDates,
+  issuedByAny: card.issuedByAny ?? [],
+  notes: card.notes,
+});
+
+async function fetchCardsPage(opts: {
+  cursor: string | null;
+  statuses: CardStatus[];
+  departments: CardDepartment[];
+  q: string;
+  signal?: AbortSignal;
+}): Promise<CardsPageResponse> {
+  const params = new URLSearchParams();
+  params.set("limit", String(PAGE_SIZE));
+  if (opts.cursor) params.set("cursor", opts.cursor);
+  if (opts.statuses.length) params.set("statuses", opts.statuses.join(","));
+  if (opts.departments.length) {
+    params.set("departments", opts.departments.join(","));
+  }
+  if (opts.q.trim()) params.set("q", opts.q.trim());
+
+  const response = await fetch(`/api/cards?${params.toString()}`, {
+    signal: opts.signal,
+  });
   if (!response.ok) {
     throw new Error("Failed to fetch cards");
   }
   const data = await response.json();
   return {
-    cards: data.cards.map((card: {
-    id: string;
-    currentUserId?: string | null;
-    allocationDate: string;
-    status: CardStatus;
-    department: CardDepartment;
-    arcCardNumber: string;
-    securityCode: string;
-    passRecipient: string;
-    issueDates: string[];
-    issuedByAny?: string[];
-    notes: string;
-  }) => ({
-    id: card.id,
-    currentUserId: card.currentUserId || null,
-    allocationDate: card.allocationDate,
-    status: card.status,
-    department: card.department,
-    final7Digits: card.arcCardNumber?.slice(-7) ?? "",
-    securityCode: card.securityCode,
-    passRecipient: card.passRecipient,
-    issueDates: card.issueDates,
-    issuedByAny: card.issuedByAny ?? [],
-    notes: card.notes,
-  })),
+    cards: ((data.cards ?? []) as ApiCard[]).map(mapCard),
+    nextCursor: data.nextCursor ?? null,
+    total: typeof data.total === "number" ? data.total : null,
+    totalAll: typeof data.totalAll === "number" ? data.totalAll : 0,
     monthlyUnloadSchedule: data.monthlyUnloadSchedule ?? {
       enabled: false,
       dayOfMonth: 1,
@@ -102,6 +133,7 @@ async function fetchCards(): Promise<{
       lastRunMonthKey: undefined,
       lastRunAt: null,
     },
+    searchMode: Boolean(data.searchMode),
   };
 }
 
@@ -248,12 +280,22 @@ export default function CardsPage() {
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [barsHidden, setBarsHidden] = useState(false);
   const toolbarRef = useRef<HTMLDivElement>(null);
-  
-  // Search and Filter state
+
+  // Search and Filter state (server-driven)
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [statusFilters, setStatusFilters] = useState<CardStatus[]>([]);
   const [departmentFilters, setDepartmentFilters] = useState<CardDepartment[]>([]);
+
+  // Server pagination state: cursorsRef[i] is the cursor that fetches page i.
+  const [pageIndex, setPageIndex] = useState(0);
+  const cursorsRef = useRef<(string | null)[]>([null]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
+  const [totalAll, setTotalAll] = useState(0);
+  const [isSearchResult, setIsSearchResult] = useState(false);
+  const [isFetching, setIsFetching] = useState(false);
+  const scheduleInputsLoadedRef = useRef(false);
 
   // edit card api call
 const updateCardStatus = async (cardId: string, nextStatus: CardStatus) => {
@@ -417,49 +459,58 @@ const saveMonthlyUnloadSchedule = async () => {
     };
   }, []);
 
+  // Any filter/search change restarts pagination from page 0.
+  // (Defined BEFORE the fetch effect so the cursor reset happens first.)
   useEffect(() => {
-    fetchCards()
-      .then((payload) => {
+    cursorsRef.current = [null];
+    setPageIndex(0);
+  }, [searchQuery, statusFilters, departmentFilters]);
+
+  // Server-driven page fetch: debounced while typing, immediate otherwise,
+  // aborted on newer requests.
+  useEffect(() => {
+    const controller = new AbortController();
+    const delay = searchQuery.trim() ? 300 : 0;
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        setIsFetching(true);
+        const payload = await fetchCardsPage({
+          cursor: cursorsRef.current[pageIndex] ?? null,
+          statuses: statusFilters,
+          departments: departmentFilters,
+          q: searchQuery,
+          signal: controller.signal,
+        });
         setData(payload.cards);
+        setNextCursor(payload.nextCursor);
+        cursorsRef.current[pageIndex + 1] = payload.nextCursor;
+        setTotal(payload.total);
+        setTotalAll(payload.totalAll);
+        setIsSearchResult(payload.searchMode);
         setMonthlyUnloadSchedule(payload.monthlyUnloadSchedule);
-        setScheduleDayInput(String(payload.monthlyUnloadSchedule.dayOfMonth));
-        setScheduleTimeInput(String(payload.monthlyUnloadSchedule.time24));
+        if (!scheduleInputsLoadedRef.current) {
+          scheduleInputsLoadedRef.current = true;
+          setScheduleDayInput(String(payload.monthlyUnloadSchedule.dayOfMonth));
+          setScheduleTimeInput(String(payload.monthlyUnloadSchedule.time24));
+        }
+        setError(null);
         setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
+        setIsFetching(false);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(err instanceof Error ? err.message : "Failed to fetch cards");
         setLoading(false);
-      });
-  }, []);
+        setIsFetching(false);
+      }
+    }, delay);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [pageIndex, searchQuery, statusFilters, departmentFilters]);
 
-  // Filter and search logic
-  const filteredData = useMemo(() => {
-    let result = data;
-
-    // Apply search filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter((card) =>
-        card.passRecipient.toLowerCase().includes(query) ||
-        card.final7Digits.toLowerCase().includes(query) ||
-        card.securityCode.toLowerCase().includes(query) ||
-        card.notes.toLowerCase().includes(query) ||
-        card.department.toLowerCase().includes(query)
-      );
-    }
-
-    // Apply status filter
-    if (statusFilters.length > 0) {
-      result = result.filter((card) => statusFilters.includes(card.status));
-    }
-
-    // Apply department filter
-    if (departmentFilters.length > 0) {
-      result = result.filter((card) => departmentFilters.includes(card.department));
-    }
-
-    return result;
-  }, [data, searchQuery, statusFilters, departmentFilters]);
+  // Filtering/search happen server-side; the table renders the current page.
+  const filteredData = data;
 
   const toggleStatusFilter = (status: CardStatus) => {
     setStatusFilters((prev) =>
@@ -589,6 +640,7 @@ const saveMonthlyUnloadSchedule = async () => {
     [isViewOnly]
   );
 
+  // Sorting applies within the current server page; pagination is server-side.
   const table = useReactTable({
     data: filteredData,
     columns,
@@ -596,19 +648,15 @@ const saveMonthlyUnloadSchedule = async () => {
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 15,
-      },
-    },
   });
 
   const rows = table.getRowModel().rows;
   const selectedCard = data.find((c) => c.id === selectedCardId) ?? null;
-  const { pageIndex, pageSize } = table.getState().pagination;
-  const start = pageIndex * pageSize + 1;
-  const end = Math.min(start + rows.length - 1, filteredData.length);
+  const start = data.length === 0 ? 0 : pageIndex * PAGE_SIZE + 1;
+  const end = pageIndex * PAGE_SIZE + data.length;
+  const totalLabel = total !== null ? String(total) : "…";
+  const hasActiveNarrowing =
+    isSearchResult || activeFilterCount > 0 || Boolean(searchQuery.trim());
   
   // Hardcoded width based on the screenshot column distribution
   const columnWidths: Record<string, string> = {
@@ -708,7 +756,7 @@ const saveMonthlyUnloadSchedule = async () => {
           <div className="relative w-full sm:flex-1">
             <input
               type="search"
-              placeholder="Search cards..."
+              placeholder="Search by card number or recipient name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full rounded-md border border-gray-300 bg-white pl-4 pr-10 py-2 text-sm placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
@@ -878,23 +926,24 @@ const saveMonthlyUnloadSchedule = async () => {
         }`}
       >
         <button
-          onClick={() => table.previousPage()}
-          disabled={!table.getCanPreviousPage()}
+          onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
+          disabled={pageIndex === 0 || isFetching}
           className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500 text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
-        
+
         <span className="text-sm font-medium text-gray-600">
-          {filteredData.length === 0 ? "0" : `${start}-${end}`} of {filteredData.length}
-          {filteredData.length !== data.length && (
-            <span className="text-gray-400"> (filtered from {data.length})</span>
+          {data.length === 0 ? "0" : `${start}-${end}`} of {totalLabel}
+          {hasActiveNarrowing && total !== null && total !== totalAll && (
+            <span className="text-gray-400"> (filtered from {totalAll})</span>
           )}
+          {isFetching && <span className="text-gray-400"> · loading…</span>}
         </span>
 
         <button
-          onClick={() => table.nextPage()}
-          disabled={!table.getCanNextPage()}
+          onClick={() => setPageIndex((p) => p + 1)}
+          disabled={!nextCursor || isFetching}
           className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500 text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ArrowRight className="h-4 w-4" />

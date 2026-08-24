@@ -26,6 +26,22 @@
       ]
     },
     {
+      "collectionGroup": "arc_cards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "arcCardNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "arc_cards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "department", "order": "ASCENDING" },
+        { "fieldPath": "arcCardNumber", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "issues",
       "queryScope": "COLLECTION",
       "fields": [
