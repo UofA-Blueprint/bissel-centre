@@ -259,6 +259,13 @@ export default function DashboardPage() {
                 type="search"
                 value={searchQuery}
                 onChange={(e) => updateSearchUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  // Backspace on an already-empty query exits search mode.
+                  if (e.key === "Backspace" && e.currentTarget.value === "") {
+                    e.preventDefault();
+                    exitSearchMode();
+                  }
+                }}
                 placeholder="Search recipients by name or alias..."
                 className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-800 placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
               />
