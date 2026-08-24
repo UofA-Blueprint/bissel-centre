@@ -196,7 +196,7 @@ function SortableHeader({
     <button
       type="button"
       onClick={onClick}
-      className="group flex items-center gap-1 text-left text-xs font-bold text-gray-900 hover:text-black"
+      className="group flex items-center gap-1 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700"
     >
       {label}
       <span className="flex flex-col opacity-0 transition-opacity group-hover:opacity-50">
@@ -352,10 +352,24 @@ function EventBadge({ event }: { event: string }) {
 function ExpandedRowContent({ row }: { row: Row<UserReportRow> }) {
   const user = row.original;
   const [activeTab, setActiveTab] = useState<"cards" | "activity">("cards");
+  const fullName = `${user.firstName} ${user.lastName}`.trim();
 
   return (
-    <div className="bg-slate-50 border-t border-b border-gray-200">
-      <div className="px-6 py-4 space-y-4">
+    <div className="bg-cyan-50/30">
+      <div className="px-5 py-3 space-y-3">
+        {/* Owner headline — this panel belongs to THIS recipient */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-semibold text-gray-900">
+            {fullName || "(unnamed)"}
+          </span>
+          <span className="text-xs text-gray-400">— recipient details</span>
+          {user.banned && (
+            <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-medium text-red-600">
+              Flagged
+            </span>
+          )}
+        </div>
+
         {/* User detail summary strip */}
         <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
           <div>
@@ -391,7 +405,7 @@ function ExpandedRowContent({ row }: { row: Row<UserReportRow> }) {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-gray-200">
+        <div className="flex gap-1 border-b border-cyan-100">
           <button
             onClick={() => setActiveTab("cards")}
             className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
@@ -1030,7 +1044,7 @@ export default function ReportsPage() {
       {
         accessorKey: "phoneNumber",
         header: () => (
-          <span className="text-xs font-bold text-gray-900">Phone</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Phone</span>
         ),
         cell: ({ getValue }) => (
           <span className="text-gray-800">{getValue<string>() || "—"}</span>
@@ -1039,7 +1053,7 @@ export default function ReportsPage() {
       {
         accessorKey: "status",
         header: () => (
-          <span className="text-xs font-bold text-gray-900">Status</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Status</span>
         ),
         cell: ({ getValue }) => <StatusChip status={getValue<string>()} />,
       },
@@ -1061,7 +1075,7 @@ export default function ReportsPage() {
         id: "currentArcCardDepartment",
         accessorKey: "currentArcCardDepartment",
         header: () => (
-          <span className="text-xs font-bold text-gray-900">Current Card Dept.</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Current Card Dept.</span>
         ),
         cell: ({ getValue }) => (
           <span className="text-gray-800 text-xs">{getValue<string>() || "—"}</span>
@@ -1111,7 +1125,7 @@ export default function ReportsPage() {
       {
         id: "activityCount",
         header: () => (
-          <span className="text-xs font-bold text-gray-900">History</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">History</span>
         ),
         cell: ({ row }) => {
           const count = row.original.activityHistory.length;
@@ -1527,7 +1541,7 @@ export default function ReportsPage() {
             <button
               onClick={handleExportAll}
               disabled={!!exporting}
-              className="flex items-center gap-1.5 bg-[#00BDD6] px-3.5 py-2 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 bg-primary px-3.5 py-2 text-sm font-semibold text-white hover:bg-cyan-600 disabled:opacity-50 transition-colors"
             >
               <Download className="h-4 w-4" />
               {exporting === "all" ? "Exporting..." : "Export All"}
@@ -1536,7 +1550,7 @@ export default function ReportsPage() {
             <button
               onClick={handleExportCards}
               disabled={!!exporting}
-              className="flex items-center gap-1.5 bg-[#00BDD6] px-3 py-2 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50 transition-colors"
               title="Download Card History sheet"
             >
               <CreditCard className="h-3.5 w-3.5" />
@@ -1546,7 +1560,7 @@ export default function ReportsPage() {
             <button
               onClick={handleExportActivity}
               disabled={!!exporting}
-              className="flex items-center gap-1.5 bg-[#00BDD6] px-3 py-2 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50 transition-colors rounded-r-md"
+              className="flex items-center gap-1.5 bg-primary px-3 py-2 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-50 transition-colors rounded-r-md"
               title="Download Activity Log sheet"
             >
               <History className="h-3.5 w-3.5" />
@@ -1596,11 +1610,11 @@ export default function ReportsPage() {
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-sm">
             <thead>
-              <tr className="bg-[#B2EBF2] border-b border-cyan-200">
+              <tr className="bg-gray-50 border-b border-gray-200">
                 {table.getFlatHeaders().map((header) => (
                   <th
                     key={header.id}
-                    className="px-4 py-4 text-left align-middle"
+                    className="px-3 py-2 text-left align-middle"
                     style={{ width: columnWidths[header.id] ?? "auto" }}
                   >
                     {header.isPlaceholder
@@ -1610,28 +1624,31 @@ export default function ReportsPage() {
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
-              {rows.map((row, index) => (
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((row) => (
                 <Fragment key={row.id}>
                   <tr
-                    className={`transition-colors hover:bg-blue-50/50 cursor-pointer ${
+                    className={`transition-colors cursor-pointer ${
                       row.getIsExpanded()
-                        ? "bg-cyan-50/40"
-                        : index % 2 === 0
-                          ? "bg-white"
-                          : "bg-gray-50"
+                        ? "bg-cyan-50 [&>td:first-child]:border-l-4 [&>td:first-child]:border-l-cyan-500"
+                        : "bg-white hover:bg-cyan-50/40"
                     }`}
                     onClick={row.getToggleExpandedHandler()}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="px-4 py-3.5 align-top">
+                      <td key={cell.id} className="px-3 py-2.5 align-middle">
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </td>
                     ))}
                   </tr>
                   {row.getIsExpanded() && (
                     <tr>
-                      <td colSpan={columns.length} className="p-0">
+                      {/* Same left accent as the parent row so the panel
+                          reads as belonging to that recipient. */}
+                      <td
+                        colSpan={columns.length}
+                        className="p-0 border-l-4 border-l-cyan-500"
+                      >
                         <ExpandedRowContent row={row} />
                       </td>
                     </tr>
@@ -1655,7 +1672,7 @@ export default function ReportsPage() {
         <button
           onClick={() => table.previousPage()}
           disabled={!table.getCanPreviousPage()}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500 text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
@@ -1670,7 +1687,7 @@ export default function ReportsPage() {
         <button
           onClick={() => table.nextPage()}
           disabled={!table.getCanNextPage()}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500 text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ArrowRight className="h-4 w-4" />
         </button>
