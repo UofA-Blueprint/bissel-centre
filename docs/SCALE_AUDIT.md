@@ -220,6 +220,13 @@ Legend: reads/req = Firestore document reads per request at the 10k-card model.
   param); expanded-row card/activity history fetched lazily on expand; exports go
   through server endpoints with the same filter params (never "export what the
   browser holds"); filter option lists become static enums or served from aggregates.
+- **URL contract already in place (Aug 2026):** `/reports?search=` and
+  `/reports?userId=` are live as client-side filters (history-synced, deep-linked
+  from the dashboard list and search rows). When SCALE-01/03 pagination lands here,
+  these two params must move INTO the API query (`where`/document fetch) rather
+  than remaining client-side `filter()` calls — the URL contract itself stays
+  unchanged, so the dashboard links keep working. `userId` especially becomes
+  cheaper than the full view at that point (1 doc + subqueries instead of 5 scans).
 
 ### 3.4 `/cards/new` — `src/app/(app)/cards/new/page.tsx`
 
