@@ -123,21 +123,44 @@ export async function GET(request: NextRequest) {
     // Hydrate display data for the shortlist (bounded: ≤ MAX_RESULTS reads).
     const ids = ranked.map((r) => r.row.id);
     const detailById = new Map<string, admin.firestore.DocumentData>();
+    const cardStatusByUser = new Map<string, "Active" | "Unloaded">();
     if (ids.length > 0) {
-      const snap = await db
-        .collection("users")
-        .where(admin.firestore.FieldPath.documentId(), "in", ids)
-        .select(
-          "firstName",
-          "secondName",
-          "aliases",
-          "photoThumb",
-          "dateOfBirth",
-          "banned",
-          "status",
-        )
-        .get();
+      const [snap, cardSnap] = await Promise.all([
+        db
+          .collection("users")
+          .where(admin.firestore.FieldPath.documentId(), "in", ids)
+          .select(
+            "firstName",
+            "secondName",
+            "aliases",
+            "photoThumb",
+            "dateOfBirth",
+            "banned",
+            "status",
+          )
+          .get(),
+        db
+          .collection("arc_cards")
+          .where("currentUserId", "in", ids)
+          .select("currentUserId", "status")
+          .get(),
+      ]);
       for (const doc of snap.docs) detailById.set(doc.id, doc.data());
+      for (const doc of cardSnap.docs) {
+        const d = doc.data() as {
+          currentUserId?: string | null;
+          status?: string;
+        };
+        if (!d.currentUserId) continue;
+        if (d.status === "Active") {
+          cardStatusByUser.set(d.currentUserId, "Active");
+        } else if (
+          d.status === "Unloaded" &&
+          !cardStatusByUser.has(d.currentUserId)
+        ) {
+          cardStatusByUser.set(d.currentUserId, "Unloaded");
+        }
+      }
     }
 
     const results = ranked.map(({ row, tier }) => {
@@ -151,6 +174,7 @@ export async function GET(request: NextRequest) {
         banned: Boolean(d?.banned),
         status: (d?.status as string | undefined) ?? "Active",
         picture: (d?.photoThumb as string | undefined) ?? "",
+        arcCardStatus: cardStatusByUser.get(row.id),
       };
     });
 

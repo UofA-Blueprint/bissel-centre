@@ -51,7 +51,22 @@ interface User {
 interface DashboardSummaryResponse {
   stats: StatCardProps[];
   users: User[];
+  nextCursor: string | null;
+  total: number;
 }
+
+interface SearchApiResult {
+  id: string;
+  name: string;
+  aliases?: string[];
+  dateOfBirth?: string;
+  banned?: boolean;
+  status?: string;
+  picture?: string;
+  arcCardStatus?: User["arcCardStatus"];
+}
+
+const USERS_PAGE_SIZE = 60;
 
 // ?register= carries a small running index (1, 2, 3, …) per tab session.
 const DRAFT_ID_RE = /^[1-9]\d{0,5}$/;
@@ -109,6 +124,9 @@ export default function DashboardPage() {
     { icon: "/flag.svg", number: 0, label: "Flagged Users" },
   ]);
   const [users, setUsers] = useState<User[]>([]);
+  const [nextUsersCursor, setNextUsersCursor] = useState<string | null>(null);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -129,6 +147,8 @@ export default function DashboardPage() {
       if (hasWarmCache) {
         setStats(cachedSummary.data.stats);
         setUsers(cachedSummary.data.users);
+        setNextUsersCursor(cachedSummary.data.nextCursor);
+        setTotalUsers(cachedSummary.data.total);
         setIsLoading(false);
       } else {
         setIsLoading(true);
@@ -137,9 +157,10 @@ export default function DashboardPage() {
       try {
         setForbidden(false);
 
-        const dashboardResponse = await fetch("/api/dashboard/summary", {
-          cache: "no-store",
-        });
+        const dashboardResponse = await fetch(
+          `/api/dashboard/summary?limit=${USERS_PAGE_SIZE}`,
+          { cache: "no-store" },
+        );
 
         if (!dashboardResponse.ok) {
           if (dashboardResponse.status === 401) {
@@ -161,6 +182,8 @@ export default function DashboardPage() {
 
         setStats(summary.stats);
         setUsers(summary.users);
+        setNextUsersCursor(summary.nextCursor ?? null);
+        setTotalUsers(summary.total ?? summary.users.length);
         dashboardSummaryCache = {
           data: summary,
           timestampMs: Date.now(),
@@ -203,14 +226,41 @@ export default function DashboardPage() {
           { signal: controller.signal },
         );
         if (!res.ok) return; // keep current results on error
-        const data = (await res.json()) as { ids?: string[] };
-        const order = new Map(
-          (data.ids ?? []).map((id, rank) => [id, rank] as const),
-        );
-        const matched = filtered
-          .filter((u) => order.has(u.id))
-          .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
-        setSearchResults(matched);
+        const data = (await res.json()) as {
+          ids?: string[];
+          results?: SearchApiResult[];
+        };
+        // Prefer the locally-loaded user object (it has full card state);
+        // users beyond the loaded pages render from the server-hydrated
+        // result so pagination never hides a search hit.
+        const localById = new Map(filtered.map((u) => [u.id, u] as const));
+        const rows: User[] = [];
+        for (const r of data.results ?? []) {
+          const local = localById.get(r.id);
+          if (local) {
+            rows.push(local);
+          } else if (!createdByFilter) {
+            rows.push({
+              id: r.id,
+              firstName: r.name,
+              secondName: "",
+              picture: r.picture ?? "",
+              genderIdentity: "",
+              aliases: r.aliases ?? [],
+              dateOfBirth: r.dateOfBirth ?? "",
+              address: "",
+              postalCode: "",
+              passesIssued: [],
+              banned: Boolean(r.banned),
+              status: r.status === "Inactive" ? "Inactive" : "Active",
+              createdAt: "",
+              createdBy: "",
+              arcCardStatus: r.arcCardStatus,
+              lastIssued: "N/A",
+            });
+          }
+        }
+        setSearchResults(rows);
       } catch {
         // aborted (new keystroke) — newer request will set results
       }
@@ -224,6 +274,27 @@ export default function DashboardPage() {
 
   const handleGoToCards = () => {
     router.push("/cards");
+  };
+
+  const loadMoreUsers = async () => {
+    if (!nextUsersCursor || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const res = await fetch(
+        `/api/dashboard/summary?limit=${USERS_PAGE_SIZE}&cursor=${encodeURIComponent(nextUsersCursor)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) return;
+      const page = (await res.json()) as DashboardSummaryResponse;
+      setUsers((prev) => {
+        const seen = new Set(prev.map((u) => u.id));
+        return [...prev, ...page.users.filter((u) => !seen.has(u.id))];
+      });
+      setNextUsersCursor(page.nextCursor ?? null);
+      if (typeof page.total === "number") setTotalUsers(page.total);
+    } finally {
+      setIsLoadingMore(false);
+    }
   };
 
   // Keep the input in sync with the URL so back/forward and shared links
@@ -386,7 +457,7 @@ export default function DashboardPage() {
           <p className="mt-2 px-1 text-xs text-gray-500">
             {isLoading
               ? "Loading…"
-              : `${searchResults.length} / ${users.length} shown`}
+              : `${searchResults.length} / ${totalUsers || users.length} shown`}
           </p>
 
           {/* Dense, full-width, table-like results */}
@@ -413,6 +484,20 @@ export default function DashboardPage() {
               </ul>
             )}
           </div>
+          {!searchQuery.trim() && nextUsersCursor && !isLoading && (
+            <div className="flex justify-center py-3">
+              <button
+                type="button"
+                onClick={() => void loadMoreUsers()}
+                disabled={isLoadingMore}
+                className="rounded-md border border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {isLoadingMore
+                  ? "Loading…"
+                  : `Load more (${users.length} of ${totalUsers})`}
+              </button>
+            </div>
+          )}
         </div>
         <RegisterRecipientModal
           open={registerDraftId !== null}
@@ -536,6 +621,21 @@ export default function DashboardPage() {
                     width={370}
                     height={370}
                   />
+                </div>
+              )}
+
+              {!searchQuery.trim() && nextUsersCursor && (
+                <div className="flex justify-center py-4">
+                  <button
+                    type="button"
+                    onClick={() => void loadMoreUsers()}
+                    disabled={isLoadingMore}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {isLoadingMore
+                      ? "Loading…"
+                      : `Load more (${users.length} of ${totalUsers})`}
+                  </button>
                 </div>
               )}
             </>
