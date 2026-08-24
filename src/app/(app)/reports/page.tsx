@@ -434,6 +434,7 @@ export default function ReportsPage() {
   const searchParams = useSearchParams();
   const modifiedByFilter = searchParams.get("modifiedBy");
   const bannedByFilter = searchParams.get("bannedBy");
+  const searchParam = searchParams.get("search");
   const [data, setData] = useState<UserReportRow[]>([]);
   const [allCards, setAllCards] = useState<ReportCardRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -441,7 +442,7 @@ export default function ReportsPage() {
   const [sorting, setSorting] = useState<SortingState>([]);
 
   // Search / filter
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(searchParam ?? "");
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [flagFilter, setFlagFilter] = useState<"all" | "flagged" | "not_flagged">("all");
   const [statusFilter, setStatusFilter] = useState<("Active" | "Inactive")[]>([]);
@@ -503,6 +504,24 @@ export default function ReportsPage() {
         setLoading(false);
       });
   }, []);
+
+  // Keep the search box in sync with /reports?search= so dashboard links,
+  // history entries, and refreshes restore the same filtered view.
+  useEffect(() => {
+    setSearchQuery((prev) => {
+      const fromUrl = searchParam ?? "";
+      return fromUrl !== prev ? fromUrl : prev;
+    });
+  }, [searchParam]);
+
+  const updateSearchQuery = (q: string) => {
+    setSearchQuery(q);
+    const params = new URLSearchParams(window.location.search);
+    if (q) params.set("search", q);
+    else params.delete("search");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `/reports?${qs}` : "/reports");
+  };
 
   const filteredData = useMemo(() => {
     let result = data;
@@ -637,7 +656,7 @@ export default function ReportsPage() {
     setDateTo("");
     setDateField("registered");
     setDatePreset("none");
-    setSearchQuery("");
+    updateSearchQuery("");
   };
 
   const applyDatePreset = (
@@ -1182,12 +1201,12 @@ export default function ReportsPage() {
               type="search"
               placeholder="Search by name, email, phone..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => updateSearchQuery(e.target.value)}
               className="w-full rounded-md border border-gray-300 bg-white pl-4 pr-10 py-2 text-sm placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
             />
             {searchQuery ? (
               <button
-                onClick={() => setSearchQuery("")}
+                onClick={() => updateSearchQuery("")}
                 className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-gray-400 hover:text-gray-600"
               >
                 <X size={14} strokeWidth={3} />

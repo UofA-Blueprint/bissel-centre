@@ -521,10 +521,13 @@ const UserCardSkeleton: React.FC = () => {
 };
 
 // Dense row for the search-first (?search=) view — small height, full width.
+// Clicking a row opens that recipient's filtered view in /reports?search=.
 const SearchResultRow: React.FC<{ user: User }> = ({ user }) => {
+  const router = useRouter();
   const [imgError, setImgError] = useState(false);
   const showImage = user.picture && !imgError;
   const initial = user.firstName?.trim().charAt(0).toUpperCase() || "?";
+  const fullName = `${user.firstName ?? ""} ${user.secondName ?? ""}`.trim();
   const cardStatusText =
     user.arcCardStatus === "Active"
       ? "Active"
@@ -535,7 +538,20 @@ const SearchResultRow: React.FC<{ user: User }> = ({ user }) => {
           : "None";
 
   return (
-    <li className="grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-center gap-x-3 px-3 py-1.5 text-sm hover:bg-cyan-50/40 sm:grid-cols-[minmax(0,3fr)_repeat(3,minmax(0,1fr))]">
+    <li
+      role="button"
+      tabIndex={0}
+      title={`View ${fullName || "recipient"} in reports`}
+      onClick={() =>
+        router.push(`/reports?search=${encodeURIComponent(fullName)}`)
+      }
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          router.push(`/reports?search=${encodeURIComponent(fullName)}`);
+        }
+      }}
+      className="grid cursor-pointer grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-center gap-x-3 px-3 py-1.5 text-sm hover:bg-cyan-50/40 sm:grid-cols-[minmax(0,3fr)_repeat(3,minmax(0,1fr))]"
+    >
       <div className="flex min-w-0 items-center gap-2">
         <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200">
           {showImage ? (
