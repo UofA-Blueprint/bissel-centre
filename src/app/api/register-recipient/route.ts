@@ -223,8 +223,10 @@ export async function POST(request: NextRequest) {
       thumbnail = null;
     }
 
-    // Validate required personal details fields
-    const requiredFields = ["firstName", "lastName", "email"] as const;
+    // Validate required personal details fields. lastName is intentionally
+    // not required — mononyms are legal names (common among reclaimed
+    // traditional Indigenous names).
+    const requiredFields = ["firstName", "email"] as const;
     for (const field of requiredFields) {
       if (!personalDetails[field]) {
         return NextResponse.json(
@@ -246,7 +248,7 @@ export async function POST(request: NextRequest) {
     const userData = {
       // Required schema fields
       firstName: personalDetails.firstName,
-      secondName: personalDetails.lastName,
+      secondName: personalDetails.lastName || "",
       // Full-res base64 lives in user_photos/{uid}; the user doc only carries
       // the small thumbnail so list queries stay bounded.
       photoThumb: thumbnail,
