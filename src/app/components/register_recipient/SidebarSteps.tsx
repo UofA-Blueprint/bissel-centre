@@ -20,9 +20,9 @@ export default function SidebarSteps({
     { id: 4, label: "Review" },
   ];
 
-  const isStepClickable = (stepId: number) => {
-    return stepId < completedSteps.size + 2;
-  };
+  // All steps are freely navigable — validation happens on Continue and on
+  // final submit (with step-labeled errors), not as a navigation gate.
+  const isStepClickable = (_stepId: number) => true;
 
   return (
     <aside

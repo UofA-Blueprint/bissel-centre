@@ -6,7 +6,9 @@ import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Flag, Search } from "lucide-react";
-import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
+import RegisterRecipientModal, {
+  draftStorageKey,
+} from "@/app/components/register_recipient/RegisterRecipientModal";
 import SearchBar from "@/app/components/SearchBar";
 import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
 import StaffSelector from "../StaffSelector";
@@ -51,6 +53,9 @@ interface DashboardSummaryResponse {
   users: User[];
 }
 
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const DASHBOARD_CACHE_TTL_MS = 30_000;
 let dashboardSummaryCache: {
   data: DashboardSummaryResponse;
@@ -66,6 +71,17 @@ export default function DashboardPage() {
   // param (even empty) switches the page into the dense results view.
   const searchParam = searchParams.get("search");
   const isSearchMode = searchParam !== null;
+  // Register modal lives behind ?register=<uuid>&step=N — the uuid indexes
+  // the draft in sessionStorage so multiple drafts coexist and reloads or
+  // history navigation restore the right one.
+  const registerParam = searchParams.get("register");
+  const stepParam = searchParams.get("step");
+  const registerDraftId =
+    registerParam && UUID_RE.test(registerParam) ? registerParam : null;
+  const registerStep = Math.min(
+    4,
+    Math.max(1, Number.parseInt(stepParam ?? "1", 10) || 1),
+  );
   const [stats, setStats] = useState([
     { icon: "/card.svg", number: 0, label: "Available Cards" },
     { icon: "/checkmark.svg", number: 0, label: "Active Cards" },
@@ -79,7 +95,6 @@ export default function DashboardPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -230,6 +245,51 @@ export default function DashboardPage() {
     router.push(qs ? `/dashboard?${qs}` : "/dashboard");
   };
 
+  // ── Register modal URL handlers ─────────────────────────────────
+
+  // Normalize legacy/invalid ?register= values to a real uuid.
+  useEffect(() => {
+    if (registerParam !== null && !UUID_RE.test(registerParam)) {
+      const params = new URLSearchParams(window.location.search);
+      params.set("register", crypto.randomUUID());
+      params.set("step", "1");
+      window.history.replaceState(null, "", `/dashboard?${params.toString()}`);
+    }
+  }, [registerParam]);
+
+  const openRegisterModal = () => {
+    const id = crypto.randomUUID();
+    try {
+      // Seed the envelope now so a later "uuid missing from storage" state
+      // is distinguishable as another-tab / ended-session.
+      sessionStorage.setItem(
+        draftStorageKey(id),
+        JSON.stringify({ data: {}, completedSteps: [], createdAt: Date.now() }),
+      );
+    } catch {
+      /* storage unavailable — modal still works, just won't restore */
+    }
+    const params = new URLSearchParams(window.location.search);
+    params.set("register", id);
+    params.set("step", "1");
+    window.history.pushState(null, "", `/dashboard?${params.toString()}`);
+  };
+
+  // Step changes push entries so browser-back walks the wizard backwards.
+  const setRegisterStep = (n: number) => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("step", String(n));
+    window.history.pushState(null, "", `/dashboard?${params.toString()}`);
+  };
+
+  const closeRegisterModal = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("register");
+    params.delete("step");
+    const qs = params.toString();
+    window.history.pushState(null, "", qs ? `/dashboard?${qs}` : "/dashboard");
+  };
+
   if (forbidden) {
     return (
       <main className="bg-gray-100 min-h-screen">
@@ -275,7 +335,7 @@ export default function DashboardPage() {
                 type="button"
                 disabled={isViewOnly}
                 onClick={() => {
-                  if (!isViewOnly) setIsModalOpen(true);
+                  if (!isViewOnly) openRegisterModal();
                 }}
                 title={
                   isViewOnly
@@ -333,8 +393,11 @@ export default function DashboardPage() {
           </div>
         </div>
         <RegisterRecipientModal
-          open={isModalOpen}
-          onClose={() => setIsModalOpen(false)}
+          open={registerDraftId !== null}
+          draftId={registerDraftId}
+          step={registerStep}
+          onStepChange={setRegisterStep}
+          onClose={closeRegisterModal}
           onSuccess={() => {
             setIsLoading(true);
             setRefreshNonce((prev) => prev + 1);
@@ -385,7 +448,7 @@ export default function DashboardPage() {
             }`}
             onClick={() => {
               if (isViewOnly) return;
-              setIsModalOpen(true);
+              openRegisterModal();
             }}
             disabled={isViewOnly}
             title={
@@ -458,8 +521,11 @@ export default function DashboardPage() {
         </div>
       </div>
       <RegisterRecipientModal
-        open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        open={registerDraftId !== null}
+        draftId={registerDraftId}
+        step={registerStep}
+        onStepChange={setRegisterStep}
+        onClose={closeRegisterModal}
         onSuccess={() => {
           setIsLoading(true);
           setRefreshNonce((prev) => prev + 1);
