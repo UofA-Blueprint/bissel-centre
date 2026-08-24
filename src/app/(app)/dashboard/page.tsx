@@ -543,11 +543,11 @@ const SearchResultRow: React.FC<{ user: User }> = ({ user }) => {
       tabIndex={0}
       title={`View ${fullName || "recipient"} in reports`}
       onClick={() =>
-        router.push(`/reports?search=${encodeURIComponent(fullName)}`)
+        router.push(`/reports?userId=${encodeURIComponent(user.id)}`)
       }
       onKeyDown={(e) => {
         if (e.key === "Enter") {
-          router.push(`/reports?search=${encodeURIComponent(fullName)}`);
+          router.push(`/reports?userId=${encodeURIComponent(user.id)}`);
         }
       }}
       className="grid cursor-pointer grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-center gap-x-3 px-3 py-1.5 text-sm hover:bg-cyan-50/40 sm:grid-cols-[minmax(0,3fr)_repeat(3,minmax(0,1fr))]"
@@ -602,11 +602,14 @@ const SearchResultRow: React.FC<{ user: User }> = ({ user }) => {
 };
 
 const UserCard: React.FC<{ user: User }> = ({ user }) => {
+  const router = useRouter();
   const isBanned = user.banned;
   const arcCardStatus = user.arcCardStatus;
   const [imgError, setImgError] = useState(false);
   const initial = user.firstName?.trim().charAt(0).toUpperCase() || "?";
   const showImage = user.picture && !imgError;
+  const openReports = () =>
+    router.push(`/reports?userId=${encodeURIComponent(user.id)}`);
   const userStatusText = user.status === "Inactive" ? "Inactive User" : "Active User";
   const cardStatusText =
     arcCardStatus === "Active"
@@ -617,7 +620,16 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
         ? "Card Expired"
         : "No Active Card";
   return (
-    <div className="bg-white rounded-lg shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)] px-4 py-2.5 sm:px-6 sm:py-4 w-full flex items-center justify-between">
+    <div
+      role="button"
+      tabIndex={0}
+      title={`View ${user.firstName} ${user.secondName} in reports`.trim()}
+      onClick={openReports}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") openReports();
+      }}
+      className="bg-white rounded-lg shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)] px-4 py-2.5 sm:px-6 sm:py-4 w-full flex items-center justify-between cursor-pointer transition-shadow hover:shadow-md"
+    >
       {/* Avatar */}
       <div className="w-9 h-9 sm:w-12 sm:h-12 shrink-0 bg-gray-200 rounded-full overflow-hidden flex items-center justify-center mr-3 sm:mr-4">
         {showImage ? (

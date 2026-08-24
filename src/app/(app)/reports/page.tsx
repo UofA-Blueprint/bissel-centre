@@ -435,6 +435,8 @@ export default function ReportsPage() {
   const modifiedByFilter = searchParams.get("modifiedBy");
   const bannedByFilter = searchParams.get("bannedBy");
   const searchParam = searchParams.get("search");
+  // Exact single-recipient deep link (e.g. from dashboard rows/cards).
+  const userIdFilter = searchParams.get("userId");
   const [data, setData] = useState<UserReportRow[]>([]);
   const [allCards, setAllCards] = useState<ReportCardRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -523,8 +525,19 @@ export default function ReportsPage() {
     window.history.replaceState(null, "", qs ? `/reports?${qs}` : "/reports");
   };
 
+  const clearUserIdFilter = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("userId");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `/reports?${qs}` : "/reports");
+  };
+
   const filteredData = useMemo(() => {
     let result = data;
+
+    if (userIdFilter) {
+      result = result.filter((u) => u.userId === userIdFilter);
+    }
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -633,6 +646,7 @@ export default function ReportsPage() {
     dateField,
     modifiedByFilter,
     bannedByFilter,
+    userIdFilter,
   ]);
 
   const activeFilterCount =
@@ -1185,6 +1199,24 @@ export default function ReportsPage() {
               {filteredData.length === 1 ? "" : "s"} match
             </span>
           )}
+        </div>
+      )}
+      {userIdFilter && (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-medium text-cyan-800">
+            Showing single recipient:{" "}
+            {filteredData[0]
+              ? `${filteredData[0].firstName} ${filteredData[0].lastName}`.trim()
+              : "(not found)"}
+            <button
+              type="button"
+              onClick={clearUserIdFilter}
+              title="Show all recipients"
+              className="rounded-full p-0.5 text-cyan-600 hover:bg-cyan-100"
+            >
+              <X size={12} strokeWidth={3} />
+            </button>
+          </span>
         </div>
       )}
       <header className="flex flex-col gap-3 pb-2 lg:flex-row lg:items-end lg:justify-between">
