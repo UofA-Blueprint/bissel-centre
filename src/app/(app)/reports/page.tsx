@@ -501,6 +501,9 @@ export default function ReportsPage() {
   const searchParam = searchParams.get("search");
   // Exact single-recipient deep link (e.g. from dashboard rows/cards).
   const userIdFilter = searchParams.get("userId");
+  // Recipients issued a card by this staff member (admin drill-down link).
+  // Server-side only: rows don't carry per-issue staff attribution.
+  const issuedByFilter = searchParams.get("issuedBy");
   const [data, setData] = useState<UserReportRow[]>([]);
   const [allCards, setAllCards] = useState<ReportCardRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -607,6 +610,7 @@ export default function ReportsPage() {
         }
         if (modifiedByFilter) params.set("modifiedBy", modifiedByFilter);
         if (bannedByFilter) params.set("bannedBy", bannedByFilter);
+        if (issuedByFilter) params.set("issuedBy", issuedByFilter);
         if (userIdFilter) params.set("userId", userIdFilter);
 
         const reportData = await fetchReportData(params, controller.signal);
@@ -642,6 +646,7 @@ export default function ReportsPage() {
     dateField,
     modifiedByFilter,
     bannedByFilter,
+    issuedByFilter,
     userIdFilter,
   ]);
 
@@ -666,6 +671,13 @@ export default function ReportsPage() {
   const clearUserIdFilter = () => {
     const params = new URLSearchParams(window.location.search);
     params.delete("userId");
+    const qs = params.toString();
+    window.history.replaceState(null, "", qs ? `/reports?${qs}` : "/reports");
+  };
+
+  const clearIssuedByFilter = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("issuedBy");
     const qs = params.toString();
     window.history.replaceState(null, "", qs ? `/reports?${qs}` : "/reports");
   };
@@ -1337,6 +1349,21 @@ export default function ReportsPage() {
               {filteredData.length === 1 ? "" : "s"} match
             </span>
           )}
+        </div>
+      )}
+      {issuedByFilter && (
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-3 py-1 text-xs font-medium text-cyan-800">
+            Showing recipients issued a card by the selected staff member
+            <button
+              type="button"
+              onClick={clearIssuedByFilter}
+              title="Show all recipients"
+              className="rounded-full p-0.5 text-cyan-600 hover:bg-cyan-100"
+            >
+              <X size={12} strokeWidth={3} />
+            </button>
+          </span>
         </div>
       )}
       {userIdFilter && (

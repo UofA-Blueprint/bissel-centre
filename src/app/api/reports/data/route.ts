@@ -180,6 +180,7 @@ type Filters = {
   flaggedTo: Date | null;
   modifiedBy: string | null;
   bannedBy: string | null;
+  issuedBy: string | null;
   userId: string | null;
 };
 
@@ -213,6 +214,7 @@ function parseFilters(sp: URLSearchParams): Filters {
     flaggedTo: parseDayEnd(sp.get("flaggedTo")),
     modifiedBy: sp.get("modifiedBy"),
     bannedBy: sp.get("bannedBy"),
+    issuedBy: sp.get("issuedBy"),
     userId: sp.get("userId"),
   };
 }
@@ -409,6 +411,18 @@ export async function GET(request: NextRequest) {
           "userId",
           truncated,
           "bannedBy",
+        ),
+      );
+    }
+    if (f.issuedBy) {
+      sets.push(
+        await idsFromSimpleLayer(
+          db,
+          (q) => q.where("issuedBy", "==", f.issuedBy),
+          "issues",
+          "userId",
+          truncated,
+          "issuedBy",
         ),
       );
     }
