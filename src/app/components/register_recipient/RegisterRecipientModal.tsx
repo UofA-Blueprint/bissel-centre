@@ -65,6 +65,15 @@ const RegisterRecipientModal: React.FC<Props> = ({
   const [formData, setFormData] = useState<FormData>({});
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
 
+  // Headless UI's Dialog renders through a portal, which cannot be
+  // server-rendered. With URL-driven opens (?register=), SSR would render
+  // the dialog open and mismatch the client portal markup — so render it
+  // closed until after mount; it opens on the first client frame.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // ── Load draft when the modal opens / the uuid changes ─────────
   useEffect(() => {
     if (!open || !draftId) return;
@@ -341,7 +350,7 @@ const RegisterRecipientModal: React.FC<Props> = ({
 
   return (
     <Dialog
-      open={open}
+      open={open && mounted}
       onClose={handleClose}
       className="fixed inset-0 z-50 overflow-y-auto"
     >
