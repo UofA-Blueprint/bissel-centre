@@ -18,7 +18,14 @@ const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 // Hard ceiling: decoding larger files into a canvas can freeze or crash
 // low-memory devices, so there is no override past this point.
 const ABSOLUTE_MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
-const ACCEPTED_TYPES = ["image/jpeg", "image/png"];
+const ACCEPTED_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/gif",
+];
+const ACCEPTED_TYPES_LABEL = "JPEG, PNG, WebP, AVIF or GIF";
 const MAX_BASE64_FIELD_BYTES = 1_000_000;
 // List views render 36-48px avatars; a 96px JPEG keeps the user doc small
 // while the full-res base64 lives in the user_photos collection.
@@ -151,7 +158,7 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
       if (!file) return;
 
       if (!ACCEPTED_TYPES.includes(file.type)) {
-        onError?.("Only JPEG or PNG images are supported.");
+        onError?.(`Only ${ACCEPTED_TYPES_LABEL} images are supported.`);
         return;
       }
       if (file.size > ABSOLUTE_MAX_UPLOAD_BYTES) {
@@ -365,7 +372,7 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
             <div className="text-center space-y-4">
               <p className="font-semibold">Browse a file or use webcam</p>
               <p className="text-sm text-gray-500">
-                PNG and JPEG formats, up to 2 MB
+                {ACCEPTED_TYPES_LABEL} · up to 2 MB recommended
               </p>
               <div className="w-32 h-32 bg-gray-200 rounded-full mx-auto my-4"></div>
               <div className="flex items-center space-x-4">
@@ -453,7 +460,7 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
             ref={fileInputRef}
             type="file"
             className="hidden"
-            accept="image/png, image/jpeg"
+            accept={ACCEPTED_TYPES.join(", ")}
             onChange={handleFileChange}
           />
         </div>

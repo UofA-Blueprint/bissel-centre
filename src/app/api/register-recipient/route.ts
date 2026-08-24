@@ -19,33 +19,57 @@ function getUtf8ByteSize(value: string): number {
 const THUMB_MAX_DIMENSION = 96;
 const THUMB_QUALITY = 75;
 
-// Server-side image validation: the declared data-URL mimetype must be
-// JPEG/PNG and must match the file's magic bytes — the client is not trusted.
+// Identify the actual image format from magic bytes.
+function sniffImageMime(buffer: Buffer): string | null {
+  if (buffer.length < 12) return null;
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  if (
+    buffer.toString("ascii", 0, 4) === "RIFF" &&
+    buffer.toString("ascii", 8, 12) === "WEBP"
+  ) {
+    return "image/webp";
+  }
+  if (buffer.toString("ascii", 0, 4) === "GIF8") {
+    return "image/gif";
+  }
+  if (buffer.toString("ascii", 4, 8) === "ftyp") {
+    const brand = buffer.toString("ascii", 8, 12);
+    if (brand === "avif" || brand === "avis") return "image/avif";
+  }
+  return null;
+}
+
+// Server-side image validation: the declared data-URL mimetype must be an
+// accepted format and must match the file's magic bytes — the client is not
+// trusted.
 function decodeImageDataUrl(
   dataUrl: string,
-): { buffer: Buffer; mime: "image/jpeg" | "image/png" } | null {
-  const match = dataUrl.match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/);
+): { buffer: Buffer; mime: string } | null {
+  const match = dataUrl.match(
+    /^data:image\/(jpeg|png|webp|avif|gif);base64,([A-Za-z0-9+/=]+)$/,
+  );
   if (!match) return null;
 
-  const declared = `image/${match[1]}` as "image/jpeg" | "image/png";
+  const declared = `image/${match[1]}`;
   let buffer: Buffer;
   try {
     buffer = Buffer.from(match[2], "base64");
   } catch {
     return null;
   }
-  if (buffer.length < 8) return null;
 
-  const isJpeg =
-    buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
-  const isPng =
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47;
-
-  if (declared === "image/jpeg" && !isJpeg) return null;
-  if (declared === "image/png" && !isPng) return null;
+  const sniffed = sniffImageMime(buffer);
+  if (!sniffed || sniffed !== declared) return null;
 
   return { buffer, mime: declared };
 }
@@ -176,7 +200,7 @@ export async function POST(request: NextRequest) {
     const decoded = decodeImageDataUrl(photoUpload.imageUrl);
     if (!decoded) {
       return NextResponse.json(
-        { error: "Recipient photo must be a valid JPEG or PNG image." },
+        { error: "Recipient photo must be a valid JPEG, PNG, WebP, AVIF, or GIF image." },
         { status: 400 },
       );
     }
