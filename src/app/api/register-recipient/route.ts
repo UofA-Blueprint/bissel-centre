@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { encryptPhone } from "@/utils/phoneEncryption";
 import admin from "firebase-admin";
 import sharp from "sharp";
+import { upsertSearchIndexEntry } from "@/app/services/searchIndexService";
 
 const MAX_PICTURE_FIELD_BYTES = 1_000_000; // Firestore field value must stay < ~1,048,487 bytes.
 // Thumbnails live on the user doc and ship with every list response — keep
@@ -284,6 +285,7 @@ export async function POST(request: NextRequest) {
       const batch = db.batch();
       batch.set(userRef, userData);
       batch.set(photoRef, photoData);
+      upsertSearchIndexEntry(batch, db, userRef.id, userData);
       await batch.commit();
     }else{
       try {
@@ -344,6 +346,8 @@ export async function POST(request: NextRequest) {
           })
 
           tx.set(photoRef, photoData)
+
+          upsertSearchIndexEntry(tx, db, userRef.id, userData)
 
           // Rule 3: once assigned, card becomes Active
           tx.update(cardDoc.ref,{

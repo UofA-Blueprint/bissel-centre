@@ -5,7 +5,6 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Fuse from "fuse.js";
 import { Flag } from "lucide-react";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
 import SearchBar from "@/app/components/SearchBar";
@@ -147,23 +146,45 @@ export default function DashboardPage() {
     };
   }, [router, refreshNonce]);
 
+  // Server-side search: debounced call to /api/users/search (folding +
+  // fuzzy + phonetic over names AND aliases), then map the returned ids
+  // onto the already-loaded user objects to keep card status fields.
   useEffect(() => {
     const filtered = createdByFilter
       ? users.filter((u) => u.createdBy === createdByFilter)
       : users;
 
-    if (!searchQuery.trim()) {
+    const query = searchQuery.trim();
+    if (query.length < 2) {
       setSearchResults(filtered);
       return;
     }
 
-    const fuse = new Fuse(filtered, {
-      keys: ["firstName", "secondName", "email"],
-      threshold: 0.3,
-    });
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/users/search?q=${encodeURIComponent(query)}`,
+          { signal: controller.signal },
+        );
+        if (!res.ok) return; // keep current results on error
+        const data = (await res.json()) as { ids?: string[] };
+        const order = new Map(
+          (data.ids ?? []).map((id, rank) => [id, rank] as const),
+        );
+        const matched = filtered
+          .filter((u) => order.has(u.id))
+          .sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
+        setSearchResults(matched);
+      } catch {
+        // aborted (new keystroke) — newer request will set results
+      }
+    }, 300);
 
-    const results = fuse.search(searchQuery).map((r) => r.item);
-    setSearchResults(results);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
   }, [searchQuery, users, createdByFilter]);
 
   const handleGoToCards = () => {
