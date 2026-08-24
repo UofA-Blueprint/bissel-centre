@@ -10,7 +10,7 @@ import SidebarSteps from "./SidebarSteps";
 
 type Props = {
   open: boolean;
-  /** UUID from ?register= — indexes this draft in sessionStorage. */
+  /** Running index from ?register= — keys this draft in sessionStorage. */
   draftId: string | null;
   /** Current wizard step (1-4) from ?step= — URL is the source of truth. */
   step: number;
@@ -32,7 +32,7 @@ type DraftEnvelope = {
   updatedAt?: number;
 };
 
-// Multiple drafts live side by side, indexed by uuid. Text fields (and a
+// Multiple drafts live side by side, keyed by a running index. Text fields (and a
 // COMPLETED photo, stored as base64) survive reloads; a merely-selected photo
 // is a blob: URL tied to the document and cannot survive, so it is stripped
 // before persisting.

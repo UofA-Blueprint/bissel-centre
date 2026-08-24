@@ -53,8 +53,24 @@ interface DashboardSummaryResponse {
   users: User[];
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// ?register= carries a small running index (1, 2, 3, …) per tab session.
+const DRAFT_ID_RE = /^[1-9]\d{0,5}$/;
+
+// Next unused index = max over existing draft keys + 1. Scanning (rather
+// than a separate counter) self-heals when a URL from another tab names an
+// index this tab never allocated.
+const nextDraftIndex = (): string => {
+  let max = 0;
+  try {
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const match = sessionStorage.key(i)?.match(/^recipient-draft:(\d+)$/);
+      if (match) max = Math.max(max, Number.parseInt(match[1], 10));
+    }
+  } catch {
+    /* storage unavailable */
+  }
+  return String(max + 1);
+};
 
 const DASHBOARD_CACHE_TTL_MS = 30_000;
 let dashboardSummaryCache: {
@@ -71,13 +87,13 @@ export default function DashboardPage() {
   // param (even empty) switches the page into the dense results view.
   const searchParam = searchParams.get("search");
   const isSearchMode = searchParam !== null;
-  // Register modal lives behind ?register=<uuid>&step=N — the uuid indexes
-  // the draft in sessionStorage so multiple drafts coexist and reloads or
-  // history navigation restore the right one.
+  // Register modal lives behind ?register=<index>&step=N — the running
+  // index keys the draft in sessionStorage so multiple drafts coexist and
+  // reloads or history navigation restore the right one.
   const registerParam = searchParams.get("register");
   const stepParam = searchParams.get("step");
   const registerDraftId =
-    registerParam && UUID_RE.test(registerParam) ? registerParam : null;
+    registerParam && DRAFT_ID_RE.test(registerParam) ? registerParam : null;
   const registerStep = Math.min(
     4,
     Math.max(1, Number.parseInt(stepParam ?? "1", 10) || 1),
@@ -247,20 +263,9 @@ export default function DashboardPage() {
 
   // ── Register modal URL handlers ─────────────────────────────────
 
-  // Normalize legacy/invalid ?register= values to a real uuid.
-  useEffect(() => {
-    if (registerParam !== null && !UUID_RE.test(registerParam)) {
-      const params = new URLSearchParams(window.location.search);
-      params.set("register", crypto.randomUUID());
-      params.set("step", "1");
-      window.history.replaceState(null, "", `/dashboard?${params.toString()}`);
-    }
-  }, [registerParam]);
-
-  const openRegisterModal = () => {
-    const id = crypto.randomUUID();
+  const seedDraft = (id: string) => {
     try {
-      // Seed the envelope now so a later "uuid missing from storage" state
+      // Seed the envelope now so a later "index missing from storage" state
       // is distinguishable as another-tab / ended-session.
       sessionStorage.setItem(
         draftStorageKey(id),
@@ -269,6 +274,23 @@ export default function DashboardPage() {
     } catch {
       /* storage unavailable — modal still works, just won't restore */
     }
+  };
+
+  // Normalize invalid ?register= values to the next running index.
+  useEffect(() => {
+    if (registerParam !== null && !DRAFT_ID_RE.test(registerParam)) {
+      const id = nextDraftIndex();
+      seedDraft(id);
+      const params = new URLSearchParams(window.location.search);
+      params.set("register", id);
+      params.set("step", "1");
+      window.history.replaceState(null, "", `/dashboard?${params.toString()}`);
+    }
+  }, [registerParam]);
+
+  const openRegisterModal = () => {
+    const id = nextDraftIndex();
+    seedDraft(id);
     const params = new URLSearchParams(window.location.search);
     params.set("register", id);
     params.set("step", "1");
