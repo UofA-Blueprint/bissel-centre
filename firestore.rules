@@ -1,0 +1,128 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Deny by default ──────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ── Helper functions ─────────────────────────────────────────────
+
+    // Caller has a valid Firebase Auth session.
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Caller is an IT Admin (custom claim set by Admin SDK).
+    function isAdmin() {
+      return isAuthenticated() && request.auth.token.admin == true;
+    }
+
+    // Caller is an active administrative staff member.
+    // Staff doc ID == Firebase Auth UID; check existence + not soft-deleted.
+    function isActiveStaff() {
+      return isAuthenticated()
+        && exists(/databases/$(database)/documents/administrative_staff/$(request.auth.uid))
+        && get(/databases/$(database)/documents/administrative_staff/$(request.auth.uid)).data.isDeleted != true;
+    }
+
+    // Caller is either an IT Admin or an active staff member.
+    function isStaffOrAdmin() {
+      return isAdmin() || isActiveStaff();
+    }
+
+    // ── Collection: users (recipients) ───────────────────────────────
+    // Staff can CRUD recipients. Admins get read-only access.
+    match /users/{userId} {
+      allow read:   if isStaffOrAdmin();
+      allow create: if isActiveStaff();
+      allow update: if isActiveStaff();
+      allow delete: if isActiveStaff();
+    }
+
+    // ── Collection: arc_cards ────────────────────────────────────────
+    // Staff can CRUD cards. Admins get read-only.
+    match /arc_cards/{cardId} {
+      allow read:   if isStaffOrAdmin();
+      allow create: if isActiveStaff();
+      allow update: if isActiveStaff();
+      allow delete: if false;
+    }
+
+    // ── Collection: issues (card issuance events) ────────────────────
+    // Staff can create and update issues. Admins get read-only.
+    match /issues/{issueId} {
+      allow read:   if isStaffOrAdmin();
+      allow create: if isActiveStaff();
+      allow update: if isActiveStaff();
+      allow delete: if false;
+    }
+
+    // ── Collection: banned_users ─────────────────────────────────────
+    // Staff can ban/unban. Admins get read-only.
+    match /banned_users/{banId} {
+      allow read:   if isStaffOrAdmin();
+      allow create: if isActiveStaff();
+      allow update: if isActiveStaff();
+      allow delete: if isActiveStaff();
+    }
+
+    // ── Collection: history (audit log) ──────────────────────────────
+    // Append-only: staff can read and create, never update or delete.
+    match /history/{entryId} {
+      allow read:   if isStaffOrAdmin();
+      allow create: if isActiveStaff();
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ── Collection: questions (survey responses) ─────────────────────
+    match /questions/{questionId} {
+      allow read:   if isStaffOrAdmin();
+      allow create: if isActiveStaff();
+      allow update: if isActiveStaff();
+      allow delete: if isActiveStaff();
+    }
+
+    // ── Collection: administrative_staff ─────────────────────────────
+    // Admins manage staff records via Admin SDK (server-side).
+    // Staff can read their own record (auth service checks it on login).
+    // No client-side writes — all mutations go through server actions.
+    match /administrative_staff/{staffId} {
+      allow read:   if isAdmin() || (isAuthenticated() && request.auth.uid == staffId);
+      allow write:  if false;
+    }
+
+    // ── Collection: it_admins ────────────────────────────────────────
+    // IT admin records are managed exclusively by the Admin SDK.
+    // Admins can read; no client writes.
+    match /it_admins/{adminId} {
+      allow read:  if isAdmin();
+      allow write: if false;
+    }
+
+    // ── Legacy collection: it_admin (singular, from seed) ────────────
+    // Same policy as it_admins; kept for backward compat.
+    match /it_admin/{adminId} {
+      allow read:  if isAdmin();
+      allow write: if false;
+    }
+
+    // ── Collection: app_settings ─────────────────────────────────────
+    // Staff and admins can read settings (monthly unload schedule).
+    // Only staff can update (schedule changes go through the API, but
+    // the client SDK may read). No client-side creates or deletes.
+    match /app_settings/{settingId} {
+      allow read:   if isStaffOrAdmin();
+      allow write:  if false;
+    }
+
+    // ── Collection: _migrations ──────────────────────────────────────
+    // Internal migration markers. No client access — Admin SDK only.
+    match /_migrations/{migrationId} {
+      allow read:  if false;
+      allow write: if false;
+    }
+  }
+}
