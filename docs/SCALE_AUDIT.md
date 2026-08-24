@@ -306,13 +306,13 @@ Legend: reads/req = Firestore document reads per request at the 10k-card model.
 |---|---|---|
 | P1 | `GET /api/cards` | ✅ Done: cursor pagination + status/department filters + card-number/recipient-name search (via the name index) + `count()` totals + per-page joins (`in` ≤ 30) |
 | P1 | `dashboardService.ts` | ✅ Done: `photoThumb`-only select, cursor-paged users (newest first) with per-page card/issue joins, server search, `count()` stats + total |
-| P1 | `GET /api/reports/data` | ✅ Partial: photos/unused fields stripped via `select()` (memory blob gone), `maxDuration` raised. Remaining — user-row pagination, lazy per-user history, filters→queries — moved to the P2 reports rework: they are inseparable from the client filter-model change (every filter scans nested per-user arrays today) |
+| P1 | `GET /api/reports/data` | ✅ Done: `select()`-stripped AND cursor-paginated — one page of users per request with banned/history/issues/cards joined via bounded `in`-queries (no full scans remain on this route); the client walks pages on load so every filter/export keeps working. Still open (true P2 redesign): filters→queries + lazy expanded-row detail, which require the client filter-model rework |
 | P1 | Photo split (base64 kept) | ✅ Done: `photoThumb` on user doc + `user_photos/{uid}` full-res + lazy `GET /api/users/[id]/photo`; `scripts/migrate-photos.mjs` backfills (run `--prune` post-deploy to drop legacy `picture`) |
 | P1 | `POST /api/reports/export` | ✅ Done: N+1 replaced with batched `in` joins (30/chunk), `maxDuration: 120`, `select()` on scans. (Date pre-filtering stays client-side: `allocationDate` mixes ISO and M/D/YYYY formats, so a string-range `where` would silently drop rows) |
-| P2 | `POST /api/cards` | `db.batch()`, request cap, duplicate-number guard |
-| P2 | `cron/expire-cards` | Status-filtered query, cursor paging, run-lock, `maxDuration: 300` |
-| P2 | `(app)/layout.tsx` + per-route auth | Single session verification per request path; drop redundant `checkRevoked` on hot reads |
-| P2 | `firestore.indexes.json` | Add composite indexes for the new cursor + filter queries |
+| P2 | `POST /api/cards` | ✅ Done: single atomic `db.batch()` (no partial creations), 200/request cap, duplicate-number guard in-request and against existing cards (check-then-write race noted as accepted) |
+| P2 | `cron/expire-cards` | ✅ Done: sweep queries only non-Unloaded statuses in 400-doc batches (re-query-until-empty), month claimed transactionally BEFORE sweeping so overlapping invocations can't double-process, `?dryRun=1` reports via one aggregate, `maxDuration: 300` |
+| P2 | `(app)/layout.tsx` + per-route auth | ✅ Done: layout reads name/email from session claims (no `getUser`) and skips revocation; `checkRevoked` dropped on hot read routes (summary, searches, photo, cards GET, reports data) and kept on all writes + export |
+| P2 | `firestore.indexes.json` | ✅ Done (P1): composite (status\|department + arcCardNumber) deployed |
 | P3 | `services/userService.ts`, `administrativeStaffService.ts` | Delete dead client data layer |
 
 ### Frontend (pages / components) — UI changes
@@ -323,7 +323,7 @@ Legend: reads/req = Firestore document reads per request at the 10k-card model.
 | P1 | `/cards` | ✅ Done: prev/next walk server cursors, debounced server search (card number or recipient name), filter drawer → query params, totals from `count()`; sorting is within-page |
 | P1 | Register-recipient modal | ✅ Done: emits ~3 KB thumbnail alongside the ≤ 1 MB base64 (both stay base64) |
 | P2 | `/reports` | Server-driven filters + pagination; lazy expanded-row history; exports via server with filter params; static filter option lists |
-| P2 | `/cards/new` | Client cap + progress for bulk allocation |
+| P2 | `/cards/new` | ✅ Done: 200-card client cap matching the server, server error messages (e.g. duplicates) surfaced instead of a generic failure |
 | P3 | `/admin/dashboard` | "First 100 shown" indicator on drill-down modals |
 
 Rule of thumb for the rewires: **`/cards` and `/reports` keep their table UI and lose

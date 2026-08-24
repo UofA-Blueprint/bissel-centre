@@ -18,7 +18,8 @@ export async function GET(request: NextRequest) {
     }
 
     const app = await initAdmin();
-    const decodedClaims = await app.auth().verifySessionCookie(sessionCookie, true);
+    // Hot read path — revocation check skipped (SCALE-05).
+    const decodedClaims = await app.auth().verifySessionCookie(sessionCookie);
 
     if (decodedClaims.admin !== true) {
       const staffDoc = await app

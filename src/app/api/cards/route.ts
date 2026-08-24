@@ -63,7 +63,10 @@ function normalizeDateOnlyInput(value: unknown): string {
   return raw;
 }
 
-async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
+async function verifyStaffAccess(options?: {
+  allowAdmin?: boolean;
+  checkRevoked?: boolean;
+}) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("session")?.value;
 
@@ -74,7 +77,10 @@ async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
   }
 
   const app = await initAdmin();
-  const decodedClaims = await app.auth().verifySessionCookie(sessionCookie, true);
+  // Writes verify with revocation; hot read paths may skip it (SCALE-05).
+  const decodedClaims = await app
+    .auth()
+    .verifySessionCookie(sessionCookie, options?.checkRevoked ?? true);
 
   const db = app.firestore();
 
@@ -270,7 +276,10 @@ async function buildCardRows(
 // name-search index). Cost is O(page size), never O(collection).
 export async function GET(request: NextRequest) {
   try {
-    const access = await verifyStaffAccess({ allowAdmin: true });
+    const access = await verifyStaffAccess({
+      allowAdmin: true,
+      checkRevoked: false,
+    });
     if ("error" in access) {
       return access.error;
     }
@@ -458,7 +467,9 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/cards - Create new card(s)
+// POST /api/cards - Create new card(s): capped, batched, duplicate-guarded.
+const MAX_CARDS_PER_REQUEST = 200; // well under Firestore's 500-op batch cap
+
 export async function POST(request: NextRequest) {
   try {
     const access = await verifyStaffAccess();
@@ -472,10 +483,61 @@ export async function POST(request: NextRequest) {
       ? body.cards
       : [body];
 
-    // Check if migration has been run
-    const createdCards: ArcCard[] = [];
-    
+    if (cardsToCreate.length === 0) {
+      return NextResponse.json({ error: "No cards provided" }, { status: 400 });
+    }
+    if (cardsToCreate.length > MAX_CARDS_PER_REQUEST) {
+      return NextResponse.json(
+        { error: `At most ${MAX_CARDS_PER_REQUEST} cards per request` },
+        { status: 400 },
+      );
+    }
 
+    const numbers = cardsToCreate.map((c) =>
+      String(c.arcCardNumber ?? "").trim(),
+    );
+    if (numbers.some((n) => n.length === 0)) {
+      return NextResponse.json(
+        { error: "Every card needs a card number" },
+        { status: 400 },
+      );
+    }
+    const dupInRequest = Array.from(
+      new Set(numbers.filter((n, i) => numbers.indexOf(n) !== i)),
+    );
+    if (dupInRequest.length > 0) {
+      return NextResponse.json(
+        { error: `Duplicate card number(s) in request: ${dupInRequest.join(", ")}` },
+        { status: 409 },
+      );
+    }
+
+    // Duplicate guard against existing cards (bounded in-queries). A race
+    // between two simultaneous requests with the same number can still slip
+    // through this check-then-write; acceptable for a small staff team.
+    const existing: string[] = [];
+    await Promise.all(
+      chunk(numbers, 30).map(async (part) => {
+        const snap = await db
+          .collection("arc_cards")
+          .where("arcCardNumber", "in", part)
+          .select("arcCardNumber")
+          .get();
+        for (const doc of snap.docs) {
+          existing.push(String(doc.data().arcCardNumber ?? ""));
+        }
+      }),
+    );
+    if (existing.length > 0) {
+      return NextResponse.json(
+        { error: `Card number(s) already exist: ${Array.from(new Set(existing)).join(", ")}` },
+        { status: 409 },
+      );
+    }
+
+    // One atomic batch — no partial creations on failure.
+    const batch = db.batch();
+    const createdCards: ArcCard[] = [];
     for (const cardInput of cardsToCreate) {
       const status =
         cardInput.status && cardInput.status.trim() !== ""
@@ -487,18 +549,16 @@ export async function POST(request: NextRequest) {
         allocationDate: normalizeDateOnlyInput(cardInput.allocationDate),
         status,
         department: cardInput.department,
-        arcCardNumber: cardInput.arcCardNumber,
+        arcCardNumber: String(cardInput.arcCardNumber).trim(),
         securityCode: cardInput.securityCode,
         notes: cardInput.notes || "",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
-      const docRef = await db.collection("arc_cards").add(newCard);
-      
-      // If migrated, card starts with no issues (they get added when issued to someone)
-      // The card is created in "Unloaded" state typically
-      
+      const docRef = db.collection("arc_cards").doc();
+      batch.set(docRef, newCard);
+
       createdCards.push({
         id: docRef.id,
         ...newCard,
@@ -508,6 +568,7 @@ export async function POST(request: NextRequest) {
         updatedAt: undefined,
       } as unknown as ArcCard);
     }
+    await batch.commit();
 
     return NextResponse.json({ cards: createdCards }, { status: 201 });
   } catch (error) {

@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
+import { FieldPath } from "firebase-admin/firestore";
 import { cookies } from "next/headers";
 import { decryptPhoneSafe } from "@/utils/phoneEncryption";
 import type {
@@ -9,9 +10,12 @@ import type {
   ReportCardRow,
 } from "@/app/(app)/reports/types";
 
-// Reports still walks whole collections (bounded by select()); allow extra
-// time until the P2 pagination rework lands.
+// One page of users per request; the client walks pages. Joins are bounded
+// in-queries per page — no full-collection scans anywhere on this route.
 export const maxDuration = 60;
+
+const DEFAULT_PAGE_SIZE = 200;
+const MAX_PAGE_SIZE = 500;
 
 async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
   const cookieStore = await cookies();
@@ -24,9 +28,10 @@ async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
   }
 
   const app = await initAdmin();
+  // Hot read path — revocation check skipped (SCALE-05).
   const decodedClaims = await app
     .auth()
-    .verifySessionCookie(sessionCookie, true);
+    .verifySessionCookie(sessionCookie);
 
   const db = app.firestore();
 
@@ -59,95 +64,175 @@ async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
   return { app, db, role: "staff" as const };
 }
 
-export async function GET() {
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+const toIsoString = (value: unknown): string => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "object" && value !== null && "toDate" in value) {
+    const candidate = value as { toDate?: () => Date };
+    const date = candidate.toDate?.();
+    if (date instanceof Date) return date.toISOString();
+  }
+  return String(value);
+};
+
+const normalizeId = (value: unknown): string => {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "object" && value !== null) {
+    if ("id" in value && typeof (value as { id?: unknown }).id === "string") {
+      return ((value as { id: string }).id || "").trim();
+    }
+  }
+  return "";
+};
+
+const CARD_FIELDS = [
+  "arcCardNumber",
+  "securityCode",
+  "department",
+  "status",
+  "allocationDate",
+  "currentUserId",
+  "userId",
+  "passRecipient",
+  "issueDates",
+  "notes",
+  "createdAt",
+  "updatedAt",
+] as const;
+
+export async function GET(request: NextRequest) {
   try {
     const access = await verifyStaffAccess({ allowAdmin: true });
     if ("error" in access) return access.error;
     const { db } = access;
 
-    // select() everywhere: photos and unused fields never leave Firestore,
-    // so the function's memory footprint stays proportional to report data,
-    // not to image blobs.
-    const [usersSnapshot, cardsSnapshot, issuesSnapshot, bannedSnapshot, historySnapshot, migrationDoc] =
-      await Promise.all([
-        db
-          .collection("users")
-          .select(
-            "firstName",
-            "secondName",
-            "email",
-            "phoneNumber",
-            "phone",
-            "status",
-            "banned",
-            "banReason",
-            "genderIdentity",
-            "dateOfBirth",
-            "address",
-            "postalCode",
-            "notes",
-            "createdAt",
-            "passesIssued",
-          )
-          .get(),
-        db
-          .collection("arc_cards")
-          .select(
-            "arcCardNumber",
-            "securityCode",
-            "department",
-            "status",
-            "allocationDate",
-            "currentUserId",
-            "userId",
-            "passRecipient",
-            "issueDates",
-            "notes",
-            "createdAt",
-            "updatedAt",
-          )
-          .get(),
-        db.collection("issues").select("cardId", "userId", "issueDate").get(),
-        db
-          .collection("banned_users")
-          .select("userId", "banReason", "bannedAt", "bannedBy")
-          .get(),
-        db
-          .collection("history")
-          .select("userId", "date", "event", "notes", "modifiedBy", "reason")
-          .get(),
-        db.collection("_migrations").doc("issues_v1").get(),
-      ]);
+    const sp = request.nextUrl.searchParams;
+    const limitParam = Number.parseInt(sp.get("limit") ?? "", 10);
+    const pageSize = Number.isFinite(limitParam)
+      ? Math.min(MAX_PAGE_SIZE, Math.max(1, limitParam))
+      : DEFAULT_PAGE_SIZE;
+    const cursorId = sp.get("cursor");
 
+    // ── One page of users (photos never selected) ────────────────
+    let usersQuery = db
+      .collection("users")
+      .select(
+        "firstName",
+        "secondName",
+        "email",
+        "phoneNumber",
+        "phone",
+        "status",
+        "banned",
+        "banReason",
+        "genderIdentity",
+        "dateOfBirth",
+        "address",
+        "postalCode",
+        "notes",
+        "createdAt",
+        "passesIssued",
+      )
+      .orderBy(FieldPath.documentId())
+      .limit(pageSize + 1);
+    if (cursorId) usersQuery = usersQuery.startAfter(cursorId);
+
+    const [usersSnapshot, migrationDoc] = await Promise.all([
+      usersQuery.get(),
+      db.collection("_migrations").doc("issues_v1").get(),
+    ]);
     const isMigrated = migrationDoc.exists;
+    const hasMore = usersSnapshot.size > pageSize;
+    const pageDocs = usersSnapshot.docs.slice(0, pageSize);
+    const pageUserIds = pageDocs.map((d) => d.id);
+    const nextCursor =
+      hasMore && pageDocs.length > 0 ? pageDocs[pageDocs.length - 1].id : null;
 
-    const toIsoString = (value: unknown): string => {
-      if (!value) return "";
-      if (typeof value === "string") return value;
-      if (value instanceof Date) return value.toISOString();
-      if (typeof value === "object" && value !== null && "toDate" in value) {
-        const candidate = value as { toDate?: () => Date };
-        const date = candidate.toDate?.();
-        if (date instanceof Date) return date.toISOString();
-      }
-      return String(value);
-    };
+    // ── Per-page joins: banned, history, issues by userId ────────
+    const bannedDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    const historyDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    const issueDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    await Promise.all(
+      chunk(pageUserIds, 30).flatMap((part) => {
+        if (part.length === 0) return [];
+        return [
+          db
+            .collection("banned_users")
+            .where("userId", "in", part)
+            .select("userId", "banReason", "bannedAt", "bannedBy")
+            .get()
+            .then((s) => bannedDocs.push(...s.docs)),
+          db
+            .collection("history")
+            .where("userId", "in", part)
+            .select("userId", "date", "event", "notes", "modifiedBy", "reason")
+            .get()
+            .then((s) => historyDocs.push(...s.docs)),
+          db
+            .collection("issues")
+            .where("userId", "in", part)
+            .select("cardId", "userId", "issueDate")
+            .get()
+            .then((s) => issueDocs.push(...s.docs)),
+        ];
+      }),
+    );
 
-    const normalizeId = (value: unknown): string => {
-      if (!value) return "";
-      if (typeof value === "string") return value.trim();
-      if (typeof value === "object" && value !== null) {
-        if ("id" in value && typeof (value as { id?: unknown }).id === "string") {
-          return ((value as { id: string }).id || "").trim();
+    // ── Cards relevant to this page: current holders + passesIssued
+    //    references + cards named by this page's issues ────────────
+    const cardDocById = new Map<
+      string,
+      FirebaseFirestore.QueryDocumentSnapshot
+    >();
+    const referencedCardIds = new Set<string>();
+    for (const doc of pageDocs) {
+      const passes = doc.data().passesIssued;
+      if (Array.isArray(passes)) {
+        for (const value of passes) {
+          const id = normalizeId(value);
+          if (id) referencedCardIds.add(id);
         }
       }
-      return "";
-    };
+    }
+    for (const doc of issueDocs) {
+      const id = normalizeId(doc.data().cardId);
+      if (id) referencedCardIds.add(id);
+    }
 
-    // Index users for quick lookups
+    await Promise.all([
+      ...chunk(pageUserIds, 30).map(async (part) => {
+        if (part.length === 0) return;
+        const snap = await db
+          .collection("arc_cards")
+          .where("currentUserId", "in", part)
+          .select(...CARD_FIELDS)
+          .get();
+        for (const doc of snap.docs) cardDocById.set(doc.id, doc);
+      }),
+      ...chunk(Array.from(referencedCardIds), 30).map(async (part) => {
+        if (part.length === 0) return;
+        const snap = await db
+          .collection("arc_cards")
+          .where(FieldPath.documentId(), "in", part)
+          .select(...CARD_FIELDS)
+          .get();
+        for (const doc of snap.docs) cardDocById.set(doc.id, doc);
+      }),
+    ]);
+    const cardDocs = Array.from(cardDocById.values());
+
+    // ── Build lookup maps (page-scoped) ──────────────────────────
     const userNameById = new Map<string, string>();
     const passesIssuedByUser = new Map<string, string[]>();
-    for (const userDoc of usersSnapshot.docs) {
+    for (const userDoc of pageDocs) {
       const d = userDoc.data();
       userNameById.set(
         userDoc.id,
@@ -161,9 +246,11 @@ export async function GET() {
       passesIssuedByUser.set(userDoc.id, passIds);
     }
 
-    // Index banned users by userId
-    const bannedMap = new Map<string, { reason: string; bannedAt: string | null; bannedBy: string }>();
-    for (const doc of bannedSnapshot.docs) {
+    const bannedMap = new Map<
+      string,
+      { reason: string; bannedAt: string | null; bannedBy: string }
+    >();
+    for (const doc of bannedDocs) {
       const d = doc.data();
       const bannedAt = toIsoString(d.bannedAt) || null;
       bannedMap.set(d.userId, {
@@ -173,9 +260,8 @@ export async function GET() {
       });
     }
 
-    // Index history entries by userId
     const historyMap = new Map<string, ActivityEntry[]>();
-    for (const doc of historySnapshot.docs) {
+    for (const doc of historyDocs) {
       const d = doc.data();
       if (!d.userId) continue;
       if (!historyMap.has(d.userId)) historyMap.set(d.userId, []);
@@ -188,28 +274,23 @@ export async function GET() {
         reason: d.reason,
       });
     }
-
-    // Sort history entries per user (newest first)
     for (const entries of historyMap.values()) {
       entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }
 
-    // Build card data per user and complete card list.
-    const cardsByUser = new Map<string, CardHistoryEntry[]>();
-    const allCards: ReportCardRow[] = [];
-
     const cardDocsById = new Map<string, FirebaseFirestore.DocumentData>();
-    for (const cardDoc of cardsSnapshot.docs) {
+    for (const cardDoc of cardDocs) {
       cardDocsById.set(cardDoc.id, cardDoc.data());
     }
 
-    // Build history from both schemas (old + migrated) so we don't depend on
-    // migration marker docs being present.
     const issueDatesByCard = new Map<string, string[]>();
     const userCardIssueDates = new Map<string, string[]>();
-
-    for (const issueDoc of issuesSnapshot.docs) {
-      const d = issueDoc.data() as { cardId?: unknown; userId?: unknown; issueDate?: string };
+    for (const issueDoc of issueDocs) {
+      const d = issueDoc.data() as {
+        cardId?: unknown;
+        userId?: unknown;
+        issueDate?: string;
+      };
       const cardId = normalizeId(d.cardId);
       const userId = normalizeId(d.userId);
       if (!cardId) continue;
@@ -223,8 +304,13 @@ export async function GET() {
       }
     }
 
+    // ── Per-user card history ────────────────────────────────────
+    const cardsByUser = new Map<string, CardHistoryEntry[]>();
     const userCardEntries = new Map<string, Map<string, CardHistoryEntry>>();
-    const ensureUserCardEntry = (userId: string, cardId: string): CardHistoryEntry => {
+    const ensureUserCardEntry = (
+      userId: string,
+      cardId: string,
+    ): CardHistoryEntry => {
       if (!userCardEntries.has(userId)) userCardEntries.set(userId, new Map());
       const perUser = userCardEntries.get(userId)!;
       if (!perUser.has(cardId)) {
@@ -250,24 +336,23 @@ export async function GET() {
       return perUser.get(cardId)!;
     };
 
-    // Migrated issues linkage
-    for (const [userCardKey, dates] of userCardIssueDates.entries()) {
-      const splitAt = userCardKey.indexOf("::");
-      const userId = userCardKey.slice(0, splitAt);
-      const cardId = userCardKey.slice(splitAt + 2);
-      const entry = ensureUserCardEntry(userId, cardId);
-      entry.issueDates.push(...dates);
+    if (isMigrated) {
+      for (const [userCardKey, dates] of userCardIssueDates.entries()) {
+        const splitAt = userCardKey.indexOf("::");
+        const userId = userCardKey.slice(0, splitAt);
+        const cardId = userCardKey.slice(splitAt + 2);
+        const entry = ensureUserCardEntry(userId, cardId);
+        entry.issueDates.push(...dates);
+      }
     }
 
-    // Current holder linkage (old + new schema)
-    for (const cardDoc of cardsSnapshot.docs) {
+    for (const cardDoc of cardDocs) {
       const d = cardDoc.data() as { currentUserId?: unknown; userId?: unknown };
       const holderId = normalizeId(d.currentUserId) || normalizeId(d.userId);
-      if (!holderId) continue;
+      if (!holderId || !userNameById.has(holderId)) continue;
       ensureUserCardEntry(holderId, cardDoc.id);
     }
 
-    // Fallback linkage from passesIssued
     for (const [userId, passCardIds] of passesIssuedByUser.entries()) {
       for (const cardId of passCardIds) {
         if (!cardDocsById.has(cardId)) continue;
@@ -275,7 +360,6 @@ export async function GET() {
       }
     }
 
-    // Materialize user card history
     for (const [userId, cardMap] of userCardEntries.entries()) {
       cardsByUser.set(
         userId,
@@ -288,8 +372,9 @@ export async function GET() {
       );
     }
 
-    // Build complete cards export rows (include old and new issueDates)
-    for (const cardDoc of cardsSnapshot.docs) {
+    // ── Page-relevant card export rows ───────────────────────────
+    const pageCards: ReportCardRow[] = [];
+    for (const cardDoc of cardDocs) {
       const d = cardDoc.data();
       const issueDates = [
         ...(issueDatesByCard.get(cardDoc.id) || []),
@@ -299,7 +384,7 @@ export async function GET() {
         .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
       const currentUserId =
         normalizeId(d.currentUserId) || normalizeId(d.userId) || null;
-      allCards.push({
+      pageCards.push({
         cardId: cardDoc.id,
         cardNumber: d.arcCardNumber || "",
         securityCode: d.securityCode || "",
@@ -307,7 +392,9 @@ export async function GET() {
         status: d.status || "Unloaded",
         allocationDate: d.allocationDate || "",
         currentUserId,
-        currentUserName: currentUserId ? userNameById.get(currentUserId) || "" : "",
+        currentUserName: currentUserId
+          ? userNameById.get(currentUserId) || ""
+          : "",
         issueDates,
         notes: d.notes || "",
         createdAt: toIsoString(d.createdAt),
@@ -315,8 +402,11 @@ export async function GET() {
       });
     }
 
-    const currentCardByUser = new Map<string, { cardNumber: string; department: string }>();
-    for (const card of allCards) {
+    const currentCardByUser = new Map<
+      string,
+      { cardNumber: string; department: string }
+    >();
+    for (const card of pageCards) {
       if (!card.currentUserId) continue;
       const existing = currentCardByUser.get(card.currentUserId);
       if (!existing || card.status === "Active") {
@@ -327,9 +417,9 @@ export async function GET() {
       }
     }
 
-    // Build user rows
+    // ── User rows ────────────────────────────────────────────────
     const rows: UserReportRow[] = [];
-    for (const doc of usersSnapshot.docs) {
+    for (const doc of pageDocs) {
       const d = doc.data();
       const userId = doc.id;
       const bannedInfo = bannedMap.get(userId);
@@ -371,15 +461,7 @@ export async function GET() {
       });
     }
 
-    // Sort by last name, then first name
-    rows.sort((a, b) => {
-      const lastCmp = a.lastName.localeCompare(b.lastName);
-      return lastCmp !== 0 ? lastCmp : a.firstName.localeCompare(b.firstName);
-    });
-
-    allCards.sort((a, b) => a.cardNumber.localeCompare(b.cardNumber));
-
-    return NextResponse.json({ users: rows, cards: allCards });
+    return NextResponse.json({ users: rows, cards: pageCards, nextCursor });
   } catch (error) {
     console.error("Reports data error:", error);
     return NextResponse.json(

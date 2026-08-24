@@ -46,16 +46,52 @@ const EDMONTON_TIMEZONE = "America/Edmonton";
 
 // --- API ---
 
+// The API serves one page of users (+ that page's cards) per request; walk
+// the cursor until exhausted so no single response can approach the platform
+// response cap. Cards shared across pages merge their issue dates.
 async function fetchReportData(): Promise<{
   users: UserReportRow[];
   cards: ReportCardRow[];
 }> {
-  const res = await fetch("/api/reports/data");
-  if (!res.ok) throw new Error("Failed to fetch report data");
-  const json = await res.json();
+  const users: UserReportRow[] = [];
+  const cardsById = new Map<string, ReportCardRow>();
+  let cursor: string | null = null;
+  let guard = 0;
+
+  do {
+    const params = new URLSearchParams({ limit: "300" });
+    if (cursor) params.set("cursor", cursor);
+    const res = await fetch(`/api/reports/data?${params.toString()}`);
+    if (!res.ok) throw new Error("Failed to fetch report data");
+    const page = (await res.json()) as {
+      users?: UserReportRow[];
+      cards?: ReportCardRow[];
+      nextCursor?: string | null;
+    };
+    users.push(...(page.users ?? []));
+    for (const card of page.cards ?? []) {
+      const existing = cardsById.get(card.cardId);
+      if (existing) {
+        existing.issueDates = Array.from(
+          new Set([...existing.issueDates, ...card.issueDates]),
+        ).sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
+      } else {
+        cardsById.set(card.cardId, card);
+      }
+    }
+    cursor = page.nextCursor ?? null;
+  } while (cursor && ++guard < 100);
+
+  users.sort((a, b) => {
+    const lastCmp = a.lastName.localeCompare(b.lastName);
+    return lastCmp !== 0 ? lastCmp : a.firstName.localeCompare(b.firstName);
+  });
+
   return {
-    users: json.users ?? [],
-    cards: json.cards ?? [],
+    users,
+    cards: Array.from(cardsById.values()).sort((a, b) =>
+      a.cardNumber.localeCompare(b.cardNumber),
+    ),
   };
 }
 
