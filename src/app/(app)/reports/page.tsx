@@ -46,27 +46,39 @@ const EDMONTON_TIMEZONE = "America/Edmonton";
 
 // --- API ---
 
-// The API serves one page of users (+ that page's cards) per request; walk
-// the cursor until exhausted so no single response can approach the platform
-// response cap. Cards shared across pages merge their issue dates.
-async function fetchReportData(): Promise<{
+// Server-side layered filtering: the filter params travel to the API, which
+// returns only matching users, cursor-paged with bounded work per request
+// (partial pages resume via cursor). The client walks the cursor so no
+// single response can approach the platform response cap.
+type ReportFetchResult = {
   users: UserReportRow[];
   cards: ReportCardRow[];
-}> {
+  truncated: string[];
+};
+
+async function fetchReportData(
+  filterParams: URLSearchParams,
+  signal?: AbortSignal,
+): Promise<ReportFetchResult> {
   const users: UserReportRow[] = [];
   const cardsById = new Map<string, ReportCardRow>();
+  const truncated = new Set<string>();
   let cursor: string | null = null;
   let guard = 0;
 
   do {
-    const params = new URLSearchParams({ limit: "300" });
+    const params = new URLSearchParams(filterParams);
+    params.set("limit", "300");
     if (cursor) params.set("cursor", cursor);
-    const res = await fetch(`/api/reports/data?${params.toString()}`);
+    const res = await fetch(`/api/reports/data?${params.toString()}`, {
+      signal,
+    });
     if (!res.ok) throw new Error("Failed to fetch report data");
     const page = (await res.json()) as {
       users?: UserReportRow[];
       cards?: ReportCardRow[];
       nextCursor?: string | null;
+      truncated?: string[];
     };
     users.push(...(page.users ?? []));
     for (const card of page.cards ?? []) {
@@ -79,8 +91,9 @@ async function fetchReportData(): Promise<{
         cardsById.set(card.cardId, card);
       }
     }
+    for (const t of page.truncated ?? []) truncated.add(t);
     cursor = page.nextCursor ?? null;
-  } while (cursor && ++guard < 100);
+  } while (cursor && ++guard < 200);
 
   users.sort((a, b) => {
     const lastCmp = a.lastName.localeCompare(b.lastName);
@@ -92,6 +105,7 @@ async function fetchReportData(): Promise<{
     cards: Array.from(cardsById.values()).sort((a, b) =>
       a.cardNumber.localeCompare(b.cardNumber),
     ),
+    truncated: Array.from(truncated),
   };
 }
 
@@ -513,24 +527,27 @@ export default function ReportsPage() {
   const filterRef = useRef<HTMLDivElement>(null);
 
   const [exporting, setExporting] = useState<"all" | "cards" | "activity" | null>(null);
-  const availableCardStatuses = useMemo(
-    () => Array.from(new Set(allCards.map((card) => card.status).filter(Boolean))).sort(),
-    [allCards]
-  );
+  const [refreshing, setRefreshing] = useState(false);
+  const [truncatedLayers, setTruncatedLayers] = useState<string[]>([]);
 
-  const availableCardDepartments = useMemo(
-    () => Array.from(new Set(allCards.map((card) => card.department).filter(Boolean))).sort(),
-    [allCards]
+  // Static option lists — with server-side filtering, deriving options from
+  // the (already filtered) dataset would make options vanish as you filter.
+  const availableCardStatuses = useMemo<string[]>(
+    () => ["Active", "Unattributed", "Unloaded", "Expired", "Cancelled"],
+    []
   );
-
-  const availableActivityEvents = useMemo(
+  const availableCardDepartments = useMemo<string[]>(
     () =>
-      Array.from(
-        new Set(
-          data.flatMap((user) => user.activityHistory.map((entry) => entry.event).filter(Boolean))
-        )
-      ).sort(),
-    [data]
+      [
+        "Mental Health", "Emergency", "Case MCT", "Newcomer Volunteer",
+        "Reception", "Housing", "FE/Comm Bridge", "FASS", "Child Care",
+        "Employment", "Comp Eng Dept", "Transit Dept", "HELP Program",
+      ].sort(),
+    []
+  );
+  const availableActivityEvents = useMemo<string[]>(
+    () => ["Ban", "Issue Card", "Renew Card", "Status Change", "Unban"],
+    []
   );
 
 
@@ -544,18 +561,89 @@ export default function ReportsPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Any filter change re-fetches only the matching users from the server
+  // (debounced, aborted on newer changes). The client-side filteredData memo
+  // below re-applies the same predicates as a refinement — it also covers
+  // the two filters the server cannot express: allocation-date ranges (the
+  // stored strings mix formats) and email/phone substring search.
   useEffect(() => {
-    fetchReportData()
-      .then((reportData) => {
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        setRefreshing(true);
+        const params = new URLSearchParams();
+        const q = searchQuery.trim();
+        // Name-ish queries resolve through the server name index; queries
+        // with @ or digits (email/phone) stay client-side.
+        if (q && !q.includes("@") && !/\d/.test(q)) params.set("search", q);
+        if (flagFilter !== "all") params.set("flag", flagFilter);
+        if (statusFilter.length) params.set("statuses", statusFilter.join(","));
+        if (currentCardFilter !== "all") {
+          params.set("currentCard", currentCardFilter);
+        }
+        if (cardStatusFilter.length) {
+          params.set("cardStatuses", cardStatusFilter.join(","));
+        }
+        if (cardDepartmentFilter.length) {
+          params.set("cardDepartments", cardDepartmentFilter.join(","));
+        }
+        if (activityEventFilter.length) {
+          params.set("events", activityEventFilter.join(","));
+        }
+        if (dateFrom || dateTo) {
+          const paramPairs: Partial<Record<typeof dateField, [string, string]>> = {
+            registered: ["createdFrom", "createdTo"],
+            card_issue: ["issuedFrom", "issuedTo"],
+            activity: ["activityFrom", "activityTo"],
+            flagged: ["flaggedFrom", "flaggedTo"],
+            // card_allocation intentionally absent: mixed date formats in
+            // the stored strings make a server range unsafe — client-side.
+          };
+          const pair = paramPairs[dateField];
+          if (pair) {
+            if (dateFrom) params.set(pair[0], dateFrom);
+            if (dateTo) params.set(pair[1], dateTo);
+          }
+        }
+        if (modifiedByFilter) params.set("modifiedBy", modifiedByFilter);
+        if (bannedByFilter) params.set("bannedBy", bannedByFilter);
+        if (userIdFilter) params.set("userId", userIdFilter);
+
+        const reportData = await fetchReportData(params, controller.signal);
         setData(reportData.users);
         setAllCards(reportData.cards);
+        setTruncatedLayers(reportData.truncated);
+        setError(null);
         setLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
+        setRefreshing(false);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setError(
+          err instanceof Error ? err.message : "Failed to fetch report data",
+        );
         setLoading(false);
-      });
-  }, []);
+        setRefreshing(false);
+      }
+    }, 350);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [
+    searchQuery,
+    flagFilter,
+    statusFilter,
+    currentCardFilter,
+    cardStatusFilter,
+    cardDepartmentFilter,
+    activityEventFilter,
+    dateFrom,
+    dateTo,
+    dateField,
+    modifiedByFilter,
+    bannedByFilter,
+    userIdFilter,
+  ]);
 
   // Keep the search box in sync with /reports?search= so dashboard links,
   // history entries, and refreshes restore the same filtered view.
@@ -1269,6 +1357,13 @@ export default function ReportsPage() {
           </span>
         </div>
       )}
+      {truncatedLayers.length > 0 && (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          A filter matched a very large number of records ({truncatedLayers.join(", ")})
+          and was capped — results may be incomplete. Narrow the filters for
+          exact results.
+        </div>
+      )}
       <header className="flex flex-col gap-3 pb-2 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">User Reports</h1>
@@ -1642,7 +1737,11 @@ export default function ReportsPage() {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+      <div
+        className={`overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm transition-opacity ${
+          refreshing ? "pointer-events-none opacity-60" : ""
+        }`}
+      >
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-sm">
             <thead>
