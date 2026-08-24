@@ -1,5 +1,3 @@
-"use server";
-
 import { NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { cookies } from "next/headers";
@@ -9,6 +7,10 @@ import type {
   ActivityEntry,
   ReportCardRow,
 } from "@/app/(app)/reports/types";
+
+// Reports still walks whole collections (bounded by select()); allow extra
+// time until the P2 pagination rework lands.
+export const maxDuration = 60;
 
 async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
   const cookieStore = await cookies();
@@ -62,13 +64,57 @@ export async function GET() {
     if ("error" in access) return access.error;
     const { db } = access;
 
+    // select() everywhere: photos and unused fields never leave Firestore,
+    // so the function's memory footprint stays proportional to report data,
+    // not to image blobs.
     const [usersSnapshot, cardsSnapshot, issuesSnapshot, bannedSnapshot, historySnapshot, migrationDoc] =
       await Promise.all([
-        db.collection("users").get(),
-        db.collection("arc_cards").get(),
-        db.collection("issues").get(),
-        db.collection("banned_users").get(),
-        db.collection("history").get(),
+        db
+          .collection("users")
+          .select(
+            "firstName",
+            "secondName",
+            "email",
+            "phoneNumber",
+            "phone",
+            "status",
+            "banned",
+            "banReason",
+            "genderIdentity",
+            "dateOfBirth",
+            "address",
+            "postalCode",
+            "notes",
+            "createdAt",
+            "passesIssued",
+          )
+          .get(),
+        db
+          .collection("arc_cards")
+          .select(
+            "arcCardNumber",
+            "securityCode",
+            "department",
+            "status",
+            "allocationDate",
+            "currentUserId",
+            "userId",
+            "passRecipient",
+            "issueDates",
+            "notes",
+            "createdAt",
+            "updatedAt",
+          )
+          .get(),
+        db.collection("issues").select("cardId", "userId", "issueDate").get(),
+        db
+          .collection("banned_users")
+          .select("userId", "banReason", "bannedAt", "bannedBy")
+          .get(),
+        db
+          .collection("history")
+          .select("userId", "date", "event", "notes", "modifiedBy", "reason")
+          .get(),
         db.collection("_migrations").doc("issues_v1").get(),
       ]);
 

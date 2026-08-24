@@ -304,11 +304,11 @@ Legend: reads/req = Firestore document reads per request at the 10k-card model.
 
 | Priority | Route / service | Work |
 |---|---|---|
-| P1 | `GET /api/cards` | Cursor pagination + `where` filters + per-page name join (`in` ≤ 30) + `count()` totals |
-| P1 | `dashboardService.ts` | Drop `picture` from list query; paginate users; server search; keep `count()` stats |
-| P1 | `GET /api/reports/data` | Paginate user rows; lazy per-user history endpoints; filters → queries; strip photos |
+| P1 | `GET /api/cards` | ✅ Done: cursor pagination + status/department filters + card-number/recipient-name search (via the name index) + `count()` totals + per-page joins (`in` ≤ 30) |
+| P1 | `dashboardService.ts` | ✅ Done: `photoThumb`-only select, cursor-paged users (newest first) with per-page card/issue joins, server search, `count()` stats + total |
+| P1 | `GET /api/reports/data` | ✅ Partial: photos/unused fields stripped via `select()` (memory blob gone), `maxDuration` raised. Remaining — user-row pagination, lazy per-user history, filters→queries — moved to the P2 reports rework: they are inseparable from the client filter-model change (every filter scans nested per-user arrays today) |
 | P1 | Photo split (base64 kept) | ✅ Done: `photoThumb` on user doc + `user_photos/{uid}` full-res + lazy `GET /api/users/[id]/photo`; `scripts/migrate-photos.mjs` backfills (run `--prune` post-deploy to drop legacy `picture`) |
-| P1 | `POST /api/reports/export` | Kill the N+1 (batch `in` joins); pre-filter by date `where`; `maxDuration` |
+| P1 | `POST /api/reports/export` | ✅ Done: N+1 replaced with batched `in` joins (30/chunk), `maxDuration: 120`, `select()` on scans. (Date pre-filtering stays client-side: `allocationDate` mixes ISO and M/D/YYYY formats, so a string-range `where` would silently drop rows) |
 | P2 | `POST /api/cards` | `db.batch()`, request cap, duplicate-number guard |
 | P2 | `cron/expire-cards` | Status-filtered query, cursor paging, run-lock, `maxDuration: 300` |
 | P2 | `(app)/layout.tsx` + per-route auth | Single session verification per request path; drop redundant `checkRevoked` on hot reads |
@@ -319,8 +319,8 @@ Legend: reads/req = Firestore document reads per request at the 10k-card model.
 
 | Priority | Page | Work |
 |---|---|---|
-| P1 | `/dashboard` | **New** pagination UI (none exists): paged/virtualized recipient list, debounced server search, thumbnail avatars, "load more" affordance |
-| P1 | `/cards` | Rewire existing prev/next footer to server cursors; debounced server search box; filter drawer → query params; totals from `count()` |
+| P1 | `/dashboard` | ✅ Done: Load More pagination (60/page, "x of y"), debounced server search (search-first `?search=` mode), thumbnail avatars; search hits beyond loaded pages render from server-hydrated results |
+| P1 | `/cards` | ✅ Done: prev/next walk server cursors, debounced server search (card number or recipient name), filter drawer → query params, totals from `count()`; sorting is within-page |
 | P1 | Register-recipient modal | ✅ Done: emits ~3 KB thumbnail alongside the ≤ 1 MB base64 (both stay base64) |
 | P2 | `/reports` | Server-driven filters + pagination; lazy expanded-row history; exports via server with filter params; static filter option lists |
 | P2 | `/cards/new` | Client cap + progress for bulk allocation |
