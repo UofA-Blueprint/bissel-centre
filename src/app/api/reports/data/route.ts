@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { cookies } from "next/headers";
+import { decryptPhoneSafe } from "@/utils/phoneEncryption";
 import type {
   UserReportRow,
   CardHistoryEntry,
@@ -346,7 +347,11 @@ export async function GET() {
         firstName: d.firstName || "",
         lastName: d.secondName || "",
         email: d.email || "",
-        phoneNumber: d.phoneNumber || d.phone || "",
+        // users.phone holds AES-GCM ciphertext (see encryptPhone in
+        // register-recipient) — decrypt for display; on any failure
+        // (bad ciphertext OR missing key) this yields "", never the
+        // raw ciphertext and never a 500.
+        phoneNumber: d.phoneNumber || decryptPhoneSafe(d.phone ?? null) || "",
         status: d.status || (d.banned ? "Inactive" : "Active"),
         banned: d.banned || false,
         banReason: bannedInfo?.reason || d.banReason || "",

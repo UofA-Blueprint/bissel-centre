@@ -100,6 +100,20 @@ export function decryptPhone(encryptedPhone: string | null): string | null {
 }
 
 /**
+ * Display-safe decryption: returns null instead of throwing when the key is
+ * unconfigured (e.g. local dev without PHONE_ENCRYPTION_KEY). Write paths
+ * should keep using encryptPhone/decryptPhone so misconfiguration is loud;
+ * read-for-display paths use this so one missing env var can't 500 a page.
+ */
+export function decryptPhoneSafe(encryptedPhone: string | null): string | null {
+  try {
+    return decryptPhone(encryptedPhone);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Utility to decrypt phone numbers in batch (for displaying multiple users)
  */
 export function decryptPhones(
