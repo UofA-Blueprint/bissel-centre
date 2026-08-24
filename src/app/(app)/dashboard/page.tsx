@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Flag } from "lucide-react";
+import { ArrowLeft, Flag, Search } from "lucide-react";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
 import SearchBar from "@/app/components/SearchBar";
 import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
@@ -62,6 +62,10 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
   const isViewOnly = useIsViewOnly();
   const createdByFilter = searchParams.get("createdBy");
+  // Search-first mode lives behind /dashboard?search=... — presence of the
+  // param (even empty) switches the page into the dense results view.
+  const searchParam = searchParams.get("search");
+  const isSearchMode = searchParam !== null;
   const [stats, setStats] = useState([
     { icon: "/card.svg", number: 0, label: "Available Cards" },
     { icon: "/checkmark.svg", number: 0, label: "Active Cards" },
@@ -191,10 +195,144 @@ export default function DashboardPage() {
     router.push("/cards");
   };
 
+  // Keep the input in sync with the URL so back/forward and shared links
+  // restore the search without a reload.
+  useEffect(() => {
+    setSearchQuery((prev) => {
+      const fromUrl = searchParam ?? "";
+      return fromUrl !== prev ? fromUrl : prev;
+    });
+  }, [searchParam]);
+
+  const urlWithSearch = (q: string) => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("search", q);
+    return `/dashboard?${params.toString()}`;
+  };
+
+  // First keystroke on the normal dashboard pushes ONE history entry into
+  // search mode (so browser-back returns to /dashboard); edits inside search
+  // mode replace in place so history isn't spammed per keystroke.
+  const enterSearchMode = (q: string) => {
+    setSearchQuery(q);
+    window.history.pushState(null, "", urlWithSearch(q));
+  };
+
+  const updateSearchUrl = (q: string) => {
+    setSearchQuery(q);
+    window.history.replaceState(null, "", urlWithSearch(q));
+  };
+
+  const exitSearchMode = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("search");
+    const qs = params.toString();
+    router.push(qs ? `/dashboard?${qs}` : "/dashboard");
+  };
+
   if (forbidden) {
     return (
       <main className="bg-gray-100 min-h-screen">
         <StaffOnlyNotice />
+      </main>
+    );
+  }
+
+  if (isSearchMode) {
+    return (
+      <main className="min-h-screen bg-gray-100">
+        <div className="px-3 py-3 sm:px-6">
+          {/* Top bar: back · slim long search · actions on the right */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={exitSearchMode}
+              title="Back to dashboard"
+              className="shrink-0 rounded-md p-2 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+              <input
+                autoFocus
+                type="search"
+                value={searchQuery}
+                onChange={(e) => updateSearchUrl(e.target.value)}
+                placeholder="Search recipients by name or alias..."
+                className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-800 placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              />
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                disabled={isViewOnly}
+                onClick={() => {
+                  if (!isViewOnly) setIsModalOpen(true);
+                }}
+                title={
+                  isViewOnly
+                    ? "Sign in as administrative staff to add recipients."
+                    : undefined
+                }
+                className={`rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap ${
+                  isViewOnly
+                    ? "cursor-not-allowed bg-gray-200 text-gray-400"
+                    : "bg-primary text-white hover:bg-cyan-600"
+                }`}
+              >
+                ＋ New Recipient
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                <Image src="/filter.svg" alt="" width={14} height={14} />
+                Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Count */}
+          <p className="mt-2 px-1 text-xs text-gray-500">
+            {isLoading
+              ? "Loading…"
+              : `${searchResults.length} / ${users.length} shown`}
+          </p>
+
+          {/* Dense, full-width, table-like results */}
+          <div className="mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
+            <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] gap-x-3 border-b border-gray-200 bg-gray-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:grid-cols-[minmax(0,3fr)_repeat(3,minmax(0,1fr))]">
+              <span>Name</span>
+              <span className="hidden sm:block">Date of birth</span>
+              <span className="hidden sm:block">Status</span>
+              <span>Card</span>
+            </div>
+            {isLoading ? (
+              <div className="px-3 py-6 text-center text-sm text-gray-400">
+                Loading recipients…
+              </div>
+            ) : searchResults.length === 0 ? (
+              <div className="px-3 py-6 text-center text-sm text-gray-400">
+                No recipients match this search.
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {searchResults.map((user) => (
+                  <SearchResultRow key={user.id} user={user} />
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+        <RegisterRecipientModal
+          open={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onSuccess={() => {
+            setIsLoading(true);
+            setRefreshNonce((prev) => prev + 1);
+          }}
+        />
       </main>
     );
   }
@@ -230,7 +368,7 @@ export default function DashboardPage() {
         {/* Search Bar */}
         <SearchBar
           value={searchQuery}
-          onChange={setSearchQuery}
+          onChange={enterSearchMode}
           placeholder="Search recipients..."
           className="max-w-7xl mx-auto mb-4 sm:mb-6 sticky top-0 z-20 lg:static lg:z-auto lg:shrink-0"
         >
@@ -372,6 +510,71 @@ const UserCardSkeleton: React.FC = () => {
         </div>
       </div>
     </div>
+  );
+};
+
+// Dense row for the search-first (?search=) view — small height, full width.
+const SearchResultRow: React.FC<{ user: User }> = ({ user }) => {
+  const [imgError, setImgError] = useState(false);
+  const showImage = user.picture && !imgError;
+  const initial = user.firstName?.trim().charAt(0).toUpperCase() || "?";
+  const cardStatusText =
+    user.arcCardStatus === "Active"
+      ? "Active"
+      : user.arcCardStatus === "Unloaded"
+        ? "Assigned · Unloaded"
+        : user.arcCardStatus === "Expired"
+          ? "Expired"
+          : "None";
+
+  return (
+    <li className="grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-center gap-x-3 px-3 py-1.5 text-sm hover:bg-cyan-50/40 sm:grid-cols-[minmax(0,3fr)_repeat(3,minmax(0,1fr))]">
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200">
+          {showImage ? (
+            <Image
+              src={user.picture as string}
+              alt=""
+              width={24}
+              height={24}
+              className="h-6 w-6 rounded-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <span className="text-[10px] font-bold text-gray-600">
+              {initial}
+            </span>
+          )}
+        </div>
+        {user.banned && (
+          <Flag
+            className="h-3.5 w-3.5 shrink-0 text-red-500"
+            aria-label="Flagged user"
+          />
+        )}
+        <span className="truncate font-medium text-gray-900">
+          {user.firstName} {user.secondName}
+        </span>
+        {user.aliases?.length > 0 && (
+          <span className="hidden truncate text-xs text-gray-400 md:inline">
+            aka {user.aliases.join(", ")}
+          </span>
+        )}
+      </div>
+      <span className="hidden truncate text-gray-600 sm:block">
+        {user.dateOfBirth || "—"}
+      </span>
+      <span className="hidden truncate text-gray-600 sm:block">
+        {user.status === "Inactive" ? "Inactive" : "Active"}
+      </span>
+      <span
+        className={`truncate ${
+          user.arcCardStatus === "Expired" ? "text-red-500" : "text-gray-600"
+        }`}
+      >
+        {cardStatusText}
+      </span>
+    </li>
   );
 };
 
