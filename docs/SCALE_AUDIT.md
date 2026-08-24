@@ -88,8 +88,8 @@ Legend: reads/req = Firestore document reads per request at the 10k-card model.
 - Photos are **99.5 %** of the payload (measured).
 - **Reads/req at model scale:** ~41,000.
 - **Verdict: BLOCKER (worst endpoint).**
-- **Fix:** drop `picture` from the list query (serve thumbnails from Storage,
-  SCALE-02); paginate users server-side; move search server-side (SCALE-03); compute
+- **Fix:** select `photoThumb` instead of `picture` (photo split, SCALE-02);
+  paginate users server-side; move search server-side (SCALE-03); compute
   `arcCardStatus`/`lastIssued` per page via bounded queries, or denormalize
   `lastIssuedAt`/`cardStatus` onto the user doc at write time.
 
@@ -183,7 +183,8 @@ Legend: reads/req = Firestore document reads per request at the 10k-card model.
   unbounded list.
 - **UI work needed:** paged or virtualized list + pagination controls (none exist
   today — this page needs *new* UI, unlike cards/reports); debounced server-side
-  search box; thumbnail URLs instead of base64; "load more" or numbered pages;
+  search box; `photoThumb` avatars (small base64) with the full photo loaded
+  lazily via `/api/users/[id]/photo`; "load more" or numbered pages;
   keep stat tiles (already backed by `count()` aggregates).
 
 ### 3.2 `/cards` — `src/app/(app)/cards/page.tsx`
@@ -228,10 +229,11 @@ Legend: reads/req = Firestore document reads per request at the 10k-card model.
 ### 3.5 Register-recipient modal — `src/app/components/register_recipient/`
 
 - Card lookup uses the server-limited `/api/cards/search` ✅.
-- `PhotoUploadForm.tsx:171-206` compresses the photo to a ≤ 1 MB base64 string —
-  this is the **root cause of SCALE-02** (110 KB average inline photos).
-- **UI work needed (with backend):** upload to Firebase Storage, submit the storage
-  path/URL instead of base64; show upload progress.
+- `PhotoUploadForm.tsx` compresses the photo to a ≤ 1 MB base64 string — the
+  **root cause of SCALE-02** when stored inline on the user doc.
+- **Resolved (base64 kept):** the form now also emits a ~3 KB `thumbnail`; the
+  API stores the thumb on the user doc and the full-res base64 in
+  `user_photos/{uid}` (progressive load via `/api/users/[id]/photo`).
 
 ### 3.6 `/it-admin` — server redirect page ✅. `/login`, `/register`,
 `/admin/login`, `/admin/register` — auth flows, O(1) ✅.
@@ -248,9 +250,17 @@ Legend: reads/req = Firestore document reads per request at the 10k-card model.
 ## 4. Cross-cutting root causes
 
 1. **Base64 photos inside `users` docs** (~110 KB avg, 99.5 % of user payload).
-   Single change with the largest payoff: move to Firebase Storage, store
-   `photoPath`, serve resized thumbnails. Turns the dashboard cap from ~41 users
-   into a non-issue and shrinks reports/memory by ~100×.
+   Strategy (base64 is retained by design): **split the photo out of the list
+   path** — a small `photoThumb` (~3 KB, 96 px JPEG base64) stays on the user
+   doc for list avatars; the full-res base64 moves to a `user_photos/{uid}` doc
+   and loads progressively via `GET /api/users/[id]/photo` only when a detail
+   view needs it. Turns the dashboard cap from ~41 users into a non-issue and
+   shrinks reports/memory by ~30× once the legacy `picture` field is pruned.
+   `user_photos` is server-only (deny-by-default rules; no client grant needed).
+   Hardening: the API validates the declared mimetype against magic bytes and
+   regenerates the thumbnail server-side with sharp (client thumb is ignored);
+   the photo endpoint serves real `image/jpeg` bytes (browser-cacheable, ~25%
+   smaller than base64-in-JSON) while Firestore storage stays base64.
 2. **No server-side pagination anywhere** except `/api/cards/search`. Every list is
    full-scan → serialize → let the client slice.
 3. **Derived display data computed by cross-joining full collections per request**
@@ -290,7 +300,7 @@ Legend: reads/req = Firestore document reads per request at the 10k-card model.
 | P1 | `GET /api/cards` | Cursor pagination + `where` filters + per-page name join (`in` ≤ 30) + `count()` totals |
 | P1 | `dashboardService.ts` | Drop `picture` from list query; paginate users; server search; keep `count()` stats |
 | P1 | `GET /api/reports/data` | Paginate user rows; lazy per-user history endpoints; filters → queries; strip photos |
-| P1 | Photo storage | New upload path (Firebase Storage) + migration script for existing base64 photos |
+| P1 | Photo split (base64 kept) | ✅ Done: `photoThumb` on user doc + `user_photos/{uid}` full-res + lazy `GET /api/users/[id]/photo`; `scripts/migrate-photos.mjs` backfills (run `--prune` post-deploy to drop legacy `picture`) |
 | P1 | `POST /api/reports/export` | Kill the N+1 (batch `in` joins); pre-filter by date `where`; `maxDuration` |
 | P2 | `POST /api/cards` | `db.batch()`, request cap, duplicate-number guard |
 | P2 | `cron/expire-cards` | Status-filtered query, cursor paging, run-lock, `maxDuration: 300` |
@@ -304,7 +314,7 @@ Legend: reads/req = Firestore document reads per request at the 10k-card model.
 |---|---|---|
 | P1 | `/dashboard` | **New** pagination UI (none exists): paged/virtualized recipient list, debounced server search, thumbnail avatars, "load more" affordance |
 | P1 | `/cards` | Rewire existing prev/next footer to server cursors; debounced server search box; filter drawer → query params; totals from `count()` |
-| P1 | Register-recipient modal | Storage upload with progress instead of base64 inline |
+| P1 | Register-recipient modal | ✅ Done: emits ~3 KB thumbnail alongside the ≤ 1 MB base64 (both stay base64) |
 | P2 | `/reports` | Server-driven filters + pagination; lazy expanded-row history; exports via server with filter params; static filter option lists |
 | P2 | `/cards/new` | Client cap + progress for bulk allocation |
 | P3 | `/admin/dashboard` | "First 100 shown" indicator on drill-down modals |

@@ -4,12 +4,62 @@ import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { cookies } from "next/headers";
 import { encryptPhone } from "@/utils/phoneEncryption";
 import admin from "firebase-admin";
+import sharp from "sharp";
 
 const MAX_PICTURE_FIELD_BYTES = 1_000_000; // Firestore field value must stay < ~1,048,487 bytes.
+// Thumbnails live on the user doc and ship with every list response — keep
+// them small so list payloads stay bounded.
+const MAX_THUMBNAIL_FIELD_BYTES = 20_000;
 const EDMONTON_TIMEZONE = "America/Edmonton";
 
 function getUtf8ByteSize(value: string): number {
   return Buffer.byteLength(value, "utf8");
+}
+
+const THUMB_MAX_DIMENSION = 96;
+const THUMB_QUALITY = 75;
+
+// Server-side image validation: the declared data-URL mimetype must be
+// JPEG/PNG and must match the file's magic bytes — the client is not trusted.
+function decodeImageDataUrl(
+  dataUrl: string,
+): { buffer: Buffer; mime: "image/jpeg" | "image/png" } | null {
+  const match = dataUrl.match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) return null;
+
+  const declared = `image/${match[1]}` as "image/jpeg" | "image/png";
+  let buffer: Buffer;
+  try {
+    buffer = Buffer.from(match[2], "base64");
+  } catch {
+    return null;
+  }
+  if (buffer.length < 8) return null;
+
+  const isJpeg =
+    buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  const isPng =
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47;
+
+  if (declared === "image/jpeg" && !isJpeg) return null;
+  if (declared === "image/png" && !isPng) return null;
+
+  return { buffer, mime: declared };
+}
+
+// The thumbnail stored on the user doc is regenerated here from the uploaded
+// image, so a tampered client can never store a thumb that doesn't match.
+async function makeAuthoritativeThumb(buffer: Buffer): Promise<string> {
+  const out = await sharp(buffer)
+    .resize(THUMB_MAX_DIMENSION, THUMB_MAX_DIMENSION, { fit: "inside" })
+    // JPEG has no alpha — flatten transparent PNGs onto white, not black.
+    .flatten({ background: "#ffffff" })
+    .jpeg({ quality: THUMB_QUALITY })
+    .toBuffer();
+  return `data:image/jpeg;base64,${out.toString("base64")}`;
 }
 
 function formatEdmontonDate(date: Date): string {
@@ -91,6 +141,7 @@ export async function POST(request: NextRequest) {
       };
       photoUpload?: {
         imageUrl?: string;
+        thumbnail?: string;
       };
     };
 
@@ -120,6 +171,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate the image server-side (declared mimetype + magic bytes), then
+    // regenerate the thumbnail here — the client-sent thumbnail is ignored.
+    const decoded = decodeImageDataUrl(photoUpload.imageUrl);
+    if (!decoded) {
+      return NextResponse.json(
+        { error: "Recipient photo must be a valid JPEG or PNG image." },
+        { status: 400 },
+      );
+    }
+
+    let thumbnail: string | null = null;
+    try {
+      thumbnail = await makeAuthoritativeThumb(decoded.buffer);
+    } catch {
+      return NextResponse.json(
+        { error: "Recipient photo could not be processed. Please upload a different image." },
+        { status: 400 },
+      );
+    }
+    if (getUtf8ByteSize(thumbnail) > MAX_THUMBNAIL_FIELD_BYTES) {
+      thumbnail = null;
+    }
+
     // Validate required personal details fields
     const requiredFields = ["firstName", "lastName", "email"] as const;
     for (const field of requiredFields) {
@@ -144,7 +218,9 @@ export async function POST(request: NextRequest) {
       // Required schema fields
       firstName: personalDetails.firstName,
       secondName: personalDetails.lastName,
-      picture: photoUpload.imageUrl, // Base64 encoded image
+      // Full-res base64 lives in user_photos/{uid}; the user doc only carries
+      // the small thumbnail so list queries stay bounded.
+      photoThumb: thumbnail,
       genderIdentity: personalDetails.gender || null,
       aliases: personalDetails.alias ? [personalDetails.alias] : [],
       dateOfBirth: personalDetails.dob || null,
@@ -167,11 +243,17 @@ export async function POST(request: NextRequest) {
     };
 
     const userRef = db.collection("users").doc();
-    // const batch = db.batch();
-    // batch.set(userRef, userData);
+    const photoRef = db.collection("user_photos").doc(userRef.id);
+    const photoData = {
+      picture: photoUpload.imageUrl, // Full-res base64, served via /api/users/[id]/photo
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
 
     if (!arcCardDigits){
-      await userRef.set(userData)
+      const batch = db.batch();
+      batch.set(userRef, userData);
+      batch.set(photoRef, photoData);
+      await batch.commit();
     }else{
       try {
         await db.runTransaction(async(tx) => {
@@ -229,6 +311,8 @@ export async function POST(request: NextRequest) {
             arcCardNumber: arcCardDigits,
             passesIssued: [cardDoc.id],
           })
+
+          tx.set(photoRef, photoData)
 
           // Rule 3: once assigned, card becomes Active
           tx.update(cardDoc.ref,{

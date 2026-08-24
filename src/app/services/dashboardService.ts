@@ -97,10 +97,12 @@ export async function getDashboardSummaryForViewer(viewer: {
   bannedUsersAgg,] = await Promise.all([
   db
     .collection("users")
+    // photoThumb (small base64) is the only image data lists ever ship; the
+    // full-res base64 lives in user_photos and loads lazily per recipient.
     .select(
       "firstName",
       "secondName",
-      "picture",
+      "photoThumb",
       "aliases",
       "banned",
       "status",
@@ -192,6 +194,8 @@ export async function getDashboardSummaryForViewer(viewer: {
     return {
       id: doc.id,
       ...(data as Omit<DashboardUser, "id" | "arcCardStatus" | "lastIssued">),
+      // Keep the response field name the UI already renders.
+      picture: (data.photoThumb as string | undefined) ?? "",
       status: userAccountStatus,
       createdAt: toDateOrNull(data.createdAt)?.toISOString() ?? data.createdAt,
       updatedAt: toDateOrNull(data.updatedAt)?.toISOString() ?? data.updatedAt,
