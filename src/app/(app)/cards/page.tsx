@@ -8,7 +8,7 @@ import {
   SortingState,
   useReactTable,
 } from "@tanstack/react-table";
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, ChevronUp, Filter, Plus, Search, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, ChevronUp, Filter, Info, Plus, Search, X } from "lucide-react";
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from "@headlessui/react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -168,7 +168,7 @@ function SortableHeader({
     <button
       type="button"
       onClick={onClick}
-      className="group flex items-center gap-1 text-left text-xs font-bold text-gray-900 hover:text-black"
+      className="group flex items-center gap-1 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 hover:text-gray-700"
     >
       {label}
       <span className="flex flex-col opacity-0 transition-opacity group-hover:opacity-50">
@@ -220,6 +220,37 @@ function formatDateTime(value: string): string {
     minute: "2-digit",
     timeZone: EDMONTON_TIMEZONE,
   }).format(parsed);
+}
+
+// Calendar days until the next monthly unload run (Edmonton time), or null
+// when the schedule is disabled.
+function daysUntilNextUnload(s: MonthlyUnloadSchedule): number | null {
+  if (!s.enabled) return null;
+  const now = new Date(
+    new Date().toLocaleString("en-US", { timeZone: EDMONTON_TIMEZONE }),
+  );
+  const [hh, mm] = (s.time24 || "00:00")
+    .split(":")
+    .map((v) => Number(v) || 0);
+  const clampDay = (y: number, m: number) =>
+    Math.min(s.dayOfMonth, new Date(y, m + 1, 0).getDate());
+  let target = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    clampDay(now.getFullYear(), now.getMonth()),
+    hh,
+    mm,
+  );
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  // Already ran this month (or the slot passed) → next occurrence is next month.
+  if (target.getTime() <= now.getTime() || s.lastRunMonthKey === monthKey) {
+    const y = now.getMonth() === 11 ? now.getFullYear() + 1 : now.getFullYear();
+    const m = (now.getMonth() + 1) % 12;
+    target = new Date(y, m, clampDay(y, m), hh, mm);
+  }
+  const dayOnly = (d: Date) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  return Math.max(0, Math.round((dayOnly(target) - dayOnly(now)) / 86_400_000));
 }
 
 function StatusSelect({
@@ -274,6 +305,7 @@ export default function CardsPage() {
   const [scheduleDayInput, setScheduleDayInput] = useState("1");
   const [scheduleTimeInput, setScheduleTimeInput] = useState("00:00");
   const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+  const [scheduleExpanded, setScheduleExpanded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -551,7 +583,7 @@ const saveMonthlyUnloadSchedule = async () => {
       },
       {
         accessorKey: "status",
-        header: () => <span className="text-xs font-bold text-gray-900">Status</span>,
+        header: () => <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Status</span>,
         cell: ({ row, getValue }) => (
           <StatusSelect
             value={getValue<CardStatus>()}
@@ -563,7 +595,7 @@ const saveMonthlyUnloadSchedule = async () => {
       },
       {
         accessorKey: "department",
-        header: () => <span className="text-xs font-bold text-gray-900">Department</span>,
+        header: () => <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Department</span>,
         cell: ({ getValue }) => {
           const value = getValue<CardDepartment>();
           return <Chip label={value} tone={deptStyles[value]} />;
@@ -595,7 +627,7 @@ const saveMonthlyUnloadSchedule = async () => {
       },
       {
         accessorKey: "passRecipient",
-        header: () => <span className="text-xs font-bold text-gray-900">Pass Recipient</span>,
+        header: () => <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Pass Recipient</span>,
         cell: ({ getValue }) => (
           <span className="font-medium text-gray-900">{getValue<string>() || "No recipient"}</span>
         ),
@@ -603,19 +635,19 @@ const saveMonthlyUnloadSchedule = async () => {
       {
         id: "allocationDateDisplay",
         accessorKey: "allocationDate",
-        header: () => <span className="text-xs font-bold text-gray-900">Allocation Date</span>,
+        header: () => <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Allocation Date</span>,
         cell: ({ getValue }) => (
           <span className="text-gray-700">{formatDate(getValue<string>()) || "—"}</span>
         ),
       },
       {
         accessorKey: "notes",
-        header: () => <span className="text-xs font-bold text-gray-900">Notes</span>,
+        header: () => <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Notes</span>,
         cell: ({ getValue }) => <span className="text-gray-500">{getValue<string>()}</span>,
       },
       {
         id: "actions",
-        header: () => <span className="text-xs font-bold text-gray-900">Actions</span>,
+        header: () => <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Actions</span>,
         cell: ({ row }) => {
           const card = row.original;
           const canForceUnassign = Boolean(card.currentUserId);
@@ -687,91 +719,112 @@ const saveMonthlyUnloadSchedule = async () => {
     );
   }
 
+  const unloadCountdown = daysUntilNextUnload(monthlyUnloadSchedule);
+
   return (
-    <div className="space-y-4 px-2 py-3 sm:p-6 bg-gray-50 font-sans">
+    <div className="space-y-4 px-2 py-3 sm:p-6 bg-gray-100 font-sans">
       <BackNavigation href="/dashboard" label="Back to Staff Dashboard" />
       {/* --- Title --- */}
       <h1 className="text-2xl font-bold text-gray-900">ARC Card Master List</h1>
-      <p className="rounded-lg border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs sm:text-sm text-cyan-900">
-        Card statuses: <strong>Active</strong> = assigned and usable, <strong>Unloaded</strong> = assigned or unassigned but not loaded, <strong>Unattributed</strong> = unassigned, <strong>Expired</strong> = no longer valid, <strong>Cancelled</strong> = retired card.
+      <p className="text-xs text-gray-400">
+        Statuses: <strong>Active</strong> assigned &amp; usable · <strong>Unloaded</strong> not loaded · <strong>Unattributed</strong> unassigned · <strong>Expired</strong> no longer valid · <strong>Cancelled</strong> retired.
       </p>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-gray-900">
-              Monthly Auto-Unload Schedule (Edmonton Time)
-            </h2>
-            <p className="text-xs text-gray-500">
-              On the chosen day/time each month, all cards automatically become Unloaded. Assigned users stay linked unless Force Unassign is used.
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              Last run: {monthlyUnloadSchedule.lastRunAt ? formatDateTime(monthlyUnloadSchedule.lastRunAt) : "Never"}
-            </p>
-            <p className="mt-0.5 text-xs text-gray-500">
-              Saved schedule: Day {monthlyUnloadSchedule.dayOfMonth} at {monthlyUnloadSchedule.time24} ({monthlyUnloadSchedule.timezone})
-            </p>
+      {/* Monthly unload lives behind a compact info box; click for details. */}
+      <div className="rounded-lg bg-white shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)]">
+        <button
+          type="button"
+          onClick={() => setScheduleExpanded((v) => !v)}
+          className="flex w-full items-center gap-2.5 px-4 py-2.5 text-left"
+        >
+          <Info className="h-4 w-4 shrink-0 text-cyan-600" />
+          <span className="flex-1 text-sm text-gray-700">
+            {unloadCountdown === null
+              ? "Monthly auto-unload is off"
+              : unloadCountdown === 0
+                ? "Monthly card unload runs today"
+                : `Next monthly card unload in ${unloadCountdown} day${unloadCountdown === 1 ? "" : "s"}`}
+          </span>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-gray-400 transition-transform ${
+              scheduleExpanded ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+        {scheduleExpanded && (
+          <div className="flex flex-col gap-3 border-t border-gray-100 px-4 pb-4 pt-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-900">
+                Monthly Auto-Unload Schedule (Edmonton Time)
+              </h2>
+              <p className="text-xs text-gray-500">
+                On the chosen day/time each month, all cards automatically become Unloaded. Assigned users stay linked unless Force Unassign is used.
+              </p>
+              <p className="mt-1 text-xs text-gray-500">
+                Last run: {monthlyUnloadSchedule.lastRunAt ? formatDateTime(monthlyUnloadSchedule.lastRunAt) : "Never"}
+              </p>
+              <p className="mt-0.5 text-xs text-gray-500">
+                Saved schedule: Day {monthlyUnloadSchedule.dayOfMonth} at {monthlyUnloadSchedule.time24} ({monthlyUnloadSchedule.timezone})
+              </p>
+            </div>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex flex-col">
+                <span className="text-xs text-gray-600">Day of month</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={31}
+                  value={scheduleDayInput}
+                  onChange={(e) => setScheduleDayInput(e.target.value)}
+                  className="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <label className="flex flex-col">
+                <span className="text-xs text-gray-600">Time (24h)</span>
+                <input
+                  type="time"
+                  value={scheduleTimeInput}
+                  onChange={(e) => setScheduleTimeInput(e.target.value)}
+                  className="w-28 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void saveMonthlyUnloadSchedule()}
+                disabled={isSavingSchedule}
+                className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingSchedule ? "Saving..." : "Save Schedule"}
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col">
-              <span className="text-xs text-gray-600">Day of month</span>
-              <input
-                type="number"
-                min={1}
-                max={31}
-                value={scheduleDayInput}
-                onChange={(e) => setScheduleDayInput(e.target.value)}
-                className="w-24 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-              />
-            </label>
-            <label className="flex flex-col">
-              <span className="text-xs text-gray-600">Time (24h)</span>
-              <input
-                type="time"
-                value={scheduleTimeInput}
-                onChange={(e) => setScheduleTimeInput(e.target.value)}
-                className="w-28 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() => void saveMonthlyUnloadSchedule()}
-              disabled={isSavingSchedule}
-              className="rounded-md bg-primary px-3 py-2 text-xs font-semibold text-white hover:bg-cyan-600 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isSavingSchedule ? "Saving..." : "Save Schedule"}
-            </button>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* --- Toolbar: full-width search + actions (sticky, hide-on-scroll on mobile) --- */}
       <div
         ref={toolbarRef}
-        className={`sticky top-0 z-30 -mx-2 bg-gray-50 px-2 pb-3 pt-1 transition-transform duration-200 sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pb-4 sm:pt-0 ${
+        className={`sticky top-0 z-30 -mx-2 bg-gray-100 px-2 pb-3 pt-1 transition-transform duration-200 sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:pb-4 sm:pt-0 ${
           barsHidden ? "-translate-y-full sm:translate-y-0" : "translate-y-0"
         }`}
       >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="relative w-full sm:flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
             <input
               type="search"
               placeholder="Search by card number or recipient name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-md border border-gray-300 bg-white pl-4 pr-10 py-2 text-sm placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-9 text-sm text-gray-800 placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
             />
-            {searchQuery ? (
+            {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
                 className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-gray-400 hover:text-gray-600"
               >
                 <X size={14} strokeWidth={3} />
               </button>
-            ) : (
-              <div className="absolute right-1 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-white bg-cyan-400">
-                <Search size={14} strokeWidth={3} />
-              </div>
             )}
           </div>
 
@@ -806,7 +859,7 @@ const saveMonthlyUnloadSchedule = async () => {
             ) : (
               <Link
                 href="/cards/new"
-                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-[#00BDD6] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors sm:flex-none"
+                className="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-cyan-600 transition-colors sm:flex-none"
               >
                 <Plus className="h-4 w-4" strokeWidth={3} />
                 New Allocation
@@ -816,17 +869,16 @@ const saveMonthlyUnloadSchedule = async () => {
         </div>
       </div>
 
-      {/* --- Table Wrapper --- */}
-      <div className="hidden md:block overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+      {/* --- Table Wrapper (styling mirrors the recipients results table) --- */}
+      <div className="hidden md:block overflow-hidden rounded-lg border border-gray-200 bg-white shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)]">
         <div className="overflow-x-auto">
           <table className="min-w-full border-collapse text-sm">
             <thead>
-              {/* Header Row Color: Light Cyan/Blue from screenshot */}
-              <tr className="bg-[#E0F7FA] border-b border-gray-200">
+              <tr className="bg-gray-50 border-b border-gray-200">
                 {table.getFlatHeaders().map((header) => (
                   <th
                     key={header.id}
-                    className="px-4 py-4 text-left align-middle"
+                    className="px-3 py-2 text-left align-middle"
                     style={{ width: columnWidths[header.id] ?? "auto" }}
                   >
                     {header.isPlaceholder
@@ -836,20 +888,16 @@ const saveMonthlyUnloadSchedule = async () => {
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
-              {rows.map((row, index) => (
+            <tbody className="divide-y divide-gray-100">
+              {rows.map((row) => (
                 <tr
                   key={row.id}
-                  // Zebra Striping: Even rows (index 1, 3...) are gray in standard CSS 0-index logic
-                  // But visually row 1 is white, row 2 is gray.
-                  className={`transition-colors hover:bg-blue-50/50 ${
-                    index % 2 === 0 ? "bg-white" : "bg-gray-100"
-                  }`}
+                  className="bg-white transition-colors hover:bg-cyan-50/40"
                 >
                   {row.getVisibleCells().map((cell) => (
                     <td
                       key={cell.id}
-                      className="px-4 py-3.5 align-top"
+                      className="px-3 py-2.5 align-middle"
                     >
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
@@ -921,14 +969,14 @@ const saveMonthlyUnloadSchedule = async () => {
 
       {/* --- Pagination Footer (sticky, hide-on-scroll on mobile) --- */}
       <div
-        className={`sticky bottom-0 z-30 -mx-2 flex items-center justify-end gap-4 border-t border-gray-200 bg-gray-50 px-2 py-3 pr-2 transition-transform duration-200 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:py-4 ${
+        className={`sticky bottom-0 z-30 -mx-2 flex items-center justify-end gap-4 border-t border-gray-200 bg-gray-100 px-2 py-3 pr-2 transition-transform duration-200 sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:py-4 ${
           barsHidden ? "translate-y-full sm:translate-y-0" : "translate-y-0"
         }`}
       >
         <button
           onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
           disabled={pageIndex === 0 || isFetching}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500 text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
@@ -944,7 +992,7 @@ const saveMonthlyUnloadSchedule = async () => {
         <button
           onClick={() => setPageIndex((p) => p + 1)}
           disabled={!nextCursor || isFetching}
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500 text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <ArrowRight className="h-4 w-4" />
         </button>
