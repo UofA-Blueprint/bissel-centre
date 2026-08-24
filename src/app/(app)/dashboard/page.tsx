@@ -590,9 +590,9 @@ export default function DashboardPage() {
             </button>
           </div>
         </SearchBar>
-        <div className="max-w-7xl mx-auto w-full -mt-2 mb-4 sm:mb-6 flex justify-center">
-          <span className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-sm font-medium text-white shadow-sm text-center">
-            If the dashboard doesn&apos;t reflect the latest updates, please refresh.
+        <div className="max-w-7xl mx-auto w-full -mt-2 mb-3 flex justify-end">
+          <span className="text-xs text-gray-400">
+            Not seeing the latest updates? Refresh the page.
           </span>
         </div>
 
