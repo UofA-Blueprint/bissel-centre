@@ -72,9 +72,16 @@ export async function GET(
     // Stored value is a base64 data URL; decode and serve real image bytes so
     // <img src="/api/users/{id}/photo"> works with native browser caching
     // (~25% smaller transfer than base64-in-JSON).
-    const match = picture.match(/^data:(image\/[a-z+.-]+);base64,([A-Za-z0-9+/=]+)$/);
+    // Raster types only — legacy data predates write-time validation, and
+    // serving e.g. image/svg+xml from this origin would be a stored-XSS vector.
+    const match = picture.match(
+      /^data:(image\/(?:jpeg|png|webp|avif|gif));base64,([A-Za-z0-9+/=]+)$/,
+    );
     if (!match) {
-      return NextResponse.json({ error: "Stored photo is invalid" }, { status: 500 });
+      return NextResponse.json(
+        { error: "Stored photo is not a supported image format" },
+        { status: 415 },
+      );
     }
 
     const body = Buffer.from(match[2], "base64");
@@ -83,6 +90,10 @@ export async function GET(
         "Content-Type": match[1],
         "Content-Length": String(body.length),
         "Cache-Control": "private, max-age=3600",
+        // Belt and braces: never sniff, never script, even if a crafted
+        // polyglot image slips through.
+        "X-Content-Type-Options": "nosniff",
+        "Content-Security-Policy": "default-src 'none'; sandbox",
       },
     });
   } catch (error) {

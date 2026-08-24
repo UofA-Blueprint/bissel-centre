@@ -43,8 +43,12 @@ function sniffImageMime(buffer: Buffer): string | null {
     return "image/gif";
   }
   if (buffer.toString("ascii", 4, 8) === "ftyp") {
-    const brand = buffer.toString("ascii", 8, 12);
-    if (brand === "avif" || brand === "avis") return "image/avif";
+    // Major brand may be mif1/msf1 with avif only in the compatible-brands
+    // list that follows — scan the whole ftyp box, not just bytes 8-11.
+    const ftypSize = buffer.readUInt32BE(0);
+    const boxEnd = Math.min(buffer.length, Math.max(12, Math.min(ftypSize, 64)));
+    const brands = buffer.toString("ascii", 8, boxEnd);
+    if (brands.includes("avif") || brands.includes("avis")) return "image/avif";
   }
   return null;
 }
@@ -269,7 +273,10 @@ export async function POST(request: NextRequest) {
     const userRef = db.collection("users").doc();
     const photoRef = db.collection("user_photos").doc(userRef.id);
     const photoData = {
-      picture: photoUpload.imageUrl, // Full-res base64, served via /api/users/[id]/photo
+      // Canonical re-encode of the validated bytes — never the client's raw
+      // string, so lenient-decoder quirks (mid-stream padding etc.) can't be
+      // stored. Served via /api/users/[id]/photo.
+      picture: `data:${decoded.mime};base64,${decoded.buffer.toString("base64")}`,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
