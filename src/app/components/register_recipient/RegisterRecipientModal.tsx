@@ -1,284 +1,226 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
+import { MoreHorizontal } from "lucide-react";
 import RegisterRecipientForm, {
   RecipientFormData,
 } from "./PersonalDetailsForm";
 import AdditionalInfoForm, { AdditionalInfoData } from "./AdditionalInfoForm";
 import PhotoUploadForm, { PhotoUploadData } from "./PhotoUploadForm";
 import ReviewDetails from "./ReviewDetails";
+import HistorySection, { RecipientHistoryRow } from "./HistorySection";
+import ArcCardSection, { ArcCardSectionData } from "./ArcCardSection";
 import SidebarSteps from "./SidebarSteps";
 
 type Props = {
   open: boolean;
-  /** Running index from ?register= — keys this draft in sessionStorage. */
-  draftId: string | null;
-  /** Current wizard step (1-4) from ?step= — URL is the source of truth. */
-  step: number;
-  onStepChange: (step: number) => void;
   onClose: () => void;
   onSuccess?: () => void;
+  mode?: "create" | "edit";
+  recipientId?: string;
 };
 
 type FormData = {
   personalDetails?: RecipientFormData;
   additionalInfo?: AdditionalInfoData;
   photoUpload?: PhotoUploadData;
-};
-
-type DraftEnvelope = {
-  data: FormData;
-  completedSteps: number[];
-  createdAt?: number;
-  updatedAt?: number;
-};
-
-// Multiple drafts live side by side, keyed by a running index. Text fields (and a
-// COMPLETED photo, stored as base64) survive reloads; a merely-selected photo
-// is a blob: URL tied to the document and cannot survive, so it is stripped
-// before persisting.
-export const draftStorageKey = (id: string) => `recipient-draft:${id}`;
-
-const persistableData = (data: FormData): FormData => {
-  if (data.photoUpload?.imageUrl?.startsWith("blob:")) {
-    const { photoUpload: _dropped, ...rest } = data;
-    return rest;
-  }
-  return data;
+  arcCard?: ArcCardSectionData;
+  accountState?: {
+    banned: boolean;
+    flagged: boolean;
+  };
+  history?: RecipientHistoryRow[];
 };
 
 const RegisterRecipientModal: React.FC<Props> = ({
   open,
-  draftId,
-  step,
-  onStepChange,
   onClose,
   onSuccess,
+  mode = "create",
+  recipientId,
 }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [draftNotice, setDraftNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const personalDetailsRef = useRef<{ submit: () => void }>(null);
   const additionalInfoRef = useRef<{ submit: () => void }>(null);
   const photouploadRef = useRef<{ submit: () => void }>(null);
+  const arcCardRef = useRef<{ submit: () => void }>(null);
   const reviewRef = useRef<{ submit: () => void }>(null);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [formData, setFormData] = useState<FormData>({});
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [manageMenuOpen, setManageMenuOpen] = useState(false);
+  const [manageAction, setManageAction] = useState<
+    null | "FLAG" | "UNFLAG" | "BAN" | "UNBAN" | "DELETE"
+  >(null);
+  const [manageReason, setManageReason] = useState("");
+  const [manageSubmitting, setManageSubmitting] = useState(false);
+  const isEditMode = mode === "edit";
+  const steps = isEditMode
+    ? [
+        { id: 1, label: "Personal Details" },
+        { id: 2, label: "Additional Information" },
+        { id: 3, label: "Upload Photo" },
+        { id: 4, label: "ARC Card" },
+        { id: 5, label: "Review" },
+        { id: 6, label: "History" },
+      ]
+    : [
+        { id: 1, label: "Personal Details" },
+        { id: 2, label: "Additional Information" },
+        { id: 3, label: "Upload Photo" },
+        { id: 4, label: "Review" },
+      ];
+  const sidebarSteps = isEditMode
+    ? steps.filter((step) => step.id !== 6)
+    : steps;
+  const separateHistoryStep = isEditMode
+    ? { id: 6, label: "History" }
+    : undefined;
 
-  // Headless UI's Dialog renders through a portal, which cannot be
-  // server-rendered. With URL-driven opens (?register=), SSR would render
-  // the dialog open and mismatch the client portal markup — so render it
-  // closed until after mount; it opens on the first client frame.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // ── Load draft when the modal opens / the uuid changes ─────────
-  useEffect(() => {
-    if (!open || !draftId) return;
+  const loadRecipient = useCallback(async () => {
+    if (!isEditMode || !recipientId) return;
+    setIsLoadingProfile(true);
     setErrorMessage(null);
-    setDraftNotice(null);
     try {
-      const raw = sessionStorage.getItem(draftStorageKey(draftId));
-      if (raw) {
-        const parsed = JSON.parse(raw) as DraftEnvelope;
-        setFormData(persistableData(parsed.data ?? {}));
-        setCompletedSteps(new Set(parsed.completedSteps ?? []));
+      const response = await fetch(`/api/recipients/${recipientId}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to load recipient");
+      }
+      setFormData(data);
+      setCurrentPage((prev) => (prev > steps.length ? steps.length : prev));
+    } finally {
+      setIsLoadingProfile(false);
+    }
+  }, [isEditMode, recipientId, steps.length]);
+
+  useEffect(() => {
+    if (!open || !isEditMode || !recipientId) return;
+
+    let cancelled = false;
+    loadRecipient()
+      .then(() => {
+        if (cancelled) return;
+        setCurrentPage(1);
+        setCompletedSteps(new Set());
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setErrorMessage(
+            error instanceof Error ? error.message : "Failed to load recipient",
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, isEditMode, recipientId, loadRecipient]);
+
+  const hasFormData = () => {
+    return (
+      Object.keys(formData.personalDetails || {}).length > 0 ||
+      Object.keys(formData.additionalInfo || {}).length > 0 ||
+      Object.keys(formData.photoUpload || {}).length > 0
+    );
+  };
+
+  const handleClose = () => {
+    if (hasFormData()) {
+      const confirmed = window.confirm(
+        "Are you sure you want to exit? All entered data will be lost.",
+      );
+      if (!confirmed) {
         return;
       }
-    } catch {
-      // Corrupted entry — treat the same as missing.
+      // Clear all form data
+      setFormData({});
+      setCurrentPage(1);
+      setCompletedSteps(new Set());
+      setErrorMessage(null);
+      setManageMenuOpen(false);
+      setManageAction(null);
+      setManageReason("");
     }
-    // Edge case: the uuid is not in sessionStorage (link opened in another
-    // tab, session ended, or storage was cleared). Start fresh under the
-    // same uuid and say so.
-    setFormData({});
-    setCompletedSteps(new Set());
-    setDraftNotice(
-      "This draft couldn't be restored — it may be from another tab or an ended session. Starting a fresh registration.",
-    );
-    try {
-      sessionStorage.setItem(
-        draftStorageKey(draftId),
-        JSON.stringify({ data: {}, completedSteps: [], createdAt: Date.now() }),
-      );
-    } catch {
-      /* storage unavailable — form still works, just won't restore */
-    }
-  }, [open, draftId]);
+    onClose();
+  };
 
-  // ── Persist draft on every change ──────────────────────────────
-  useEffect(() => {
-    if (!open || !draftId) return;
-    try {
-      const envelope: DraftEnvelope = {
-        data: persistableData(formData),
-        completedSteps: Array.from(completedSteps),
-        updatedAt: Date.now(),
-      };
-      sessionStorage.setItem(draftStorageKey(draftId), JSON.stringify(envelope));
-    } catch {
-      setErrorMessage(
-        "Draft could not be saved locally (browser storage may be full). You can continue, but a reload will not restore this form.",
-      );
+  const handleDialogClose = () => {
+    // While the manage-action popup is open, keep the base modal from handling
+    // outside clicks/escape to avoid accidental "Are you sure you want to exit?"
+    // prompts during flag/ban/delete input.
+    if (manageAction) {
+      return;
     }
-  }, [open, draftId, formData, completedSteps]);
+    handleClose();
+  };
 
-  // ── Step submit handlers (Continue button — validated paths) ───
   const handlePersonalDetailsSubmit = (data: RecipientFormData) => {
     setErrorMessage(null);
     setFormData((prev) => ({ ...prev, personalDetails: data }));
     setCompletedSteps((prev) => new Set(prev).add(1));
-    onStepChange(2);
+    setCurrentPage(2);
   };
 
   const handleAdditionalInfoSubmit = (data: AdditionalInfoData) => {
     setErrorMessage(null);
     setFormData((prev) => ({ ...prev, additionalInfo: data }));
     setCompletedSteps((prev) => new Set(prev).add(2));
-    onStepChange(3);
+    setCurrentPage(3);
   };
 
   const handlePhotoUploadSubmit = (data: PhotoUploadData) => {
     setErrorMessage(null);
     setFormData((prev) => ({ ...prev, photoUpload: data }));
     setCompletedSteps((prev) => new Set(prev).add(3));
-    onStepChange(4);
+    setCurrentPage(4);
   };
 
-  // ── Free navigation: collect current page without validating ───
-  const collectCurrentPage = () => {
-    /* eslint-disable @typescript-eslint/no-explicit-any */
-    let patch: Partial<FormData> = {};
-    if (step === 1) {
-      const d = (personalDetailsRef.current as any)?.getData?.();
-      if (d) patch = { personalDetails: d };
-    } else if (step === 2) {
-      const d = (additionalInfoRef.current as any)?.getData?.();
-      if (d) patch = { additionalInfo: d };
-    } else if (step === 3) {
-      const d = (photouploadRef.current as any)?.getData?.();
-      if (d) patch = { photoUpload: d };
+  const ensureCurrentStepDataIsSaved = () => {
+    if (currentPage === 1 && personalDetailsRef.current) {
+      const data = (personalDetailsRef.current as any).getData?.();
+      if (data) setFormData((prev) => ({ ...prev, personalDetails: data }));
+    } else if (currentPage === 2 && additionalInfoRef.current) {
+      const data = (additionalInfoRef.current as any).getData?.();
+      if (data) setFormData((prev) => ({ ...prev, additionalInfo: data }));
+    } else if (currentPage === 3 && photouploadRef.current) {
+      const data = (photouploadRef.current as any).getData?.();
+      if (data) setFormData((prev) => ({ ...prev, photoUpload: data }));
+    } else if (currentPage === 4 && arcCardRef.current) {
+      const data = (arcCardRef.current as any).getData?.();
+      if (data) setFormData((prev) => ({ ...prev, arcCard: data }));
     }
-    /* eslint-enable @typescript-eslint/no-explicit-any */
-    if (Object.keys(patch).length > 0) {
-      setFormData((prev) => ({ ...prev, ...patch }));
-    }
-  };
-
-  const handleGoToStep = (target: number) => {
-    if (target === step || target < 1 || target > 4) return;
-    setErrorMessage(null);
-    collectCurrentPage();
-    onStepChange(target);
-  };
-
-  const handleBack = () => {
-    setErrorMessage(null);
-    collectCurrentPage();
-    onStepChange(step - 1);
-  };
-
-  const handleContinue = () => {
-    setErrorMessage(null);
-    switch (step) {
-      case 1:
-        personalDetailsRef.current?.submit();
-        break;
-      case 2:
-        additionalInfoRef.current?.submit();
-        break;
-      case 3:
-        photouploadRef.current?.submit();
-        break;
-      case 4:
-        void handleFinalSubmit();
-        break;
-      default:
-        break;
-    }
-  };
-
-  // ── Final submit: cross-step validation with step-labeled errors
-  //    (free jumping means any step can be incomplete at this point) ──
-  const validateAll = (): { step: number; message: string } | null => {
-    const pd = formData.personalDetails;
-    if (!pd?.firstName?.trim()) {
-      return { step: 1, message: "Step 1 (Personal Details): name is required." };
-    }
-    if (!pd?.email?.trim()) {
-      return { step: 1, message: "Step 1 (Personal Details): email is required." };
-    }
-    if (!pd?.postalCode?.trim()) {
-      return {
-        step: 1,
-        message: "Step 1 (Personal Details): postal code is required.",
-      };
-    }
-    const postalCodeRegex = /^[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d$/;
-    if (!postalCodeRegex.test(pd.postalCode.trim())) {
-      return {
-        step: 1,
-        message:
-          "Step 1 (Personal Details): postal code must use the format A1A1A1 (e.g., T5Z1H3).",
-      };
-    }
-    const photo = formData.photoUpload?.imageUrl;
-    if (!photo) {
-      return {
-        step: 3,
-        message:
-          "Step 3 (Photo): a recipient photo is required. Photos are not restored after a reload — please add it again.",
-      };
-    }
-    if (!photo.startsWith("data:")) {
-      return {
-        step: 3,
-        message:
-          "Step 3 (Photo): the photo hasn't been processed yet — press Continue on the photo step to finish it.",
-      };
-    }
-    return null;
   };
 
   const handleFinalSubmit = async () => {
     if (submittingRef.current) return;
-
-    const invalid = validateAll();
-    if (invalid) {
-      setErrorMessage(invalid.message);
-      onStepChange(invalid.step);
-      return;
-    }
-
     submittingRef.current = true;
     setIsSubmitting(true);
     try {
       setErrorMessage(null);
+      ensureCurrentStepDataIsSaved();
 
-      const response = await fetch("/api/register-recipient", {
-        method: "POST",
+      const response = await fetch(
+        isEditMode ? `/api/recipients/${recipientId}` : "/api/register-recipient",
+        {
+        method: isEditMode ? "PATCH" : "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(formData),
-      });
+        },
+      );
 
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.error || "Failed to register recipient");
       }
 
-      // Success: this draft is done — remove it from the index.
-      if (draftId) {
-        try {
-          sessionStorage.removeItem(draftStorageKey(draftId));
-        } catch {
-          /* ignore */
-        }
-      }
+      // Clear form and close modal on success
       setFormData({});
+      setCurrentPage(1);
       setCompletedSteps(new Set());
       setErrorMessage(null);
       submittingRef.current = false;
@@ -290,23 +232,105 @@ const RegisterRecipientModal: React.FC<Props> = ({
       setErrorMessage(
         error instanceof Error
           ? error.message
-          : "Failed to register recipient. Please try again.",
+          : isEditMode
+            ? "Failed to update recipient. Please try again."
+            : "Failed to register recipient. Please try again.",
       );
       submittingRef.current = false;
       setIsSubmitting(false);
     }
   };
 
-  // Closing keeps the draft in sessionStorage — reopening the same URL (or
-  // browser-back) restores it, so no destructive-close confirmation needed.
-  const handleClose = () => {
-    if (isSubmitting) return;
-    collectCurrentPage();
-    onClose();
+  const handleContinue = () => {
+    setErrorMessage(null);
+    switch (currentPage) {
+      case 1:
+        personalDetailsRef.current?.submit();
+        break;
+      case 2:
+        additionalInfoRef.current?.submit();
+        break;
+      case 3:
+        photouploadRef.current?.submit();
+        break;
+      case 4:
+        if (isEditMode) {
+          arcCardRef.current?.submit();
+          break;
+        }
+        reviewRef.current?.submit();
+        break;
+      case 5:
+        reviewRef.current?.submit();
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleBack = () => {
+    setErrorMessage(null);
+    setCurrentPage((prev) => prev - 1);
+  };
+
+  const handleGoToStep = (step: number) => {
+    setErrorMessage(null);
+    if (step === currentPage || step < 1 || step > steps.length) return;
+    ensureCurrentStepDataIsSaved();
+    setCurrentPage(step);
+  };
+
+  const handleManageAction = async () => {
+    if (!isEditMode || !recipientId || !manageAction) return;
+    if (
+      (manageAction === "FLAG" ||
+        manageAction === "UNFLAG" ||
+        manageAction === "BAN" ||
+        manageAction === "UNBAN") &&
+      !manageReason.trim()
+    ) {
+      setErrorMessage("Reason is required.");
+      return;
+    }
+    setManageSubmitting(true);
+    setErrorMessage(null);
+    try {
+      const response = await fetch(`/api/recipients/${recipientId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: manageAction,
+          reason: manageReason.trim(),
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to complete action");
+      }
+
+      if (manageAction === "DELETE") {
+        setManageAction(null);
+        setManageReason("");
+        onClose();
+        onSuccess?.();
+        return;
+      }
+
+      await loadRecipient();
+      setManageAction(null);
+      setManageReason("");
+      onSuccess?.();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Failed to complete action.",
+      );
+    } finally {
+      setManageSubmitting(false);
+    }
   };
 
   const renderCurrentPage = () => {
-    switch (step) {
+    switch (currentPage) {
       case 1:
         return (
           <RegisterRecipientForm
@@ -323,6 +347,7 @@ const RegisterRecipientModal: React.FC<Props> = ({
             onSubmit={handleAdditionalInfoSubmit}
             onError={setErrorMessage}
             initialData={formData.additionalInfo}
+            requireArcCard={!isEditMode}
           />
         );
       case 3:
@@ -335,14 +360,45 @@ const RegisterRecipientModal: React.FC<Props> = ({
           />
         );
       case 4:
+        if (isEditMode) {
+          return (
+            <ArcCardSection
+              ref={arcCardRef}
+              onSubmit={(data) => {
+                setErrorMessage(null);
+                setFormData((prev) => ({ ...prev, arcCard: data }));
+                setCompletedSteps((prev) => new Set(prev).add(4));
+                setCurrentPage(5);
+              }}
+              onError={setErrorMessage}
+              initialData={formData.arcCard}
+            />
+          );
+        }
         return (
           <ReviewDetails
             formData={formData}
             goToPersonal={() => handleGoToStep(1)}
             goToAdditionalInfo={() => handleGoToStep(2)}
             goToPhotoUpload={() => handleGoToStep(3)}
+            showArcCard={!isEditMode}
           />
         );
+      case 5:
+        if (isEditMode) {
+          return (
+            <ReviewDetails
+              formData={formData}
+              goToPersonal={() => handleGoToStep(1)}
+              goToAdditionalInfo={() => handleGoToStep(2)}
+              goToPhotoUpload={() => handleGoToStep(3)}
+              showArcCard={false}
+            />
+          );
+        }
+        return <div>Step not implemented yet.</div>;
+      case 6:
+        return <HistorySection rows={formData.history ?? []} />;
       default:
         return <div>Step not implemented yet.</div>;
     }
@@ -350,8 +406,8 @@ const RegisterRecipientModal: React.FC<Props> = ({
 
   return (
     <Dialog
-      open={open && mounted}
-      onClose={handleClose}
+      open={open}
+      onClose={handleDialogClose}
       className="fixed inset-0 z-50 overflow-y-auto"
     >
       <div className="flex items-center justify-center min-h-screen p-4">
@@ -360,8 +416,58 @@ const RegisterRecipientModal: React.FC<Props> = ({
           {/* Modal Header */}
           <div className="flex-shrink-0 flex items-start justify-between bg-offWhite p-4 rounded-t-lg border-b-2">
             <DialogTitle className="text-lg font-medium">
-              New Recipient
+              {isEditMode ? "Edit Recipient" : "New Recipient"}
             </DialogTitle>
+            {isEditMode && (
+              <div className="relative mr-2">
+                <button
+                  type="button"
+                  onClick={() => setManageMenuOpen((prev) => !prev)}
+                  className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                  Manage Account
+                </button>
+                {manageMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-44 rounded-md border border-gray-200 bg-white shadow-lg z-40">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManageAction("DELETE");
+                        setManageMenuOpen(false);
+                      }}
+                      className="block w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50"
+                    >
+                      Delete User
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManageAction(
+                          formData.accountState?.flagged ? "UNFLAG" : "FLAG",
+                        );
+                        setManageMenuOpen(false);
+                      }}
+                      className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      {formData.accountState?.flagged ? "Unflag User" : "Flag User"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setManageAction(
+                          formData.accountState?.banned ? "UNBAN" : "BAN",
+                        );
+                        setManageMenuOpen(false);
+                      }}
+                      className="block w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      {formData.accountState?.banned ? "Unban User" : "Ban User"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <button
               type="button"
               aria-label="Close"
@@ -372,30 +478,26 @@ const RegisterRecipientModal: React.FC<Props> = ({
               <span className="sr-only">Close</span>✕
             </button>
           </div>
-          {draftNotice && (
-            <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-800">
-              <span>{draftNotice}</span>
-              <button
-                type="button"
-                onClick={() => setDraftNotice(null)}
-                className="shrink-0 rounded p-0.5 text-amber-600 hover:bg-amber-100"
-              >
-                ✕
-              </button>
-            </div>
-          )}
           {/* Modal Body */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 flex-grow bg-lightGrey overflow-hidden">
             {/* Sidebar (small column) */}
             <SidebarSteps
-              currentPage={step}
+              currentPage={currentPage}
               goToStep={handleGoToStep}
               completedSteps={completedSteps}
+              steps={sidebarSteps}
+              separateStep={separateHistoryStep}
             />
 
             {/* Form (larger column) */}
             <section className="md:col-span-3 overflow-y-auto p-4">
-              {renderCurrentPage()}
+              {isLoadingProfile ? (
+                <div className="flex h-full items-center justify-center text-gray-500">
+                  Loading recipient...
+                </div>
+              ) : (
+                renderCurrentPage()
+              )}
             </section>
           </div>
           {/* Modal Footer */}
@@ -404,7 +506,7 @@ const RegisterRecipientModal: React.FC<Props> = ({
               {errorMessage && <span>{errorMessage}</span>}
             </div>
             <div>
-              {step > 1 && (
+              {currentPage > 1 && (
                 <button
                   onClick={handleBack}
                   disabled={isSubmitting}
@@ -416,18 +518,88 @@ const RegisterRecipientModal: React.FC<Props> = ({
             </div>
             <button
               disabled={isSubmitting}
-              onClick={step === 4 ? () => void handleFinalSubmit() : handleContinue}
+              onClick={
+                isEditMode && currentPage === 6
+                  ? handleClose
+                  : (isEditMode ? currentPage === 5 : currentPage === 4)
+                    ? handleFinalSubmit
+                    : handleContinue
+              }
               className="px-3 py-2 bg-primary text-white rounded-xl disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {step === 4
+              {isEditMode && currentPage === 6
+                ? "Done"
+                : (isEditMode ? currentPage === 5 : currentPage === 4)
                 ? isSubmitting
-                  ? "Finishing..."
-                  : "Finish Registration"
+                  ? isEditMode ? "Saving..." : "Finishing..."
+                  : isEditMode ? "Save Changes" : "Finish Registration"
                 : "Continue →"}
             </button>
           </div>
         </DialogPanel>
       </div>
+      {manageAction && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {manageAction === "DELETE"
+                ? "Delete Recipient"
+                : manageAction === "FLAG"
+                  ? "Flag Recipient"
+                  : manageAction === "UNFLAG"
+                    ? "Unflag Recipient"
+                    : manageAction === "UNBAN"
+                      ? "Unban Recipient"
+                      : "Ban Recipient"}
+            </h3>
+            <p className="mt-2 text-sm text-gray-600">
+              {manageAction === "DELETE"
+                ? "This will permanently remove this recipient and unlink any assigned cards."
+                : manageAction === "FLAG"
+                  ? "Provide the reason for flagging this recipient."
+                  : manageAction === "UNFLAG"
+                    ? "Provide the reason for removing the flag from this recipient."
+                    : manageAction === "UNBAN"
+                      ? "Provide the reason for removing the ban from this recipient."
+                      : "Provide the reason for banning this recipient. Any assigned cards will be unassigned."}
+            </p>
+            {manageAction !== "DELETE" && (
+              <textarea
+                value={manageReason}
+                onChange={(e) => setManageReason(e.target.value)}
+                className="mt-3 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                rows={3}
+                placeholder="Reason (required)"
+              />
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (manageSubmitting) return;
+                  setManageAction(null);
+                  setManageReason("");
+                }}
+                className="rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={manageSubmitting}
+                onClick={handleManageAction}
+                className={`rounded-md px-3 py-2 text-sm text-white ${
+                  manageAction === "DELETE" || manageAction === "BAN"
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-primary hover:bg-cyan-600"
+                } disabled:opacity-50`}
+              >
+                {manageSubmitting ? "Working..." : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Dialog>
   );
 };

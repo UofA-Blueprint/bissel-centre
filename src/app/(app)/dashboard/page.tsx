@@ -5,10 +5,8 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Flag, Search } from "lucide-react";
-import RegisterRecipientModal, {
-  draftStorageKey,
-} from "@/app/components/register_recipient/RegisterRecipientModal";
+import { ArrowLeft, Flag, Search, XCircle } from "lucide-react";
+import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
 import SearchBar from "@/app/components/SearchBar";
 import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
 import StaffSelector from "../StaffSelector";
@@ -36,6 +34,8 @@ interface User {
   postalCode: string;
   passesIssued: string[];
   banned: boolean;
+  flagged?: boolean;
+  flagReason?: string;
   banReason?: string;
   notes?: string;
   status?: "Active" | "Inactive"; // Account status (different from banned)
@@ -60,7 +60,11 @@ interface SearchApiResult {
   name: string;
   aliases?: string[];
   dateOfBirth?: string;
+  postalCode?: string;
   banned?: boolean;
+  flagged?: boolean;
+  flagReason?: string;
+  banReason?: string;
   status?: string;
   picture?: string;
   arcCardStatus?: User["arcCardStatus"];
@@ -69,24 +73,6 @@ interface SearchApiResult {
 const USERS_PAGE_SIZE = 60;
 
 // ?register= carries a small running index (1, 2, 3, …) per tab session.
-const DRAFT_ID_RE = /^[1-9]\d{0,5}$/;
-
-// Next unused index = max over existing draft keys + 1. Scanning (rather
-// than a separate counter) self-heals when a URL from another tab names an
-// index this tab never allocated.
-const nextDraftIndex = (): string => {
-  let max = 0;
-  try {
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const match = sessionStorage.key(i)?.match(/^recipient-draft:(\d+)$/);
-      if (match) max = Math.max(max, Number.parseInt(match[1], 10));
-    }
-  } catch {
-    /* storage unavailable */
-  }
-  return String(max + 1);
-};
-
 const DASHBOARD_CACHE_TTL_MS = 30_000;
 let dashboardSummaryCache: {
   data: DashboardSummaryResponse;
@@ -105,14 +91,6 @@ export default function DashboardPage() {
   // Register modal lives behind ?register=<index>&step=N — the running
   // index keys the draft in sessionStorage so multiple drafts coexist and
   // reloads or history navigation restore the right one.
-  const registerParam = searchParams.get("register");
-  const stepParam = searchParams.get("step");
-  const registerDraftId =
-    registerParam && DRAFT_ID_RE.test(registerParam) ? registerParam : null;
-  const registerStep = Math.min(
-    4,
-    Math.max(1, Number.parseInt(stepParam ?? "1", 10) || 1),
-  );
   const [stats, setStats] = useState([
     { icon: "/card.svg", number: 0, label: "Available Cards" },
     { icon: "/checkmark.svg", number: 0, label: "Active Cards" },
@@ -122,6 +100,7 @@ export default function DashboardPage() {
       label: "Expired Cards",
     },
     { icon: "/flag.svg", number: 0, label: "Flagged Users" },
+    { icon: "/flag.svg", number: 0, label: "Banned Users" },
   ]);
   const [users, setUsers] = useState<User[]>([]);
   const [nextUsersCursor, setNextUsersCursor] = useState<string | null>(null);
@@ -129,6 +108,8 @@ export default function DashboardPage() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -249,9 +230,12 @@ export default function DashboardPage() {
               aliases: r.aliases ?? [],
               dateOfBirth: r.dateOfBirth ?? "",
               address: "",
-              postalCode: "",
+              postalCode: r.postalCode ?? "",
               passesIssued: [],
               banned: Boolean(r.banned),
+              flagged: Boolean(r.flagged),
+              flagReason: r.flagReason,
+              banReason: r.banReason,
               status: r.status === "Inactive" ? "Inactive" : "Active",
               createdAt: "",
               createdBy: "",
@@ -334,53 +318,9 @@ export default function DashboardPage() {
 
   // ── Register modal URL handlers ─────────────────────────────────
 
-  const seedDraft = (id: string) => {
-    try {
-      // Seed the envelope now so a later "index missing from storage" state
-      // is distinguishable as another-tab / ended-session.
-      sessionStorage.setItem(
-        draftStorageKey(id),
-        JSON.stringify({ data: {}, completedSteps: [], createdAt: Date.now() }),
-      );
-    } catch {
-      /* storage unavailable — modal still works, just won't restore */
-    }
-  };
-
-  // Normalize invalid ?register= values to the next running index.
-  useEffect(() => {
-    if (registerParam !== null && !DRAFT_ID_RE.test(registerParam)) {
-      const id = nextDraftIndex();
-      seedDraft(id);
-      const params = new URLSearchParams(window.location.search);
-      params.set("register", id);
-      params.set("step", "1");
-      window.history.replaceState(null, "", `/dashboard?${params.toString()}`);
-    }
-  }, [registerParam]);
-
   const openRegisterModal = () => {
-    const id = nextDraftIndex();
-    seedDraft(id);
-    const params = new URLSearchParams(window.location.search);
-    params.set("register", id);
-    params.set("step", "1");
-    window.history.pushState(null, "", `/dashboard?${params.toString()}`);
-  };
-
-  // Step changes push entries so browser-back walks the wizard backwards.
-  const setRegisterStep = (n: number) => {
-    const params = new URLSearchParams(window.location.search);
-    params.set("step", String(n));
-    window.history.pushState(null, "", `/dashboard?${params.toString()}`);
-  };
-
-  const closeRegisterModal = () => {
-    const params = new URLSearchParams(window.location.search);
-    params.delete("register");
-    params.delete("step");
-    const qs = params.toString();
-    window.history.pushState(null, "", qs ? `/dashboard?${qs}` : "/dashboard");
+    setEditingUserId(null);
+    setIsModalOpen(true);
   };
 
   if (forbidden) {
@@ -500,11 +440,13 @@ export default function DashboardPage() {
           )}
         </div>
         <RegisterRecipientModal
-          open={registerDraftId !== null}
-          draftId={registerDraftId}
-          step={registerStep}
-          onStepChange={setRegisterStep}
-          onClose={closeRegisterModal}
+          open={isModalOpen}
+          mode={editingUserId ? "edit" : "create"}
+          recipientId={editingUserId ?? undefined}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingUserId(null);
+          }}
           onSuccess={() => {
             setIsLoading(true);
             setRefreshNonce((prev) => prev + 1);
@@ -608,7 +550,15 @@ export default function DashboardPage() {
             <>
               <div className="flex flex-wrap gap-2 sm:gap-4 justify-center">
                 {searchResults.map((user) => (
-                  <UserCard key={user.id} user={user} />
+                  <UserCard
+                    key={user.id}
+                    user={user}
+                    isViewOnly={isViewOnly}
+                    onEdit={() => {
+                      setEditingUserId(user.id);
+                      setIsModalOpen(true);
+                    }}
+                  />
                 ))}
               </div>
 
@@ -643,11 +593,13 @@ export default function DashboardPage() {
         </div>
       </div>
       <RegisterRecipientModal
-        open={registerDraftId !== null}
-        draftId={registerDraftId}
-        step={registerStep}
-        onStepChange={setRegisterStep}
-        onClose={closeRegisterModal}
+        open={isModalOpen}
+        mode={editingUserId ? "edit" : "create"}
+        recipientId={editingUserId ?? undefined}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingUserId(null);
+        }}
         onSuccess={() => {
           setIsLoading(true);
           setRefreshNonce((prev) => prev + 1);
@@ -789,24 +741,35 @@ const SearchResultRow: React.FC<{ user: User }> = ({ user }) => {
   );
 };
 
-const UserCard: React.FC<{ user: User }> = ({ user }) => {
+const UserCard: React.FC<{
+  user: User;
+  onEdit: () => void;
+  isViewOnly: boolean;
+}> = ({ user, onEdit, isViewOnly }) => {
   const router = useRouter();
   const isBanned = user.banned;
+  const isFlagged = user.flagged === true;
   const arcCardStatus = user.arcCardStatus;
   const [imgError, setImgError] = useState(false);
   const initial = user.firstName?.trim().charAt(0).toUpperCase() || "?";
   const showImage = user.picture && !imgError;
   const openReports = () =>
     router.push(`/reports?userId=${encodeURIComponent(user.id)}`);
-  const userStatusText = user.status === "Inactive" ? "Inactive User" : "Active User";
+  const userStatusText = isBanned
+    ? "Banned User"
+    : isFlagged
+      ? "Flagged and Active User"
+      : user.status === "Inactive"
+        ? "Inactive User"
+        : "Active User";
   const cardStatusText =
     arcCardStatus === "Active"
       ? "Card Active"
       : arcCardStatus === "Unloaded"
         ? "Card Assigned but Unloaded"
-      : arcCardStatus === "Expired"
-        ? "Card Expired"
-        : "No Active Card";
+        : arcCardStatus === "Expired"
+          ? "Card Expired"
+          : "No Active Card";
   return (
     <div
       role="button"
@@ -838,7 +801,18 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
       {/* Name and Info Row */}
       <div className="flex-1 flex flex-col sm:flex-row sm:items-center min-w-0 gap-2">
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          {isBanned && <Flag className="h-4 w-4 text-red-500 shrink-0" aria-label="Flagged user" />}
+          {isFlagged && (
+            <Flag
+              className="h-4 w-4 text-orange-500 shrink-0"
+              aria-label="Flagged recipient"
+            />
+          )}
+          {isBanned && (
+            <XCircle
+              className="h-4 w-4 text-red-600 shrink-0"
+              aria-label="Banned recipient"
+            />
+          )}
           <span className="min-w-0 text-base sm:text-xl font-bold text-gray-900 truncate">
             {user.firstName} {user.secondName}
           </span>
@@ -849,13 +823,26 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
           </div>
           <div
             className={`min-w-0 sm:min-w-[130px] text-left sm:text-right text-xs sm:text-base font-medium ${
-              cardStatusText === "Card Expired" ? "text-red-500" : "text-gray-500"
+              cardStatusText === "Card Expired"
+                ? "text-red-500"
+                : "text-gray-500"
             }`}
           >
             {cardStatusText}
           </div>
         </div>
       </div>
+      <button
+        type="button"
+        disabled={isViewOnly}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (!isViewOnly) onEdit();
+        }}
+        className="ml-3 shrink-0 rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-primary hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-400"
+      >
+        Edit
+      </button>
     </div>
   );
 };

@@ -46,11 +46,13 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
     });
 
     const validate = (data: RecipientFormData): string | null => {
-      // Validate required fields. Last name is intentionally optional —
-      // single names (mononyms) are legal in Alberta and common among
-      // reclaimed traditional names.
-      if (!data.firstName || !data.postalCode || !data.email) {
-        return "Name, email, and postal code are required.";
+      if (
+        !data.firstName ||
+        !data.lastName ||
+        !data.postalCode ||
+        !data.email
+      ) {
+        return "First name, last name, email, and postal code are required.";
       }
 
       // Validate postal code format (Canadian: A1A1A1 or A1A 1A1)
@@ -110,10 +112,7 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
 
           <label className="flex flex-col">
             <span className="text-sm">
-              Last name{" "}
-              <span className="text-gray-500 text-xs">
-                (leave blank for single names)
-              </span>
+              Last name <span className="text-red-500">*</span>
             </span>
             <input
               value={lastName}

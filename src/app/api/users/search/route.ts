@@ -58,9 +58,7 @@ export async function GET(request: NextRequest) {
 
     const app = await initAdmin();
     // Hot read path — revocation check skipped (SCALE-05).
-    const decodedClaims = await app
-      .auth()
-      .verifySessionCookie(sessionCookie);
+    const decodedClaims = await app.auth().verifySessionCookie(sessionCookie);
 
     if (decodedClaims.admin !== true) {
       const staffDoc = await app
@@ -136,7 +134,11 @@ export async function GET(request: NextRequest) {
             "aliases",
             "photoThumb",
             "dateOfBirth",
+            "postalCode",
             "banned",
+            "flagged",
+            "flagReason",
+            "banReason",
             "status",
           )
           .get(),
@@ -172,7 +174,11 @@ export async function GET(request: NextRequest) {
         tier,
         aliases: (d?.aliases as string[] | undefined) ?? [],
         dateOfBirth: (d?.dateOfBirth as string | undefined) ?? "",
+        postalCode: (d?.postalCode as string | undefined) ?? "",
         banned: Boolean(d?.banned),
+        flagged: Boolean(d?.flagged),
+        flagReason: (d?.flagReason as string | undefined) ?? "",
+        banReason: (d?.banReason as string | undefined) ?? "",
         status: (d?.status as string | undefined) ?? "Active",
         picture: (d?.photoThumb as string | undefined) ?? "",
         arcCardStatus: cardStatusByUser.get(row.id),

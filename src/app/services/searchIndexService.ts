@@ -11,11 +11,7 @@ import { FieldValue } from "firebase-admin/firestore";
 // Structural stand-in for Transaction | WriteBatch — the union's overloaded
 // .set() is not callable in TS, but both satisfy this shape.
 interface IndexWriter {
-  set(
-    ref: DocumentReference,
-    data: DocumentData,
-    options: SetOptions,
-  ): unknown;
+  set(ref: DocumentReference, data: DocumentData, options: SetOptions): unknown;
 }
 import {
   buildIndexEntry,
@@ -46,7 +42,12 @@ export function upsertSearchIndexEntry(
   writer: IndexWriter,
   db: Firestore,
   userId: string,
-  userData: { firstName?: string; secondName?: string; aliases?: string[] },
+  userData: {
+    firstName?: string;
+    secondName?: string;
+    aliases?: string[];
+    postalCode?: string | null;
+  },
 ): void {
   const entry = buildIndexEntry(userData);
   const ref = searchIndexShardRef(db, shardForUserId(userId));
@@ -75,7 +76,9 @@ export function deleteSearchIndexEntry(
 }
 
 /** Read all shards and flatten to rows. ~SEARCH_INDEX_SHARDS doc reads. */
-export async function loadSearchIndex(db: Firestore): Promise<SearchIndexRow[]> {
+export async function loadSearchIndex(
+  db: Firestore,
+): Promise<SearchIndexRow[]> {
   const refs = Array.from({ length: SEARCH_INDEX_SHARDS }, (_, i) =>
     searchIndexShardRef(db, i),
   );

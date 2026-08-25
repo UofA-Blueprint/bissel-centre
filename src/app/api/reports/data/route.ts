@@ -40,9 +40,7 @@ async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
 
   const app = await initAdmin();
   // Hot read path — revocation check skipped (SCALE-05).
-  const decodedClaims = await app
-    .auth()
-    .verifySessionCookie(sessionCookie);
+  const decodedClaims = await app.auth().verifySessionCookie(sessionCookie);
 
   const db = app.firestore();
 
@@ -53,7 +51,7 @@ async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
     return {
       error: NextResponse.json(
         { error: "Forbidden - Staff access only" },
-        { status: 403 }
+        { status: 403 },
       ),
     };
   }
@@ -67,7 +65,7 @@ async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
     return {
       error: NextResponse.json(
         { error: "Forbidden - Staff access only" },
-        { status: 403 }
+        { status: 403 },
       ),
     };
   }
@@ -95,7 +93,8 @@ const toIsoString = (value: unknown): string => {
 
 const toDateOrNull = (value: unknown): Date | null => {
   if (!value) return null;
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (value instanceof Date)
+    return Number.isNaN(value.getTime()) ? null : value;
   if (typeof value === "object" && value !== null && "toDate" in value) {
     const d = (value as { toDate?: () => Date }).toDate?.();
     if (d instanceof Date && !Number.isNaN(d.getTime())) return d;
@@ -152,6 +151,8 @@ const USER_FIELDS = [
   "phone",
   "status",
   "banned",
+  "flagged",
+  "flagReason",
   "banReason",
   "genderIdentity",
   "dateOfBirth",
@@ -164,7 +165,7 @@ const USER_FIELDS = [
 
 type Filters = {
   search: string;
-  flag: "all" | "flagged" | "not_flagged";
+  flag: "all" | "flagged" | "banned" | "not_flagged";
   statuses: string[];
   currentCard: "all" | "has_current" | "no_current";
   createdFrom: Date | null;
@@ -195,7 +196,10 @@ function parseFilters(sp: URLSearchParams): Filters {
   const currentCard = sp.get("currentCard");
   return {
     search: (sp.get("search") ?? "").trim(),
-    flag: flag === "flagged" || flag === "not_flagged" ? flag : "all",
+    flag:
+      flag === "flagged" || flag === "banned" || flag === "not_flagged"
+        ? flag
+        : "all",
     statuses: csv("statuses", 2),
     currentCard:
       currentCard === "has_current" || currentCard === "no_current"
@@ -433,10 +437,18 @@ export async function GET(request: NextRequest) {
           (q) => {
             let out = q;
             if (f.flaggedFrom) {
-              out = out.where("bannedAt", ">=", Timestamp.fromDate(f.flaggedFrom));
+              out = out.where(
+                "bannedAt",
+                ">=",
+                Timestamp.fromDate(f.flaggedFrom),
+              );
             }
             if (f.flaggedTo) {
-              out = out.where("bannedAt", "<=", Timestamp.fromDate(f.flaggedTo));
+              out = out.where(
+                "bannedAt",
+                "<=",
+                Timestamp.fromDate(f.flaggedTo),
+              );
             }
             return out;
           },
@@ -461,8 +473,14 @@ export async function GET(request: NextRequest) {
       doc: FirebaseFirestore.QueryDocumentSnapshot,
     ): boolean => {
       const d = doc.data();
-      if (f.flag === "flagged" && !d.banned) return false;
-      if (f.flag === "not_flagged" && d.banned) return false;
+      if (f.flag === "flagged" && d.flagged !== true) return false;
+      if (f.flag === "banned" && d.banned !== true) return false;
+      if (
+        f.flag === "not_flagged" &&
+        (d.flagged === true || d.banned === true)
+      ) {
+        return false;
+      }
       if (f.statuses.length) {
         const s = d.status === "Inactive" ? "Inactive" : "Active";
         if (!f.statuses.includes(s)) return false;
@@ -484,7 +502,10 @@ export async function GET(request: NextRequest) {
       if (f.currentCard === "all" || candidates.length === 0) return candidates;
       const holders = new Set<string>();
       await Promise.all(
-        chunk(candidates.map((c) => c.id), 30).flatMap((part) => [
+        chunk(
+          candidates.map((c) => c.id),
+          30,
+        ).flatMap((part) => [
           db
             .collection("arc_cards")
             .where("currentUserId", "in", part)
@@ -511,7 +532,9 @@ export async function GET(request: NextRequest) {
         ]),
       );
       return candidates.filter((c) =>
-        f.currentCard === "has_current" ? holders.has(c.id) : !holders.has(c.id),
+        f.currentCard === "has_current"
+          ? holders.has(c.id)
+          : !holders.has(c.id),
       );
     };
 
@@ -558,12 +581,13 @@ export async function GET(request: NextRequest) {
           .select(...USER_FIELDS)
           .orderBy(FieldPath.documentId())
           .limit(batchSize);
-        // banned is present on every doc, so this one predicate can ride
-        // the automatic index and shrink the scan.
-        if (f.flag !== "all") {
+        // Positive account-state filters can ride automatic single-field
+        // indexes. The combined "not flagged or banned" case remains a
+        // bounded server-side predicate for compatibility with legacy docs.
+        if (f.flag === "flagged" || f.flag === "banned") {
           q = db
             .collection("users")
-            .where("banned", "==", f.flag === "flagged")
+            .where(f.flag === "flagged" ? "flagged" : "banned", "==", true)
             .select(...USER_FIELDS)
             .orderBy(FieldPath.documentId())
             .limit(batchSize);
@@ -678,7 +702,7 @@ export async function GET(request: NextRequest) {
       const d = userDoc.data();
       userNameById.set(
         userDoc.id,
-        `${d.firstName || ""} ${d.secondName || ""}`.trim()
+        `${d.firstName || ""} ${d.secondName || ""}`.trim(),
       );
       const passIds = Array.isArray(d.passesIssued)
         ? d.passesIssued
@@ -717,7 +741,9 @@ export async function GET(request: NextRequest) {
       });
     }
     for (const entries of historyMap.values()) {
-      entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      entries.sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+      );
     }
 
     const cardDocsById = new Map<string, FirebaseFirestore.DocumentData>();
@@ -767,7 +793,8 @@ export async function GET(request: NextRequest) {
           currentUserId: cardDoc?.currentUserId || cardDoc?.userId || null,
           currentUserName:
             cardDoc?.currentUserId || cardDoc?.userId
-              ? userNameById.get(cardDoc?.currentUserId || cardDoc?.userId) || ""
+              ? userNameById.get(cardDoc?.currentUserId || cardDoc?.userId) ||
+                ""
               : "",
           createdAt: toIsoString(cardDoc?.createdAt),
           updatedAt: toIsoString(cardDoc?.updatedAt),
@@ -807,9 +834,9 @@ export async function GET(request: NextRequest) {
         Array.from(cardMap.values()).map((entry) => ({
           ...entry,
           issueDates: [...entry.issueDates].sort(
-            (a, b) => new Date(b).getTime() - new Date(a).getTime()
+            (a, b) => new Date(b).getTime() - new Date(a).getTime(),
           ),
-        }))
+        })),
       );
     }
 
@@ -882,6 +909,8 @@ export async function GET(request: NextRequest) {
         // raw ciphertext and never a 500.
         phoneNumber: d.phoneNumber || decryptPhoneSafe(d.phone ?? null) || "",
         status: d.status || (d.banned ? "Inactive" : "Active"),
+        flagged: d.flagged === true,
+        flagReason: d.flagReason || "",
         banned: d.banned || false,
         banReason: bannedInfo?.reason || d.banReason || "",
         bannedAt: bannedInfo?.bannedAt || null,
@@ -911,7 +940,7 @@ export async function GET(request: NextRequest) {
     console.error("Reports data error:", error);
     return NextResponse.json(
       { error: "Failed to fetch report data" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -425,16 +425,21 @@ export const getAdministrativeStaffSummary = async (
   const [
     recipientsSnap,
     issuesSnap,
-    bansSnap,
+    historyForBanCountSnap,
     auditSnap,
     authRecord,
   ] = await Promise.all([
     db.collection("users").where("createdBy", "==", id).count().get(),
     db.collection("issues").where("issuedBy", "==", id).count().get(),
-    db.collection("banned_users").where("bannedBy", "==", id).count().get(),
+    db.collection("history").where("modifiedBy", "==", id).select("event").get(),
     db.collection("history").where("modifiedBy", "==", id).count().get(),
     admin.auth().getUser(id).catch(() => null),
   ]);
+
+  const bansPlacedCount = historyForBanCountSnap.docs.reduce((count, doc) => {
+    const event = String(doc.data().event ?? "");
+    return BAN_HISTORY_EVENTS.has(event) ? count + 1 : count;
+  }, 0);
 
   const firstName = (data.firstName ?? "") as string;
   const lastName = (data.lastName ?? data.secondName ?? "") as string;
@@ -455,7 +460,7 @@ export const getAdministrativeStaffSummary = async (
     counts: {
       recipientsRegistered: recipientsSnap.data().count,
       cardsIssued: issuesSnap.data().count,
-      bansPlaced: bansSnap.data().count,
+      bansPlaced: bansPlacedCount,
       auditEntries: auditSnap.data().count,
     },
   };
@@ -504,6 +509,7 @@ export interface StaffBanRow {
 }
 
 const MODAL_LIST_LIMIT = 100;
+const BAN_HISTORY_EVENTS = new Set(["Recipient Banned", "Ban"]);
 
 async function requireAdminSession() {
   const session = await getAdminSession();
@@ -684,26 +690,36 @@ export const getStaffBans = async (
   const db = admin.firestore();
 
   const snap = await db
-    .collection("banned_users")
-    .where("bannedBy", "==", staffUid)
+    .collection("history")
+    .where("modifiedBy", "==", staffUid)
     .limit(MODAL_LIST_LIMIT)
     .get();
 
-  const userIds = snap.docs.map((doc) => (doc.data().userId ?? "") as string);
+  const banHistoryDocs = snap.docs.filter((doc) =>
+    BAN_HISTORY_EVENTS.has(String(doc.data().event ?? ""))
+  );
+  const userIds = banHistoryDocs.map((doc) => (doc.data().userId ?? "") as string);
   const nameById = await buildUserNameMap(db, userIds);
 
-  return snap.docs.map((doc) => {
+  return banHistoryDocs
+    .map((doc) => {
     const d = doc.data();
     const userId = (d.userId ?? "") as string;
+    const reason = String(d.reason ?? d.notes ?? "");
     return {
       id: doc.id,
       userId,
       userName: nameById.get(userId) ?? "",
-      banReason: (d.banReason ?? "") as string,
-      bannedAt: timestampToIso(d.bannedAt),
-      notes: (d.notes ?? "") as string,
+      banReason: reason,
+      bannedAt: timestampToIso(d.date),
+      notes: String(d.notes ?? ""),
     };
-  });
+    })
+    .sort((a, b) => {
+      const aTime = a.bannedAt ? new Date(a.bannedAt).getTime() : 0;
+      const bTime = b.bannedAt ? new Date(b.bannedAt).getTime() : 0;
+      return bTime - aTime;
+    });
 };
 
 export const setUserAsAdmin = async (email: string) => {

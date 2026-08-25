@@ -21,6 +21,8 @@ export interface DashboardUser {
   postalCode: string;
   passesIssued: string[];
   banned: boolean;
+  flagged?: boolean;
+  flagReason?: string;
   banReason?: string;
   notes?: string;
   status?: "Active" | "Inactive";
@@ -141,6 +143,9 @@ export async function getDashboardSummaryForViewer(
       "photoThumb",
       "aliases",
       "banned",
+      "flagged",
+      "flagReason",
+      "banReason",
       "status",
       "email",
       "createdAt",
@@ -161,6 +166,7 @@ export async function getDashboardSummaryForViewer(
     totalCardsAgg,
     activeCardsAgg,
     expiredCardsAgg,
+    flaggedUsersAgg,
     bannedUsersAgg,
   ] = await Promise.all([
     usersQuery.get(),
@@ -168,6 +174,7 @@ export async function getDashboardSummaryForViewer(
     db.collection("arc_cards").count().get(),
     db.collection("arc_cards").where("status", "==", "Active").count().get(),
     db.collection("arc_cards").where("status", "==", "Expired").count().get(),
+    db.collection("users").where("flagged", "==", true).count().get(),
     db.collection("banned_users").count().get(),
   ]);
 
@@ -209,7 +216,13 @@ export async function getDashboardSummaryForViewer(
         db
           .collection("issues")
           .where("userId", "in", part)
-          .select("userId", "cardId", "createdAt", "returnedAt", "closedCardStatus")
+          .select(
+            "userId",
+            "cardId",
+            "createdAt",
+            "returnedAt",
+            "closedCardStatus",
+          )
           .get()
           .then((snap) => {
             for (const doc of snap.docs) {
@@ -229,7 +242,10 @@ export async function getDashboardSummaryForViewer(
                 if (issue.cardId) {
                   latestIssueCardIdByUserId.set(issue.userId, issue.cardId);
                 }
-                latestIssueReturnedAtByUserId.set(issue.userId, issue.returnedAt);
+                latestIssueReturnedAtByUserId.set(
+                  issue.userId,
+                  issue.returnedAt,
+                );
                 latestIssueClosedStatusByUserId.set(
                   issue.userId,
                   issue.closedCardStatus,
@@ -269,7 +285,8 @@ export async function getDashboardSummaryForViewer(
     const latestIssueClosedStatus = latestIssueClosedStatusByUserId.get(doc.id);
     const hasActiveCard = activeCardByUserId.has(doc.id);
     const hasUnloadedAssignedCard = unloadedAssignedCardByUserId.has(doc.id);
-    const userAccountStatus = data.status === "Inactive" ? "Inactive" : "Active";
+    const userAccountStatus =
+      data.status === "Inactive" ? "Inactive" : "Active";
     let cardStatusForDashboard: DashboardUser["arcCardStatus"] = undefined;
     if (hasActiveCard) {
       cardStatusForDashboard = "Active";
@@ -321,8 +338,13 @@ export async function getDashboardSummaryForViewer(
     },
     {
       icon: "/flag.svg",
-      number: bannedUsersAgg.data().count,
+      number: flaggedUsersAgg.data().count,
       label: "Flagged Users",
+    },
+    {
+      icon: "/flag.svg",
+      number: bannedUsersAgg.data().count,
+      label: "Banned Users",
     },
   ];
 

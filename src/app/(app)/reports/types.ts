@@ -33,6 +33,8 @@ export interface UserReportRow {
   email: string;
   phoneNumber: string;
   status: "Active" | "Inactive" | "Unknown";
+  flagged: boolean;
+  flagReason: string;
   banned: boolean;
   banReason: string;
   bannedAt: string | null;

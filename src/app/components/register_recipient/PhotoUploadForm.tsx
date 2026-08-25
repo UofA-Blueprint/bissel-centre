@@ -47,23 +47,40 @@ const WebcamCapture = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) videoRef.current.srcObject = null;
+  };
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
+    let cancelled = false;
     const startCamera = async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
       } catch (err) {
-        console.error("Error accessing webcam:", err);
-        onCancel();
+        if (!cancelled) {
+          console.error("Error accessing webcam:", err);
+          onCancel();
+        }
       }
     };
     startCamera();
     return () => {
-      stream?.getTracks().forEach((track) => track.stop());
+      cancelled = true;
+      stopCamera();
     };
   }, [onCancel]);
 
@@ -81,6 +98,7 @@ const WebcamCapture = ({
         const file = new File([blob], `webcam-${Date.now()}.jpg`, {
           type: "image/jpeg",
         });
+        stopCamera();
         onCapture(file);
       }
     }, "image/jpeg");
@@ -98,7 +116,10 @@ const WebcamCapture = ({
       <div className="flex space-x-4">
         <button
           type="button"
-          onClick={onCancel}
+          onClick={() => {
+            stopCamera();
+            onCancel();
+          }}
           className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg"
         >
           Cancel
@@ -338,9 +359,8 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
           {oversizeFile && (
             <div className="mb-6 w-full max-w-md rounded-lg border border-amber-300 bg-amber-50 p-4 text-center space-y-3">
               <p className="text-sm font-semibold text-amber-800">
-                This photo is{" "}
-                {(oversizeFile.size / (1024 * 1024)).toFixed(1)} MB — over the
-                2 MB recommended limit.
+                This photo is {(oversizeFile.size / (1024 * 1024)).toFixed(1)}{" "}
+                MB — over the 2 MB recommended limit.
               </p>
               <p className="text-xs text-amber-700">
                 You can still upload it; it will be heavily compressed to fit,

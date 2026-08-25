@@ -24,22 +24,22 @@ const APOSTROPHE_CLASS = /['‘’ʻʼ`´]/g;
 // Letters with no NFD decomposition — NFD-strip alone passes them through.
 const ATOMIC_FOLDS = new Map(
   Object.entries({
-    "ł": "l", // ł  (Tłı̨chǫ, Dëne Sųłıné)
-    "đ": "d", // đ
-    "ø": "o", // ø
-    "æ": "ae", // æ
-    "œ": "oe", // œ
-    "ß": "ss", // ß
-    "þ": "th", // þ
-    "ð": "d", // ð
-    "ǝ": "e", // ǝ  (Dene Kǝdǝ́)
-    "ə": "e", // ə
-    "ı": "i", // ı  (dotless i — Tłı̨chǫ ı̨ decomposes to this + ogonek)
-    "ŋ": "n", // ŋ
-    "ʔ": "", //  ʔ  glottal stop (letter, not punctuation)
-    "ɂ": "", //  ɂ  glottal stop, small
-    "ŧ": "t", // ŧ
-    "ħ": "h", // ħ
+    ł: "l", // ł  (Tłı̨chǫ, Dëne Sųłıné)
+    đ: "d", // đ
+    ø: "o", // ø
+    æ: "ae", // æ
+    œ: "oe", // œ
+    ß: "ss", // ß
+    þ: "th", // þ
+    ð: "d", // ð
+    ǝ: "e", // ǝ  (Dene Kǝdǝ́)
+    ə: "e", // ə
+    ı: "i", // ı  (dotless i — Tłı̨chǫ ı̨ decomposes to this + ogonek)
+    ŋ: "n", // ŋ
+    ʔ: "", //  ʔ  glottal stop (letter, not punctuation)
+    ɂ: "", //  ɂ  glottal stop, small
+    ŧ: "t", // ŧ
+    ħ: "h", // ħ
   }),
 );
 
@@ -116,14 +116,18 @@ export function buildIndexEntry(user) {
   const aliases = Array.isArray(user.aliases)
     ? user.aliases.filter((a) => typeof a === "string" && a.trim().length > 0)
     : [];
+  const postalCode =
+    typeof user.postalCode === "string" ? user.postalCode.trim() : "";
 
   const strings = new Set();
   const codes = new Set();
-  for (const source of [displayName, ...aliases]) {
+  for (const source of [displayName, ...aliases, postalCode]) {
     const folded = foldName(source);
     if (!folded) continue;
     for (const v of searchVariants(folded)) strings.add(v);
-    for (const c of phoneticCodes(folded)) codes.add(c);
+    if (source !== postalCode) {
+      for (const c of phoneticCodes(folded)) codes.add(c);
+    }
   }
 
   return {

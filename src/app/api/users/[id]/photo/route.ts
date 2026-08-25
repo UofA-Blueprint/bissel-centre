@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
-import { initAdmin } from "@/app/services/firebaseAdmin";
+import { getStaffAccess } from "@/app/api/_lib/staffAccess";
 
 // GET /api/users/[id]/photo — full-resolution photo, loaded lazily as real
 // image bytes (Content-Type from the stored data URL). List endpoints only
@@ -10,54 +9,34 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("session")?.value;
-
-    if (!sessionCookie) {
+    const access = await getStaffAccess({
+      allowAdmin: true,
+      checkRevoked: false,
+    });
+    if ("error" in access) {
       return NextResponse.json(
-        { error: "Unauthorized - No session found" },
-        { status: 401 },
+        { error: access.error },
+        { status: access.status },
       );
     }
-
-    const app = await initAdmin();
     // Hot read path — revocation check skipped (SCALE-05).
-    const decodedClaims = await app
-      .auth()
-      .verifySessionCookie(sessionCookie);
-
-    if (decodedClaims.admin !== true) {
-      const staffDoc = await app
-        .firestore()
-        .collection("administrative_staff")
-        .doc(decodedClaims.uid)
-        .get();
-      if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
-        return NextResponse.json(
-          { error: "Forbidden - Staff access only" },
-          { status: 403 },
-        );
-      }
-    }
 
     const { id } = await params;
     if (!id) {
-      return NextResponse.json({ error: "User id is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "User id is required" },
+        { status: 400 },
+      );
     }
 
-    const db = app.firestore();
+    const db = access.db;
     const photoDoc = await db.collection("user_photos").doc(id).get();
-    let picture = photoDoc.exists
-      ? String(photoDoc.data()?.picture || "")
-      : "";
+    let picture = photoDoc.exists ? String(photoDoc.data()?.picture || "") : "";
 
     // Legacy fallback: users registered before the photo split still carry
     // the full base64 on the user doc.
     if (!picture) {
-      const userDoc = await db
-        .collection("users")
-        .doc(id)
-        .get();
+      const userDoc = await db.collection("users").doc(id).get();
       picture = userDoc.exists ? String(userDoc.data()?.picture || "") : "";
     }
 

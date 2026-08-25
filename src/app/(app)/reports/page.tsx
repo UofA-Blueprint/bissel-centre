@@ -20,9 +20,10 @@ import {
   CreditCard,
   Download,
   Filter,
+  Flag,
   History,
   Search,
-  ShieldAlert,
+  XCircle,
   X,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -172,7 +173,9 @@ function formatDateTime(dateStr: string): string {
   }
 }
 
-function parseDateOnlyParts(value: string): { year: number; month: number; day: number } | null {
+function parseDateOnlyParts(
+  value: string,
+): { year: number; month: number; day: number } | null {
   const trimmed = value.trim();
   const isoDateOnly = /^(\d{4})-(\d{2})-(\d{2})$/;
   const isoDateOnlyMatch = trimmed.match(isoDateOnly);
@@ -211,7 +214,14 @@ function parseFlexibleDate(dateStr: string): Date | null {
   const dateOnlyParts = parseDateOnlyParts(trimmed);
   if (dateOnlyParts) {
     const parsed = new Date(
-      Date.UTC(dateOnlyParts.year, dateOnlyParts.month - 1, dateOnlyParts.day, 12, 0, 0)
+      Date.UTC(
+        dateOnlyParts.year,
+        dateOnlyParts.month - 1,
+        dateOnlyParts.day,
+        12,
+        0,
+        0,
+      ),
     );
     if (!isNaN(parsed.getTime())) return parsed;
   }
@@ -247,7 +257,7 @@ function autoFitColumns(
   ws["!cols"] = keys.map((key) => {
     const maxLen = Math.max(
       key.length,
-      ...data.map((row) => String(row[key] ?? "").length)
+      ...data.map((row) => String(row[key] ?? "").length),
     );
     return { wch: Math.min(maxLen + 2, 50) };
   });
@@ -283,22 +293,65 @@ function SortableHeader({
   );
 }
 
-function FlagBadge({ banned, bannedAt }: { banned: boolean; bannedAt: string | null }) {
-  if (!banned) return <span className="text-gray-500 text-xs font-semibold">No</span>;
+function AccountStateBadge({
+  flagged,
+  banned,
+  bannedAt,
+}: {
+  flagged: boolean;
+  banned: boolean;
+  bannedAt: string | null;
+}) {
+  if (banned) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-200 border border-red-300 px-2.5 py-0.5 text-xs font-bold text-red-800">
+        <XCircle className="h-3 w-3" />
+        Banned
+        {bannedAt && (
+          <span className="font-semibold text-red-700 ml-0.5">
+            ({formatDate(bannedAt)})
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  if (!flagged)
+    return <span className="text-gray-500 text-xs font-semibold">No</span>;
+
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-red-200 border border-red-300 px-2.5 py-0.5 text-xs font-bold text-red-800">
-      <ShieldAlert className="h-3 w-3" />
+    <span className="inline-flex items-center gap-1 rounded-full bg-orange-200 border border-orange-300 px-2.5 py-0.5 text-xs font-bold text-orange-800">
+      <Flag className="h-3 w-3" />
       Flagged
-      {bannedAt && (
-        <span className="font-semibold text-red-700 ml-0.5">
-          ({formatDate(bannedAt)})
-        </span>
-      )}
     </span>
   );
 }
 
-function StatusChip({ status }: { status: string }) {
+function StatusChip({
+  status,
+  flagged,
+  banned,
+}: {
+  status: string;
+  flagged: boolean;
+  banned: boolean;
+}) {
+  if (banned) {
+    return (
+      <span className="inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-bold min-w-[70px] text-center bg-red-200 text-red-900 border-red-300">
+        Banned
+      </span>
+    );
+  }
+
+  if (flagged) {
+    return (
+      <span className="inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-bold min-w-[70px] text-center bg-orange-200 text-orange-900 border-orange-300">
+        Flagged
+      </span>
+    );
+  }
+
   const styles: Record<string, string> = {
     Active: "bg-emerald-200 text-emerald-900 border-emerald-300",
     Inactive: "bg-gray-300 text-gray-800 border-gray-400",
@@ -348,12 +401,16 @@ function CardHistoryTable({ cards }: { cards: CardHistoryEntry[] }) {
       <tbody className="divide-y divide-gray-100">
         {cards.map((card, idx) => (
           <tr key={idx} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-            <td className="px-3 py-2 font-mono font-semibold text-gray-900">{card.cardNumber || "—"}</td>
+            <td className="px-3 py-2 font-mono font-semibold text-gray-900">
+              {card.cardNumber || "—"}
+            </td>
             <td className="px-3 py-2 text-gray-800">{card.department}</td>
             <td className="px-3 py-2">
               <CardStatusChip status={card.status} />
             </td>
-            <td className="px-3 py-2 text-gray-800">{card.allocationDate || "—"}</td>
+            <td className="px-3 py-2 text-gray-800">
+              {card.allocationDate || "—"}
+            </td>
             <td className="px-3 py-2 text-gray-800">
               {card.issueDates.length > 0 ? card.issueDates.join(", ") : "—"}
             </td>
@@ -366,7 +423,9 @@ function CardHistoryTable({ cards }: { cards: CardHistoryEntry[] }) {
 
 function ActivityHistoryTable({ entries }: { entries: ActivityEntry[] }) {
   if (entries.length === 0) {
-    return <p className="text-gray-400 text-xs italic py-2">No activity history</p>;
+    return (
+      <p className="text-gray-400 text-xs italic py-2">No activity history</p>
+    );
   }
   return (
     <table className="w-full text-xs border-collapse">
@@ -390,10 +449,14 @@ function ActivityHistoryTable({ entries }: { entries: ActivityEntry[] }) {
             <td className="px-3 py-2 text-gray-800">
               {entry.notes}
               {entry.reason && (
-                <span className="ml-1 text-orange-700 font-medium italic">({entry.reason})</span>
+                <span className="ml-1 text-orange-700 font-medium italic">
+                  ({entry.reason})
+                </span>
               )}
             </td>
-            <td className="px-3 py-2 text-gray-700">{entry.modifiedBy || "—"}</td>
+            <td className="px-3 py-2 text-gray-700">
+              {entry.modifiedBy || "—"}
+            </td>
           </tr>
         ))}
       </tbody>
@@ -446,11 +509,15 @@ function ExpandedRowContent({ row }: { row: Row<UserReportRow> }) {
         <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
           <div>
             <span className="text-gray-500">Gender:</span>{" "}
-            <span className="font-medium text-gray-800">{user.genderIdentity || "—"}</span>
+            <span className="font-medium text-gray-800">
+              {user.genderIdentity || "—"}
+            </span>
           </div>
           <div>
             <span className="text-gray-500">DOB:</span>{" "}
-            <span className="font-medium text-gray-800">{user.dateOfBirth || "—"}</span>
+            <span className="font-medium text-gray-800">
+              {user.dateOfBirth || "—"}
+            </span>
           </div>
           <div>
             <span className="text-gray-500">Address:</span>{" "}
@@ -460,7 +527,9 @@ function ExpandedRowContent({ row }: { row: Row<UserReportRow> }) {
           </div>
           <div>
             <span className="text-gray-500">Registered:</span>{" "}
-            <span className="font-medium text-gray-800">{formatDate(user.createdAt)}</span>
+            <span className="font-medium text-gray-800">
+              {formatDate(user.createdAt)}
+            </span>
           </div>
           {user.notes && (
             <div>
@@ -468,9 +537,17 @@ function ExpandedRowContent({ row }: { row: Row<UserReportRow> }) {
               <span className="font-medium text-gray-800">{user.notes}</span>
             </div>
           )}
-          {user.banned && user.banReason && (
+          {user.flagged && user.flagReason && (
             <div>
               <span className="text-gray-500">Flag Reason:</span>{" "}
+              <span className="font-medium text-orange-700">
+                {user.flagReason}
+              </span>
+            </div>
+          )}
+          {user.banned && user.banReason && (
+            <div>
+              <span className="text-gray-500">Ban Reason:</span>{" "}
               <span className="font-medium text-red-700">{user.banReason}</span>
             </div>
           )}
@@ -535,11 +612,19 @@ export default function ReportsPage() {
   // Search / filter
   const [searchQuery, setSearchQuery] = useState(searchParam ?? "");
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
-  const [flagFilter, setFlagFilter] = useState<"all" | "flagged" | "not_flagged">("all");
-  const [statusFilter, setStatusFilter] = useState<("Active" | "Inactive")[]>([]);
-  const [currentCardFilter, setCurrentCardFilter] = useState<"all" | "has_current" | "no_current">("all");
+  const [flagFilter, setFlagFilter] = useState<
+    "all" | "flagged" | "banned" | "not_flagged"
+  >("all");
+  const [statusFilter, setStatusFilter] = useState<("Active" | "Inactive")[]>(
+    [],
+  );
+  const [currentCardFilter, setCurrentCardFilter] = useState<
+    "all" | "has_current" | "no_current"
+  >("all");
   const [cardStatusFilter, setCardStatusFilter] = useState<string[]>([]);
-  const [cardDepartmentFilter, setCardDepartmentFilter] = useState<string[]>([]);
+  const [cardDepartmentFilter, setCardDepartmentFilter] = useState<string[]>(
+    [],
+  );
   const [activityEventFilter, setActivityEventFilter] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
@@ -551,7 +636,9 @@ export default function ReportsPage() {
   >("none");
   const filterRef = useRef<HTMLDivElement>(null);
 
-  const [exporting, setExporting] = useState<"all" | "cards" | "activity" | null>(null);
+  const [exporting, setExporting] = useState<
+    "all" | "cards" | "activity" | null
+  >(null);
   const [refreshing, setRefreshing] = useState(false);
   const [truncatedLayers, setTruncatedLayers] = useState<string[]>([]);
 
@@ -559,26 +646,38 @@ export default function ReportsPage() {
   // the (already filtered) dataset would make options vanish as you filter.
   const availableCardStatuses = useMemo<string[]>(
     () => ["Active", "Unattributed", "Unloaded", "Expired", "Cancelled"],
-    []
+    [],
   );
   const availableCardDepartments = useMemo<string[]>(
     () =>
       [
-        "Mental Health", "Emergency", "Case MCT", "Newcomer Volunteer",
-        "Reception", "Housing", "FE/Comm Bridge", "FASS", "Child Care",
-        "Employment", "Comp Eng Dept", "Transit Dept", "HELP Program",
+        "Mental Health",
+        "Emergency",
+        "Case MCT",
+        "Newcomer Volunteer",
+        "Reception",
+        "Housing",
+        "FE/Comm Bridge",
+        "FASS",
+        "Child Care",
+        "Employment",
+        "Comp Eng Dept",
+        "Transit Dept",
+        "HELP Program",
       ].sort(),
-    []
+    [],
   );
   const availableActivityEvents = useMemo<string[]>(
     () => ["Ban", "Issue Card", "Renew Card", "Status Change", "Unban"],
-    []
+    [],
   );
-
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+      if (
+        filterRef.current &&
+        !filterRef.current.contains(event.target as Node)
+      ) {
         setShowFilterDropdown(false);
       }
     }
@@ -620,8 +719,7 @@ export default function ReportsPage() {
         reportMemo.current.size > 0
       ) {
         const oldestKey = reportMemo.current.keys().next().value as
-          | string
-          | undefined;
+          string | undefined;
         if (oldestKey === undefined) break;
         const evicted = reportMemo.current.get(oldestKey);
         reportMemo.current.delete(oldestKey);
@@ -635,7 +733,10 @@ export default function ReportsPage() {
     const q = searchQuery.trim();
     // Name-ish queries resolve through the server name index; queries
     // with @ or digits (email/phone) stay client-side.
-    if (q && !q.includes("@") && !/\d/.test(q)) params.set("search", q);
+    const looksLikePostalCode = /[a-z]/i.test(q) && /\d/.test(q);
+    if (q && !q.includes("@") && (!/\d/.test(q) || looksLikePostalCode)) {
+      params.set("search", q);
+    }
     if (flagFilter !== "all") params.set("flag", flagFilter);
     if (statusFilter.length) params.set("statuses", statusFilter.join(","));
     if (currentCardFilter !== "all") {
@@ -772,7 +873,7 @@ export default function ReportsPage() {
             u.lastName.toLowerCase().includes(q) ||
             u.email.toLowerCase().includes(q) ||
             u.phoneNumber.toLowerCase().includes(q) ||
-            `${u.firstName} ${u.lastName}`.toLowerCase().includes(q)
+            `${u.firstName} ${u.lastName}`.toLowerCase().includes(q),
         );
       }
       // Name-ish queries were already matched server-side through the folded /
@@ -783,13 +884,17 @@ export default function ReportsPage() {
     }
 
     if (flagFilter === "flagged") {
+      result = result.filter((u) => u.flagged);
+    } else if (flagFilter === "banned") {
       result = result.filter((u) => u.banned);
     } else if (flagFilter === "not_flagged") {
-      result = result.filter((u) => !u.banned);
+      result = result.filter((u) => !u.flagged && !u.banned);
     }
 
     if (statusFilter.length > 0) {
-      result = result.filter((u) => statusFilter.includes(u.status as "Active" | "Inactive"));
+      result = result.filter((u) =>
+        statusFilter.includes(u.status as "Active" | "Inactive"),
+      );
     }
 
     if (currentCardFilter === "has_current") {
@@ -801,21 +906,21 @@ export default function ReportsPage() {
     if (cardStatusFilter.length > 0) {
       const selectedStatuses = new Set(cardStatusFilter);
       result = result.filter((u) =>
-        u.cardHistory.some((card) => selectedStatuses.has(card.status))
+        u.cardHistory.some((card) => selectedStatuses.has(card.status)),
       );
     }
 
     if (cardDepartmentFilter.length > 0) {
       const selectedDepartments = new Set(cardDepartmentFilter);
       result = result.filter((u) =>
-        u.cardHistory.some((card) => selectedDepartments.has(card.department))
+        u.cardHistory.some((card) => selectedDepartments.has(card.department)),
       );
     }
 
     if (activityEventFilter.length > 0) {
       const selectedEvents = new Set(activityEventFilter);
       result = result.filter((u) =>
-        u.activityHistory.some((entry) => selectedEvents.has(entry.event))
+        u.activityHistory.some((entry) => selectedEvents.has(entry.event)),
       );
     }
 
@@ -844,7 +949,7 @@ export default function ReportsPage() {
         }
         if (dateField === "card_issue") {
           return u.cardHistory.some((card) =>
-            card.issueDates.some((issueDate) => inRange(issueDate))
+            card.issueDates.some((issueDate) => inRange(issueDate)),
           );
         }
         return u.activityHistory.some((activity) => inRange(activity.date));
@@ -855,7 +960,7 @@ export default function ReportsPage() {
     // performed by the selected staff.
     if (modifiedByFilter) {
       result = result.filter((u) =>
-        u.activityHistory.some((a) => a.modifiedBy === modifiedByFilter)
+        u.activityHistory.some((a) => a.modifiedBy === modifiedByFilter),
       );
     }
     if (bannedByFilter) {
@@ -905,7 +1010,7 @@ export default function ReportsPage() {
   };
 
   const applyDatePreset = (
-    preset: "today" | "last7" | "last30" | "thisMonth" | "lastMonth"
+    preset: "today" | "last7" | "last30" | "thisMonth" | "lastMonth",
   ) => {
     const now = new Date();
     const start = new Date(now);
@@ -937,16 +1042,18 @@ export default function ReportsPage() {
 
   const toggleStatusFilter = (s: "Active" | "Inactive") => {
     setStatusFilter((prev) =>
-      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
+      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s],
     );
   };
 
   const toggleStringFilter = (
     value: string,
-    setter: (updater: (prev: string[]) => string[]) => void
+    setter: (updater: (prev: string[]) => string[]) => void,
   ) => {
     setter((prev) =>
-      prev.includes(value) ? prev.filter((item) => item !== value) : [...prev, value]
+      prev.includes(value)
+        ? prev.filter((item) => item !== value)
+        : [...prev, value],
     );
   };
 
@@ -958,9 +1065,11 @@ export default function ReportsPage() {
       Email: u.email || "",
       Phone: u.phoneNumber || "",
       Status: u.status,
-      Flagged: u.banned ? "Yes" : "No",
+      Flagged: u.flagged ? "Yes" : "No",
+      Banned: u.banned ? "Yes" : "No",
       "Flagged Date": u.bannedAt ? formatDate(u.bannedAt) : "",
-      "Flag Reason": u.banReason || "",
+      "Flag Reason": u.flagReason || "",
+      "Ban Reason": u.banReason || "",
       Gender: u.genderIdentity || "",
       "Date of Birth": u.dateOfBirth || "",
       Address: u.address || "",
@@ -980,7 +1089,7 @@ export default function ReportsPage() {
   const buildExportInfoSheet = (
     XLSX: XLSXModule,
     wb: XLSXNS.WorkBook,
-    scope: "All" | "Cards" | "Activity"
+    scope: "All" | "Cards" | "Activity",
   ) => {
     const dateFieldLabel: Record<typeof dateField, string> = {
       registered: "Registered Date",
@@ -1010,15 +1119,22 @@ export default function ReportsPage() {
       { Field: "Current Card Filter", Value: currentCardFilter },
       {
         Field: "Card Status Filter",
-        Value: cardStatusFilter.length > 0 ? cardStatusFilter.join(", ") : "All",
+        Value:
+          cardStatusFilter.length > 0 ? cardStatusFilter.join(", ") : "All",
       },
       {
         Field: "Card Department Filter",
-        Value: cardDepartmentFilter.length > 0 ? cardDepartmentFilter.join(", ") : "All",
+        Value:
+          cardDepartmentFilter.length > 0
+            ? cardDepartmentFilter.join(", ")
+            : "All",
       },
       {
         Field: "Activity Event Filter",
-        Value: activityEventFilter.length > 0 ? activityEventFilter.join(", ") : "All",
+        Value:
+          activityEventFilter.length > 0
+            ? activityEventFilter.join(", ")
+            : "All",
       },
       { Field: "Date Field", Value: dateFieldLabel[dateField] },
       { Field: "Date Preset", Value: presetLabel[datePreset] },
@@ -1032,23 +1148,25 @@ export default function ReportsPage() {
 
   const buildCardSheet = (XLSX: XLSXModule, wb: XLSXNS.WorkBook) => {
     const filteredCardIdsFromUsers = new Set(
-      filteredData.flatMap((user) => user.cardHistory.map((card) => card.cardId))
+      filteredData.flatMap((user) =>
+        user.cardHistory.map((card) => card.cardId),
+      ),
     );
     let cardsForExport = allCards.filter((card) =>
-      filteredCardIdsFromUsers.has(card.cardId)
+      filteredCardIdsFromUsers.has(card.cardId),
     );
 
     if (cardStatusFilter.length > 0) {
       const selectedStatuses = new Set(cardStatusFilter);
       cardsForExport = cardsForExport.filter((card) =>
-        selectedStatuses.has(card.status)
+        selectedStatuses.has(card.status),
       );
     }
 
     if (cardDepartmentFilter.length > 0) {
       const selectedDepartments = new Set(cardDepartmentFilter);
       cardsForExport = cardsForExport.filter((card) =>
-        selectedDepartments.has(card.department)
+        selectedDepartments.has(card.department),
       );
     }
 
@@ -1078,28 +1196,28 @@ export default function ReportsPage() {
           if (fromDayKey !== null && dayKey < fromDayKey) return false;
           if (toDayKey !== null && dayKey > toDayKey) return false;
           return true;
-        })
+        }),
       );
     }
 
-    const cardRows: Record<string, string | number>[] = cardsForExport.map((c) => ({
-      "Card ID": c.cardId,
-      "Card Number": c.cardNumber,
-      "Security Code": c.securityCode,
-      Department: c.department,
-      "Card Status": c.status,
-      "Allocation Date": c.allocationDate,
-      "Current User ID": c.currentUserId || "",
-      "Current User Name": c.currentUserName || "",
-      "Issue Dates": c.issueDates.join(", "),
-      Notes: c.notes || "",
-      "Created At": c.createdAt || "",
-      "Updated At": c.updatedAt || "",
-    }));
+    const cardRows: Record<string, string | number>[] = cardsForExport.map(
+      (c) => ({
+        "Card ID": c.cardId,
+        "Card Number": c.cardNumber,
+        "Security Code": c.securityCode,
+        Department: c.department,
+        "Card Status": c.status,
+        "Allocation Date": c.allocationDate,
+        "Current User ID": c.currentUserId || "",
+        "Current User Name": c.currentUserName || "",
+        "Issue Dates": c.issueDates.join(", "),
+        Notes: c.notes || "",
+        "Created At": c.createdAt || "",
+        "Updated At": c.updatedAt || "",
+      }),
+    );
     const ws = XLSX.utils.json_to_sheet(
-      cardRows.length > 0
-        ? cardRows
-        : [{ Info: "No cards found." }]
+      cardRows.length > 0 ? cardRows : [{ Info: "No cards found." }],
     );
     if (cardRows.length > 0) autoFitColumns(ws, cardRows);
     XLSX.utils.book_append_sheet(wb, ws, "Card History");
@@ -1123,7 +1241,7 @@ export default function ReportsPage() {
     const ws = XLSX.utils.json_to_sheet(
       activityRows.length > 0
         ? activityRows
-        : [{ Info: "No activity history for the current filter" }]
+        : [{ Info: "No activity history for the current filter" }],
     );
     if (activityRows.length > 0) autoFitColumns(ws, activityRows);
     XLSX.utils.book_append_sheet(wb, ws, "Activity Log");
@@ -1229,7 +1347,9 @@ export default function ReportsPage() {
           />
         ),
         cell: ({ getValue }) => (
-          <span className="font-medium text-gray-900">{getValue<string>()}</span>
+          <span className="font-medium text-gray-900">
+            {getValue<string>()}
+          </span>
         ),
       },
       {
@@ -1242,7 +1362,9 @@ export default function ReportsPage() {
           />
         ),
         cell: ({ getValue }) => (
-          <span className="font-medium text-gray-900">{getValue<string>()}</span>
+          <span className="font-medium text-gray-900">
+            {getValue<string>()}
+          </span>
         ),
       },
       {
@@ -1255,13 +1377,17 @@ export default function ReportsPage() {
           />
         ),
         cell: ({ getValue }) => (
-          <span className="text-gray-800 text-xs">{getValue<string>() || "—"}</span>
+          <span className="text-gray-800 text-xs">
+            {getValue<string>() || "—"}
+          </span>
         ),
       },
       {
         accessorKey: "phoneNumber",
         header: () => (
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Phone</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            Phone
+          </span>
         ),
         cell: ({ getValue }) => (
           <span className="text-gray-800">{getValue<string>() || "—"}</span>
@@ -1270,9 +1396,17 @@ export default function ReportsPage() {
       {
         accessorKey: "status",
         header: () => (
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Status</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            Status
+          </span>
         ),
-        cell: ({ getValue }) => <StatusChip status={getValue<string>()} />,
+        cell: ({ row, getValue }) => (
+          <StatusChip
+            status={getValue<string>()}
+            flagged={row.original.flagged}
+            banned={row.original.banned}
+          />
+        ),
       },
       {
         id: "currentArcCard",
@@ -1285,34 +1419,49 @@ export default function ReportsPage() {
           />
         ),
         cell: ({ getValue }) => (
-          <span className="font-mono text-gray-800 text-xs">{getValue<string>() || "—"}</span>
+          <span className="font-mono text-gray-800 text-xs">
+            {getValue<string>() || "—"}
+          </span>
         ),
       },
       {
         id: "currentArcCardDepartment",
         accessorKey: "currentArcCardDepartment",
         header: () => (
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Current Card Dept.</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            Current Card Dept.
+          </span>
         ),
         cell: ({ getValue }) => (
-          <span className="text-gray-800 text-xs">{getValue<string>() || "—"}</span>
+          <span className="text-gray-800 text-xs">
+            {getValue<string>() || "—"}
+          </span>
         ),
       },
       {
         accessorKey: "banned",
         header: ({ column }) => (
           <SortableHeader
-            label="Flagged"
+            label="Account Flags"
             sorted={column.getIsSorted()}
             onClick={column.getToggleSortingHandler()}
           />
         ),
         cell: ({ row }) => (
-          <FlagBadge banned={row.original.banned} bannedAt={row.original.bannedAt} />
+          <AccountStateBadge
+            flagged={row.original.flagged}
+            banned={row.original.banned}
+            bannedAt={row.original.bannedAt}
+          />
         ),
         sortingFn: (rowA, rowB) => {
-          const a = rowA.original.banned ? 1 : 0;
-          const b = rowB.original.banned ? 1 : 0;
+          const rank = (row: UserReportRow) => {
+            if (row.banned) return 2;
+            if (row.flagged) return 1;
+            return 0;
+          };
+          const a = rank(rowA.original);
+          const b = rank(rowB.original);
           return a - b;
         },
       },
@@ -1330,7 +1479,9 @@ export default function ReportsPage() {
           return (
             <span
               className={`inline-flex items-center justify-center rounded-full border px-2.5 py-0.5 text-xs font-bold ${
-                count > 0 ? "bg-cyan-200 text-cyan-900 border-cyan-300" : "bg-gray-200 text-gray-600 border-gray-300"
+                count > 0
+                  ? "bg-cyan-200 text-cyan-900 border-cyan-300"
+                  : "bg-gray-200 text-gray-600 border-gray-300"
               }`}
             >
               {count}
@@ -1342,7 +1493,9 @@ export default function ReportsPage() {
       {
         id: "activityCount",
         header: () => (
-          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">History</span>
+          <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+            History
+          </span>
         ),
         cell: ({ row }) => {
           const count = row.original.activityHistory.length;
@@ -1355,7 +1508,7 @@ export default function ReportsPage() {
         size: 80,
       },
     ],
-    []
+    [],
   );
 
   const table = useReactTable({
@@ -1395,7 +1548,8 @@ export default function ReportsPage() {
 
   // Summary stats
   const totalUsers = filteredData.length;
-  const flaggedCount = filteredData.filter((u) => u.banned).length;
+  const flaggedCount = filteredData.filter((u) => u.flagged).length;
+  const bannedCount = filteredData.filter((u) => u.banned).length;
   const totalCards = filteredData.reduce((s, u) => s + u.totalCardsIssued, 0);
 
   if (loading) {
@@ -1467,16 +1621,17 @@ export default function ReportsPage() {
       )}
       {truncatedLayers.length > 0 && (
         <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          A filter matched a very large number of records ({truncatedLayers.join(", ")})
-          and was capped — results may be incomplete. Narrow the filters for
-          exact results.
+          A filter matched a very large number of records (
+          {truncatedLayers.join(", ")}) and was capped — results may be
+          incomplete. Narrow the filters for exact results.
         </div>
       )}
       <header className="flex flex-col gap-3 pb-2 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">User Reports</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Comprehensive view of all recipients — card history, flags, and activity
+            Comprehensive view of all recipients — card history, flags, and
+            activity
           </p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
@@ -1555,13 +1710,15 @@ export default function ReportsPage() {
                               | "card_allocation"
                               | "card_issue"
                               | "activity"
-                              | "flagged"
+                              | "flagged",
                           )
                         }
                         className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                       >
                         <option value="registered">Registered Date</option>
-                        <option value="card_allocation">Card Allocation Date</option>
+                        <option value="card_allocation">
+                          Card Allocation Date
+                        </option>
                         <option value="card_issue">Card Issue Date</option>
                         <option value="activity">Activity Date</option>
                         <option value="flagged">Flagged Date</option>
@@ -1627,13 +1784,15 @@ export default function ReportsPage() {
                       Flagged Status
                     </h4>
                     <div className="flex flex-wrap gap-2">
-                      {(["all", "flagged", "not_flagged"] as const).map((opt) => (
+                      {(
+                        ["all", "flagged", "banned", "not_flagged"] as const
+                      ).map((opt) => (
                         <button
                           key={opt}
                           onClick={() => setFlagFilter(opt)}
                           className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                             flagFilter === opt
-                              ? opt === "flagged"
+                              ? opt === "flagged" || opt === "banned"
                                 ? "bg-red-100 text-red-700 ring-2 ring-offset-1 ring-cyan-500"
                                 : "bg-cyan-100 text-cyan-700 ring-2 ring-offset-1 ring-cyan-500"
                               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -1643,7 +1802,9 @@ export default function ReportsPage() {
                             ? "All"
                             : opt === "flagged"
                               ? "Flagged"
-                              : "Not Flagged"}
+                              : opt === "banned"
+                                ? "Banned"
+                                : "Not Flagged"}
                         </button>
                       ))}
                     </div>
@@ -1733,7 +1894,10 @@ export default function ReportsPage() {
                         <button
                           key={department}
                           onClick={() =>
-                            toggleStringFilter(department, setCardDepartmentFilter)
+                            toggleStringFilter(
+                              department,
+                              setCardDepartmentFilter,
+                            )
                           }
                           className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                             cardDepartmentFilter.includes(department)
@@ -1757,7 +1921,10 @@ export default function ReportsPage() {
                         <button
                           key={eventName}
                           onClick={() =>
-                            toggleStringFilter(eventName, setActivityEventFilter)
+                            toggleStringFilter(
+                              eventName,
+                              setActivityEventFilter,
+                            )
                           }
                           className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                             activityEventFilter.includes(eventName)
@@ -1813,10 +1980,14 @@ export default function ReportsPage() {
       <div className="flex gap-3 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-4 sm:overflow-visible">
         <div className="flex-1 min-w-[180px] rounded-lg border border-cyan-200 bg-white px-4 py-3 flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-cyan-200 flex items-center justify-center">
-            <span className="text-cyan-900 font-extrabold text-sm">{totalUsers}</span>
+            <span className="text-cyan-900 font-extrabold text-sm">
+              {totalUsers}
+            </span>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-600">Total Recipients</p>
+            <p className="text-xs font-medium text-gray-600">
+              Total Recipients
+            </p>
             <p className="text-sm font-bold text-gray-900">
               {filteredData.length !== data.length
                 ? `${totalUsers} of ${data.length}`
@@ -1826,19 +1997,32 @@ export default function ReportsPage() {
         </div>
         <div className="flex-1 min-w-[180px] rounded-lg border border-red-200 bg-white px-4 py-3 flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-red-200 flex items-center justify-center">
-            <ShieldAlert className="h-4.5 w-4.5 text-red-700" />
+            <Flag className="h-4.5 w-4.5 text-red-700" />
           </div>
           <div>
             <p className="text-xs font-medium text-gray-600">Flagged Users</p>
             <p className="text-sm font-bold text-gray-900">{flaggedCount}</p>
           </div>
         </div>
-        <div className="flex-1 min-w-[180px] rounded-lg border border-blue-200 bg-white px-4 py-3 flex items-center gap-3">
-          <div className="h-10 w-10 rounded-full bg-blue-200 flex items-center justify-center">
-            <span className="text-blue-900 font-extrabold text-sm">{totalCards}</span>
+        <div className="flex-1 min-w-[180px] rounded-lg border border-rose-200 bg-white px-4 py-3 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-rose-200 flex items-center justify-center">
+            <XCircle className="h-4.5 w-4.5 text-rose-700" />
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-600">Total Cards Issued</p>
+            <p className="text-xs font-medium text-gray-600">Banned Users</p>
+            <p className="text-sm font-bold text-gray-900">{bannedCount}</p>
+          </div>
+        </div>
+        <div className="flex-1 min-w-[180px] rounded-lg border border-blue-200 bg-white px-4 py-3 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-blue-200 flex items-center justify-center">
+            <span className="text-blue-900 font-extrabold text-sm">
+              {totalCards}
+            </span>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-600">
+              Total Cards Issued
+            </p>
             <p className="text-sm font-bold text-gray-900">{totalCards}</p>
           </div>
         </div>
@@ -1862,7 +2046,10 @@ export default function ReportsPage() {
                   >
                     {header.isPlaceholder
                       ? null
-                      : flexRender(header.column.columnDef.header, header.getContext())}
+                      : flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
                   </th>
                 ))}
               </tr>
@@ -1880,7 +2067,10 @@ export default function ReportsPage() {
                   >
                     {row.getVisibleCells().map((cell) => (
                       <td key={cell.id} className="px-3 py-2.5 align-middle">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -1900,7 +2090,10 @@ export default function ReportsPage() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={columns.length} className="p-8 text-center text-gray-500">
+                  <td
+                    colSpan={columns.length}
+                    className="p-8 text-center text-gray-500"
+                  >
                     No recipients found.
                   </td>
                 </tr>
@@ -1921,9 +2114,13 @@ export default function ReportsPage() {
         </button>
 
         <span className="text-sm font-medium text-gray-600">
-          {filteredData.length === 0 ? "0" : `${start}-${end}`} of {filteredData.length}
+          {filteredData.length === 0 ? "0" : `${start}-${end}`} of{" "}
+          {filteredData.length}
           {filteredData.length !== data.length && (
-            <span className="text-gray-400"> (filtered from {data.length})</span>
+            <span className="text-gray-400">
+              {" "}
+              (filtered from {data.length})
+            </span>
           )}
         </span>
 

@@ -1,95 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initAdmin } from "@/app/services/firebaseAdmin";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { cookies } from "next/headers";
 import { encryptPhone } from "@/utils/phoneEncryption";
 import admin from "firebase-admin";
-import sharp from "sharp";
 import { upsertSearchIndexEntry } from "@/app/services/searchIndexService";
+import { getStaffAccess } from "@/app/api/_lib/staffAccess";
+import { processRecipientPhoto } from "@/app/services/recipientPhotoService";
 
-const MAX_PICTURE_FIELD_BYTES = 1_000_000; // Firestore field value must stay < ~1,048,487 bytes.
-// Thumbnails live on the user doc and ship with every list response — keep
-// them small so list payloads stay bounded.
-const MAX_THUMBNAIL_FIELD_BYTES = 20_000;
 const EDMONTON_TIMEZONE = "America/Edmonton";
-
-function getUtf8ByteSize(value: string): number {
-  return Buffer.byteLength(value, "utf8");
-}
-
-const THUMB_MAX_DIMENSION = 96;
-const THUMB_QUALITY = 75;
-
-// Identify the actual image format from magic bytes.
-function sniffImageMime(buffer: Buffer): string | null {
-  if (buffer.length < 12) return null;
-  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
-    return "image/jpeg";
-  }
-  if (
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47
-  ) {
-    return "image/png";
-  }
-  if (
-    buffer.toString("ascii", 0, 4) === "RIFF" &&
-    buffer.toString("ascii", 8, 12) === "WEBP"
-  ) {
-    return "image/webp";
-  }
-  if (buffer.toString("ascii", 0, 4) === "GIF8") {
-    return "image/gif";
-  }
-  if (buffer.toString("ascii", 4, 8) === "ftyp") {
-    // Major brand may be mif1/msf1 with avif only in the compatible-brands
-    // list that follows — scan the whole ftyp box, not just bytes 8-11.
-    const ftypSize = buffer.readUInt32BE(0);
-    const boxEnd = Math.min(buffer.length, Math.max(12, Math.min(ftypSize, 64)));
-    const brands = buffer.toString("ascii", 8, boxEnd);
-    if (brands.includes("avif") || brands.includes("avis")) return "image/avif";
-  }
-  return null;
-}
-
-// Server-side image validation: the declared data-URL mimetype must be an
-// accepted format and must match the file's magic bytes — the client is not
-// trusted.
-function decodeImageDataUrl(
-  dataUrl: string,
-): { buffer: Buffer; mime: string } | null {
-  const match = dataUrl.match(
-    /^data:image\/(jpeg|png|webp|avif|gif);base64,([A-Za-z0-9+/=]+)$/,
-  );
-  if (!match) return null;
-
-  const declared = `image/${match[1]}`;
-  let buffer: Buffer;
-  try {
-    buffer = Buffer.from(match[2], "base64");
-  } catch {
-    return null;
-  }
-
-  const sniffed = sniffImageMime(buffer);
-  if (!sniffed || sniffed !== declared) return null;
-
-  return { buffer, mime: declared };
-}
-
-// The thumbnail stored on the user doc is regenerated here from the uploaded
-// image, so a tampered client can never store a thumb that doesn't match.
-async function makeAuthoritativeThumb(buffer: Buffer): Promise<string> {
-  const out = await sharp(buffer)
-    .resize(THUMB_MAX_DIMENSION, THUMB_MAX_DIMENSION, { fit: "inside" })
-    // JPEG has no alpha — flatten transparent PNGs onto white, not black.
-    .flatten({ background: "#ffffff" })
-    .jpeg({ quality: THUMB_QUALITY })
-    .toBuffer();
-  return `data:image/jpeg;base64,${out.toString("base64")}`;
-}
 
 function formatEdmontonDate(date: Date): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -107,45 +24,14 @@ function formatEdmontonDate(date: Date): string {
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify user session
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("session")?.value;
-
-    if (!sessionCookie) {
+    const access = await getStaffAccess();
+    if ("error" in access) {
       return NextResponse.json(
-        { error: "Unauthorized - No session found" },
-        { status: 401 },
+        { error: access.error },
+        { status: access.status },
       );
     }
-
-    const adminApp = await initAdmin();
-    const decodedClaims = await adminApp
-      .auth()
-      .verifySessionCookie(sessionCookie, true);
-
-    // IT admins are in read-only "view as" mode on staff pages; they cannot
-    // create recipients even by bypassing the UI.
-    if (decodedClaims.admin === true) {
-      return NextResponse.json(
-        { error: "Forbidden - Staff access only" },
-        { status: 403 },
-      );
-    }
-
-    const staffDoc = await adminApp
-      .firestore()
-      .collection("administrative_staff")
-      .doc(decodedClaims.uid)
-      .get();
-
-    if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
-      return NextResponse.json(
-        { error: "Forbidden - Staff access only" },
-        { status: 403 },
-      );
-    }
-
-    const createdByUid = decodedClaims.uid;
+    const createdByUid = access.uid;
 
     const body = await request.json();
     const { personalDetails, additionalInfo, photoUpload } = body as {
@@ -189,44 +75,20 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    const pictureBytes = getUtf8ByteSize(photoUpload.imageUrl);
-    if (pictureBytes > MAX_PICTURE_FIELD_BYTES) {
+    let processedPhoto;
+    try {
+      processedPhoto = await processRecipientPhoto(photoUpload.imageUrl);
+    } catch (error) {
       return NextResponse.json(
         {
           error:
-            "Recipient photo is too large. Please upload a smaller image.",
+            error instanceof Error ? error.message : "Invalid recipient photo.",
         },
         { status: 400 },
       );
     }
 
-    // Validate the image server-side (declared mimetype + magic bytes), then
-    // regenerate the thumbnail here — the client-sent thumbnail is ignored.
-    const decoded = decodeImageDataUrl(photoUpload.imageUrl);
-    if (!decoded) {
-      return NextResponse.json(
-        { error: "Recipient photo must be a valid JPEG, PNG, WebP, AVIF, or GIF image." },
-        { status: 400 },
-      );
-    }
-
-    let thumbnail: string | null = null;
-    try {
-      thumbnail = await makeAuthoritativeThumb(decoded.buffer);
-    } catch {
-      return NextResponse.json(
-        { error: "Recipient photo could not be processed. Please upload a different image." },
-        { status: 400 },
-      );
-    }
-    if (getUtf8ByteSize(thumbnail) > MAX_THUMBNAIL_FIELD_BYTES) {
-      thumbnail = null;
-    }
-
-    // Validate required personal details fields. lastName is intentionally
-    // not required — mononyms are legal names (common among reclaimed
-    // traditional Indigenous names).
-    const requiredFields = ["firstName", "email"] as const;
+    const requiredFields = ["firstName", "lastName", "email"] as const;
     for (const field of requiredFields) {
       if (!personalDetails[field]) {
         return NextResponse.json(
@@ -236,7 +98,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const db = getFirestore();
+    const db = getFirestore(access.app);
     const arcCardDigits = String(additionalInfo?.arcCardDigits || "")
       .replace(/\D/g, "")
       .trim();
@@ -248,10 +110,10 @@ export async function POST(request: NextRequest) {
     const userData = {
       // Required schema fields
       firstName: personalDetails.firstName,
-      secondName: personalDetails.lastName || "",
+      secondName: personalDetails.lastName,
       // Full-res base64 lives in user_photos/{uid}; the user doc only carries
       // the small thumbnail so list queries stay bounded.
-      photoThumb: thumbnail,
+      photoThumb: processedPhoto.photoThumb,
       genderIdentity: personalDetails.gender || null,
       aliases: personalDetails.alias ? [personalDetails.alias] : [],
       dateOfBirth: personalDetails.dob || null,
@@ -259,7 +121,9 @@ export async function POST(request: NextRequest) {
       postalCode: personalDetails.postalCode || null,
       passesIssued: [],
       banned: false,
+      flagged: false,
       banReason: null,
+      flagReason: null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: createdByUid,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -279,48 +143,47 @@ export async function POST(request: NextRequest) {
       // Canonical re-encode of the validated bytes — never the client's raw
       // string, so lenient-decoder quirks (mid-stream padding etc.) can't be
       // stored. Served via /api/users/[id]/photo.
-      picture: `data:${decoded.mime};base64,${decoded.buffer.toString("base64")}`,
+      picture: processedPhoto.picture,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    if (!arcCardDigits){
+    if (!arcCardDigits) {
       const batch = db.batch();
       batch.set(userRef, userData);
       batch.set(photoRef, photoData);
       upsertSearchIndexEntry(batch, db, userRef.id, userData);
       await batch.commit();
-    }else{
+    } else {
       try {
-        await db.runTransaction(async(tx) => {
+        await db.runTransaction(async (tx) => {
           const cardQuery = db
-          .collection("arc_cards")
-          .where("arcCardNumber", "==", arcCardDigits)
-          .limit(1);
+            .collection("arc_cards")
+            .where("arcCardNumber", "==", arcCardDigits)
+            .limit(1);
 
           const cardSnapshot = await tx.get(cardQuery);
 
-          if (cardSnapshot.empty){
-            throw new Error("Selected ARC Card does not exist")
+          if (cardSnapshot.empty) {
+            throw new Error("Selected ARC Card does not exist");
           }
 
           const cardDoc = cardSnapshot.docs[0];
           const cardData = cardDoc.data() as {
             currentUserId?: string | null;
-            status?: string
-          }
+            status?: string;
+          };
 
           // Rule 1: card must not already be assigned
-          if (cardData.currentUserId){
-            throw new Error("Selected ARC Card is already assigned")
+          if (cardData.currentUserId) {
+            throw new Error("Selected ARC Card is already assigned");
           }
 
-          if (cardData.status !== "Unattributed"){
+          if (cardData.status !== "Unattributed") {
             throw new Error(
-              "Selected ARC Card must be Unattributed before assignment"
-            )
+              "Selected ARC Card must be Unattributed before assignment",
+            );
           }
 
-  
           const issueTimestamp = Timestamp.now();
           const issueDate = issueTimestamp.toDate();
           const issueDateString = formatEdmontonDate(issueDate);
@@ -345,18 +208,18 @@ export async function POST(request: NextRequest) {
             ...userData,
             arcCardNumber: arcCardDigits,
             passesIssued: [cardDoc.id],
-          })
+          });
 
-          tx.set(photoRef, photoData)
+          tx.set(photoRef, photoData);
 
-          upsertSearchIndexEntry(tx, db, userRef.id, userData)
+          upsertSearchIndexEntry(tx, db, userRef.id, userData);
 
           // Rule 3: once assigned, card becomes Active
-          tx.update(cardDoc.ref,{
+          tx.update(cardDoc.ref, {
             currentUserId: userRef.id,
             status: "Active",
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          })
+          });
 
           tx.set(issueRef, {
             cardId: cardDoc.id,
@@ -369,9 +232,11 @@ export async function POST(request: NextRequest) {
           });
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to assign ARC card";
+        const message =
+          err instanceof Error ? err.message : "Failed to assign ARC card";
         return NextResponse.json({ error: message }, { status: 400 });
-      }}
+      }
+    }
 
     return NextResponse.json(
       {
