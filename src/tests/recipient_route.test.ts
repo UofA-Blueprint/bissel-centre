@@ -10,11 +10,21 @@ jest.mock("next/server", () => ({
 jest.mock("firebase-admin/firestore", () => ({
   FieldValue: {
     serverTimestamp: jest.fn(() => "server-timestamp"),
+    delete: jest.fn(() => "deleted-field"),
   },
 }));
 
 jest.mock("@/app/api/_lib/staffAccess", () => ({
   getStaffAccess: jest.fn(),
+}));
+
+jest.mock("@/app/services/recipientPhotoService", () => ({
+  processRecipientPhoto: jest.fn(),
+}));
+
+jest.mock("@/app/services/searchIndexService", () => ({
+  upsertSearchIndexEntry: jest.fn(),
+  deleteSearchIndexEntry: jest.fn(),
 }));
 
 jest.mock("@/utils/phoneEncryption", () => ({
@@ -28,9 +38,14 @@ jest.mock("@/utils/phoneEncryption", () => ({
 
 import { GET, PATCH } from "@/app/api/recipients/[id]/route";
 import { getStaffAccess } from "@/app/api/_lib/staffAccess";
+import { processRecipientPhoto } from "@/app/services/recipientPhotoService";
+import { upsertSearchIndexEntry } from "@/app/services/searchIndexService";
 
 const mockGetStaffAccess = getStaffAccess as jest.MockedFunction<
   typeof getStaffAccess
+>;
+const mockProcessRecipientPhoto = processRecipientPhoto as jest.MockedFunction<
+  typeof processRecipientPhoto
 >;
 
 function request(body?: unknown): Request {
@@ -76,6 +91,15 @@ describe("recipient profile API", () => {
     const db = {
       collection: jest.fn((name: string) => {
         if (name === "users") return { doc: jest.fn(() => ({ get: userGet })) };
+        if (name === "user_photos") {
+          return {
+            doc: jest.fn(() => ({
+              get: jest
+                .fn()
+                .mockResolvedValue({ exists: false, data: () => ({}) }),
+            })),
+          };
+        }
         const get = jest.fn().mockResolvedValue({ docs: [], empty: true });
         return {
           where: jest.fn(() => ({
@@ -93,12 +117,15 @@ describe("recipient profile API", () => {
     expect(response.status).toBe(200);
     expect(body.personalDetails.phone).toBe("7805551234");
     expect(body.personalDetails.firstName).toBe("Alex");
-    expect(body.photoUpload.imageUrl).toContain("data:image/jpeg");
+    expect(body.photoUpload.imageUrl).toBe(
+      "/api/users/recipient-1/photo?v=legacy",
+    );
   });
 
   test("updates the profile and writes an audit record", async () => {
     const update = jest.fn();
     const create = jest.fn();
+    const set = jest.fn();
     const commit = jest.fn().mockResolvedValue(undefined);
     const recipientRef = {
       get: jest.fn().mockResolvedValue({
@@ -113,11 +140,15 @@ describe("recipient profile API", () => {
     const db = {
       collection: jest.fn((name: string) => {
         if (name === "users") return { doc: jest.fn(() => recipientRef) };
-        return { doc: jest.fn(), add: jest.fn() };
+        return { doc: jest.fn(() => ({ id: `${name}-doc` })), add: jest.fn() };
       }),
-      batch: jest.fn(() => ({ update, create, commit })),
+      batch: jest.fn(() => ({ update, create, set, commit })),
     };
     mockGetStaffAccess.mockResolvedValue({ db, uid: "staff-1" } as any);
+    mockProcessRecipientPhoto.mockResolvedValue({
+      picture: "data:image/jpeg;base64,canonical",
+      photoThumb: "data:image/jpeg;base64,thumb",
+    });
 
     const response = await PATCH(
       request({
@@ -145,6 +176,18 @@ describe("recipient profile API", () => {
       }),
     );
     expect(create).toHaveBeenCalledTimes(1);
+    expect(set).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        picture: "data:image/jpeg;base64,canonical",
+      }),
+    );
+    expect(upsertSearchIndexEntry).toHaveBeenCalledWith(
+      expect.anything(),
+      db,
+      "recipient-1",
+      expect.objectContaining({ postalCode: "T5Z 1H3" }),
+    );
     expect(create.mock.calls[0][1]).toEqual(
       expect.objectContaining({
         userId: "recipient-1",

@@ -127,10 +127,81 @@ export async function updateMonthlyUnloadSchedule(
   return next;
 }
 
+// Only statuses that actually need unloading — the sweep never reads
+// already-Unloaded cards, so its cost tracks work to do, not collection size.
+const NON_UNLOADED_STATUSES = ["Active", "Unattributed", "Expired", "Cancelled"];
+const SWEEP_BATCH_SIZE = 400; // under Firestore's 500-op batch cap
+const MAX_SWEEP_ROUNDS = 50; // runaway guard (~20k cards)
+
+/**
+ * Claim this month's run transactionally BEFORE sweeping, so two overlapping
+ * cron invocations can never double-process. Trade-off: if the sweep dies
+ * mid-way the month stays claimed and remaining cards need a manual re-run
+ * (clear lastRunMonthKey) — preferred over double-processing.
+ */
+async function claimMonthlyRun(db: Firestore, monthKey: string): Promise<boolean> {
+  const settingsRef = db
+    .collection(MONTHLY_UNLOAD_SETTINGS_COLLECTION)
+    .doc(MONTHLY_UNLOAD_SETTINGS_DOC);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(settingsRef);
+    const data = (snap.data() ?? {}) as Partial<MonthlyUnloadSchedule>;
+    if (data.lastRunMonthKey === monthKey) return false;
+    tx.set(
+      settingsRef,
+      {
+        lastRunMonthKey: monthKey,
+        lastRunAt: new Date().toISOString(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    return true;
+  });
+}
+
+/**
+ * Unload every non-Unloaded card in bounded batches. Each committed batch
+ * removes its docs from the filtered query, so re-querying until empty is
+ * both the pagination and the progress tracking.
+ */
+async function sweepLoadedCards(db: Firestore): Promise<number> {
+  let updated = 0;
+  for (let round = 0; round < MAX_SWEEP_ROUNDS; round++) {
+    const snap = await db
+      .collection("arc_cards")
+      .where("status", "in", NON_UNLOADED_STATUSES)
+      .select() // refs only
+      .limit(SWEEP_BATCH_SIZE)
+      .get();
+    if (snap.empty) break;
+
+    const batch = db.batch();
+    for (const doc of snap.docs) {
+      batch.update(doc.ref, {
+        status: "Unloaded",
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+    updated += snap.size;
+    if (snap.size < SWEEP_BATCH_SIZE) break;
+  }
+  return updated;
+}
+
 async function runMonthlyUnload(
   db: Firestore,
   schedule: MonthlyUnloadSchedule,
-): Promise<{ ran: boolean; updatedCardCount: number; monthKey: string }> {
+  opts?: { dryRun?: boolean },
+): Promise<{
+  ran: boolean;
+  updatedCardCount: number;
+  monthKey: string;
+  dryRun?: boolean;
+  wouldRunNow?: boolean;
+  reason?: string;
+}> {
   const now = getEdmontonNowParts();
   const monthKey = `${String(now.year).padStart(4, "0")}-${String(now.month).padStart(2, "0")}`;
   const scheduleTime = parseTime24(schedule.time24) ?? { hour: 0, minute: 0 };
@@ -138,66 +209,54 @@ async function runMonthlyUnload(
   const hasReachedTime =
     now.hour > scheduleTime.hour ||
     (now.hour === scheduleTime.hour && now.minute >= scheduleTime.minute);
+  const wouldRunNow =
+    schedule.enabled &&
+    isScheduledDay &&
+    hasReachedTime &&
+    schedule.lastRunMonthKey !== monthKey;
 
-  // Run only on the configured calendar day once the configured time is reached.
-  if (
-    !schedule.enabled ||
-    !isScheduledDay ||
-    !hasReachedTime ||
-    schedule.lastRunMonthKey === monthKey
-  ) {
+  // Dry run: report what a live run would do — a single aggregate, zero
+  // doc reads, zero writes, no lock claimed.
+  if (opts?.dryRun) {
+    const agg = await db
+      .collection("arc_cards")
+      .where("status", "in", NON_UNLOADED_STATUSES)
+      .count()
+      .get();
+    return {
+      ran: false,
+      dryRun: true,
+      wouldRunNow,
+      updatedCardCount: agg.data().count,
+      monthKey,
+    };
+  }
+
+  if (!wouldRunNow) {
     return { ran: false, updatedCardCount: 0, monthKey };
   }
 
-  const cardsSnapshot = await db.collection("arc_cards").get();
-  let batch = db.batch();
-  let opsInBatch = 0;
-  let updatedCardCount = 0;
-  const maybeCommit = async () => {
-    if (opsInBatch >= 400) {
-      await batch.commit();
-      batch = db.batch();
-      opsInBatch = 0;
-    }
-  };
-
-  for (const doc of cardsSnapshot.docs) {
-    const status = String((doc.data() as { status?: unknown }).status || "");
-    if (status === "Unloaded") continue;
-    batch.update(doc.ref, {
-      status: "Unloaded",
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    opsInBatch += 1;
-    updatedCardCount += 1;
-    await maybeCommit();
+  const claimed = await claimMonthlyRun(db, monthKey);
+  if (!claimed) {
+    return {
+      ran: false,
+      updatedCardCount: 0,
+      monthKey,
+      reason: "already ran (or a concurrent invocation claimed this month)",
+    };
   }
 
-  const settingsRef = db
-    .collection(MONTHLY_UNLOAD_SETTINGS_COLLECTION)
-    .doc(MONTHLY_UNLOAD_SETTINGS_DOC);
-  batch.set(
-    settingsRef,
-    {
-      lastRunMonthKey: monthKey,
-      lastRunAt: new Date().toISOString(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    },
-    { merge: true },
-  );
-  opsInBatch += 1;
-
-  if (opsInBatch > 0) {
-    await batch.commit();
-  }
-
+  const updatedCardCount = await sweepLoadedCards(db);
   return { ran: true, updatedCardCount, monthKey };
 }
 
-export async function expireOverdueArcCards(db: Firestore) {
+export async function expireOverdueArcCards(
+  db: Firestore,
+  opts?: { dryRun?: boolean },
+) {
   // Backward-compatible function name: now handles monthly unload schedule.
   const schedule = await getMonthlyUnloadSchedule(db);
-  const result = await runMonthlyUnload(db, schedule);
+  const result = await runMonthlyUnload(db, schedule, opts);
   return {
     mode: "monthly_unload",
     timezone: EDMONTON_TIMEZONE,
@@ -205,5 +264,9 @@ export async function expireOverdueArcCards(db: Firestore) {
     ran: result.ran,
     ranForMonthKey: result.monthKey,
     updatedCardCount: result.updatedCardCount,
+    ...(result.dryRun
+      ? { dryRun: true, wouldRunNow: result.wouldRunNow }
+      : {}),
+    ...(result.reason ? { reason: result.reason } : {}),
   };
 }

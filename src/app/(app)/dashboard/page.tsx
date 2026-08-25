@@ -5,8 +5,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import Fuse from "fuse.js";
-import { Flag, XCircle } from "lucide-react";
+import { ArrowLeft, Flag, Search, XCircle } from "lucide-react";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
 import SearchBar from "@/app/components/SearchBar";
 import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
@@ -52,8 +51,28 @@ interface User {
 interface DashboardSummaryResponse {
   stats: StatCardProps[];
   users: User[];
+  nextCursor: string | null;
+  total: number;
 }
 
+interface SearchApiResult {
+  id: string;
+  name: string;
+  aliases?: string[];
+  dateOfBirth?: string;
+  postalCode?: string;
+  banned?: boolean;
+  flagged?: boolean;
+  flagReason?: string;
+  banReason?: string;
+  status?: string;
+  picture?: string;
+  arcCardStatus?: User["arcCardStatus"];
+}
+
+const USERS_PAGE_SIZE = 60;
+
+// ?register= carries a small running index (1, 2, 3, …) per tab session.
 const DASHBOARD_CACHE_TTL_MS = 30_000;
 let dashboardSummaryCache: {
   data: DashboardSummaryResponse;
@@ -65,6 +84,13 @@ export default function DashboardPage() {
   const searchParams = useSearchParams();
   const isViewOnly = useIsViewOnly();
   const createdByFilter = searchParams.get("createdBy");
+  // Search-first mode lives behind /dashboard?search=... — presence of the
+  // param (even empty) switches the page into the dense results view.
+  const searchParam = searchParams.get("search");
+  const isSearchMode = searchParam !== null;
+  // Register modal lives behind ?register=<index>&step=N — the running
+  // index keys the draft in sessionStorage so multiple drafts coexist and
+  // reloads or history navigation restore the right one.
   const [stats, setStats] = useState([
     { icon: "/card.svg", number: 0, label: "Available Cards" },
     { icon: "/checkmark.svg", number: 0, label: "Active Cards" },
@@ -77,6 +103,9 @@ export default function DashboardPage() {
     { icon: "/flag.svg", number: 0, label: "Banned Users" },
   ]);
   const [users, setUsers] = useState<User[]>([]);
+  const [nextUsersCursor, setNextUsersCursor] = useState<string | null>(null);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -99,6 +128,8 @@ export default function DashboardPage() {
       if (hasWarmCache) {
         setStats(cachedSummary.data.stats);
         setUsers(cachedSummary.data.users);
+        setNextUsersCursor(cachedSummary.data.nextCursor);
+        setTotalUsers(cachedSummary.data.total);
         setIsLoading(false);
       } else {
         setIsLoading(true);
@@ -107,9 +138,10 @@ export default function DashboardPage() {
       try {
         setForbidden(false);
 
-        const dashboardResponse = await fetch("/api/dashboard/summary", {
-          cache: "no-store",
-        });
+        const dashboardResponse = await fetch(
+          `/api/dashboard/summary?limit=${USERS_PAGE_SIZE}`,
+          { cache: "no-store" },
+        );
 
         if (!dashboardResponse.ok) {
           if (dashboardResponse.status === 401) {
@@ -131,6 +163,8 @@ export default function DashboardPage() {
 
         setStats(summary.stats);
         setUsers(summary.users);
+        setNextUsersCursor(summary.nextCursor ?? null);
+        setTotalUsers(summary.total ?? summary.users.length);
         dashboardSummaryCache = {
           data: summary,
           timestampMs: Date.now(),
@@ -151,33 +185,273 @@ export default function DashboardPage() {
     };
   }, [router, refreshNonce]);
 
+  // Server-side search: debounced call to /api/users/search (folding +
+  // fuzzy + phonetic over names AND aliases), then map the returned ids
+  // onto the already-loaded user objects to keep card status fields.
   useEffect(() => {
     const filtered = createdByFilter
       ? users.filter((u) => u.createdBy === createdByFilter)
       : users;
 
-    if (!searchQuery.trim()) {
+    const query = searchQuery.trim();
+    if (query.length < 2) {
       setSearchResults(filtered);
       return;
     }
 
-    const fuse = new Fuse(filtered, {
-      keys: ["firstName", "secondName", "email"],
-      threshold: 0.3,
-    });
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/users/search?q=${encodeURIComponent(query)}`,
+          { signal: controller.signal },
+        );
+        if (!res.ok) return; // keep current results on error
+        const data = (await res.json()) as {
+          ids?: string[];
+          results?: SearchApiResult[];
+        };
+        // Prefer the locally-loaded user object (it has full card state);
+        // users beyond the loaded pages render from the server-hydrated
+        // result so pagination never hides a search hit.
+        const localById = new Map(filtered.map((u) => [u.id, u] as const));
+        const rows: User[] = [];
+        for (const r of data.results ?? []) {
+          const local = localById.get(r.id);
+          if (local) {
+            rows.push(local);
+          } else if (!createdByFilter) {
+            rows.push({
+              id: r.id,
+              firstName: r.name,
+              secondName: "",
+              picture: r.picture ?? "",
+              genderIdentity: "",
+              aliases: r.aliases ?? [],
+              dateOfBirth: r.dateOfBirth ?? "",
+              address: "",
+              postalCode: r.postalCode ?? "",
+              passesIssued: [],
+              banned: Boolean(r.banned),
+              flagged: Boolean(r.flagged),
+              flagReason: r.flagReason,
+              banReason: r.banReason,
+              status: r.status === "Inactive" ? "Inactive" : "Active",
+              createdAt: "",
+              createdBy: "",
+              arcCardStatus: r.arcCardStatus,
+              lastIssued: "N/A",
+            });
+          }
+        }
+        setSearchResults(rows);
+      } catch {
+        // aborted (new keystroke) — newer request will set results
+      }
+    }, 300);
 
-    const results = fuse.search(searchQuery).map((r) => r.item);
-    setSearchResults(results);
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
   }, [searchQuery, users, createdByFilter]);
 
   const handleGoToCards = () => {
     router.push("/cards");
   };
 
+  const loadMoreUsers = async () => {
+    if (!nextUsersCursor || isLoadingMore) return;
+    setIsLoadingMore(true);
+    try {
+      const res = await fetch(
+        `/api/dashboard/summary?limit=${USERS_PAGE_SIZE}&cursor=${encodeURIComponent(nextUsersCursor)}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) return;
+      const page = (await res.json()) as DashboardSummaryResponse;
+      setUsers((prev) => {
+        const seen = new Set(prev.map((u) => u.id));
+        return [...prev, ...page.users.filter((u) => !seen.has(u.id))];
+      });
+      setNextUsersCursor(page.nextCursor ?? null);
+      if (typeof page.total === "number") setTotalUsers(page.total);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  // Keep the input in sync with the URL so back/forward and shared links
+  // restore the search without a reload.
+  useEffect(() => {
+    setSearchQuery((prev) => {
+      const fromUrl = searchParam ?? "";
+      return fromUrl !== prev ? fromUrl : prev;
+    });
+  }, [searchParam]);
+
+  const urlWithSearch = (q: string) => {
+    const params = new URLSearchParams(window.location.search);
+    params.set("search", q);
+    return `/dashboard?${params.toString()}`;
+  };
+
+  // First keystroke on the normal dashboard pushes ONE history entry into
+  // search mode (so browser-back returns to /dashboard); edits inside search
+  // mode replace in place so history isn't spammed per keystroke.
+  const enterSearchMode = (q: string) => {
+    setSearchQuery(q);
+    window.history.pushState(null, "", urlWithSearch(q));
+  };
+
+  const updateSearchUrl = (q: string) => {
+    setSearchQuery(q);
+    window.history.replaceState(null, "", urlWithSearch(q));
+  };
+
+  const exitSearchMode = () => {
+    const params = new URLSearchParams(window.location.search);
+    params.delete("search");
+    const qs = params.toString();
+    router.push(qs ? `/dashboard?${qs}` : "/dashboard");
+  };
+
+  // ── Register modal URL handlers ─────────────────────────────────
+
+  const openRegisterModal = () => {
+    setEditingUserId(null);
+    setIsModalOpen(true);
+  };
+
   if (forbidden) {
     return (
       <main className="bg-gray-100 min-h-screen">
         <StaffOnlyNotice />
+      </main>
+    );
+  }
+
+  if (isSearchMode) {
+    return (
+      <main className="min-h-screen bg-gray-100">
+        <div className="px-3 py-3 sm:px-6">
+          {/* Top bar: back · slim long search · actions on the right */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={exitSearchMode}
+              title="Back to dashboard"
+              className="shrink-0 rounded-md p-2 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </button>
+            <div className="relative flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+              <input
+                autoFocus
+                type="search"
+                value={searchQuery}
+                onChange={(e) => updateSearchUrl(e.target.value)}
+                onKeyDown={(e) => {
+                  // Backspace on an already-empty query exits search mode.
+                  if (e.key === "Backspace" && e.currentTarget.value === "") {
+                    e.preventDefault();
+                    exitSearchMode();
+                  }
+                }}
+                placeholder="Search recipients by name or alias..."
+                className="w-full rounded-md border border-gray-300 bg-white py-1.5 pl-8 pr-3 text-sm text-gray-800 placeholder-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+              />
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                type="button"
+                disabled={isViewOnly}
+                onClick={() => {
+                  if (!isViewOnly) openRegisterModal();
+                }}
+                title={
+                  isViewOnly
+                    ? "Sign in as administrative staff to add recipients."
+                    : undefined
+                }
+                className={`rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap ${
+                  isViewOnly
+                    ? "cursor-not-allowed bg-gray-200 text-gray-400"
+                    : "bg-primary text-white hover:bg-cyan-600"
+                }`}
+              >
+                ＋ New Recipient
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                <Image src="/filter.svg" alt="" width={14} height={14} />
+                Filters
+              </button>
+            </div>
+          </div>
+
+          {/* Count */}
+          <p className="mt-2 px-1 text-xs text-gray-500">
+            {isLoading
+              ? "Loading…"
+              : `${searchResults.length} / ${totalUsers || users.length} shown`}
+          </p>
+
+          {/* Dense, full-width, table-like results */}
+          <div className="mt-1 overflow-hidden rounded-lg border border-gray-200 bg-white">
+            <div className="grid grid-cols-[minmax(0,3fr)_minmax(0,1fr)] gap-x-3 border-b border-gray-200 bg-gray-50 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500 sm:grid-cols-[minmax(0,3fr)_repeat(3,minmax(0,1fr))]">
+              <span>Name</span>
+              <span className="hidden sm:block">Date of birth</span>
+              <span className="hidden sm:block">Status</span>
+              <span>Card</span>
+            </div>
+            {isLoading ? (
+              <div className="px-3 py-6 text-center text-sm text-gray-400">
+                Loading recipients…
+              </div>
+            ) : searchResults.length === 0 ? (
+              <div className="px-3 py-6 text-center text-sm text-gray-400">
+                No recipients match this search.
+              </div>
+            ) : (
+              <ul className="divide-y divide-gray-100">
+                {searchResults.map((user) => (
+                  <SearchResultRow key={user.id} user={user} />
+                ))}
+              </ul>
+            )}
+          </div>
+          {!searchQuery.trim() && nextUsersCursor && !isLoading && (
+            <div className="flex justify-center py-3">
+              <button
+                type="button"
+                onClick={() => void loadMoreUsers()}
+                disabled={isLoadingMore}
+                className="rounded-md border border-gray-300 bg-white px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {isLoadingMore
+                  ? "Loading…"
+                  : `Load more (${users.length} of ${totalUsers})`}
+              </button>
+            </div>
+          )}
+        </div>
+        <RegisterRecipientModal
+          open={isModalOpen}
+          mode={editingUserId ? "edit" : "create"}
+          recipientId={editingUserId ?? undefined}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingUserId(null);
+          }}
+          onSuccess={() => {
+            setIsLoading(true);
+            setRefreshNonce((prev) => prev + 1);
+          }}
+        />
       </main>
     );
   }
@@ -198,7 +472,7 @@ export default function DashboardPage() {
         )}
 
         {/* Stats Section */}
-        <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-5 sm:gap-4 sm:overflow-visible mb-4 sm:mb-6 max-w-7xl mx-auto w-full lg:shrink-0">
+        <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-4 sm:gap-4 sm:overflow-visible mb-4 sm:mb-6 max-w-7xl mx-auto w-full lg:shrink-0">
           {stats.map((stat, index) => (
             <StatCard
               key={index}
@@ -213,7 +487,7 @@ export default function DashboardPage() {
         {/* Search Bar */}
         <SearchBar
           value={searchQuery}
-          onChange={setSearchQuery}
+          onChange={enterSearchMode}
           placeholder="Search recipients..."
           className="max-w-7xl mx-auto mb-4 sm:mb-6 sticky top-0 z-20 lg:static lg:z-auto lg:shrink-0"
         >
@@ -223,8 +497,7 @@ export default function DashboardPage() {
             }`}
             onClick={() => {
               if (isViewOnly) return;
-              setEditingUserId(null);
-              setIsModalOpen(true);
+              openRegisterModal();
             }}
             disabled={isViewOnly}
             title={
@@ -259,9 +532,9 @@ export default function DashboardPage() {
             </button>
           </div>
         </SearchBar>
-        <div className="max-w-7xl mx-auto w-full -mt-2 mb-4 sm:mb-6 flex justify-center">
-          <span className="inline-flex items-center rounded-full bg-primary px-3 py-1 text-sm font-medium text-white shadow-sm text-center">
-            If the dashboard doesn&apos;t reflect the latest updates, please refresh.
+        <div className="max-w-7xl mx-auto w-full -mt-2 mb-3 flex justify-end">
+          <span className="text-xs text-gray-400">
+            Not seeing the latest updates? Refresh the page.
           </span>
         </div>
 
@@ -282,7 +555,6 @@ export default function DashboardPage() {
                     user={user}
                     isViewOnly={isViewOnly}
                     onEdit={() => {
-                      if (isViewOnly) return;
                       setEditingUserId(user.id);
                       setIsModalOpen(true);
                     }}
@@ -299,6 +571,21 @@ export default function DashboardPage() {
                     width={370}
                     height={370}
                   />
+                </div>
+              )}
+
+              {!searchQuery.trim() && nextUsersCursor && (
+                <div className="flex justify-center py-4">
+                  <button
+                    type="button"
+                    onClick={() => void loadMoreUsers()}
+                    disabled={isLoadingMore}
+                    className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    {isLoadingMore
+                      ? "Loading…"
+                      : `Load more (${users.length} of ${totalUsers})`}
+                  </button>
                 </div>
               )}
             </>
@@ -346,11 +633,7 @@ const StatCard: React.FC<StatCardComponentProps> = ({
     >
       {/* Icon + Number */}
       <div className="flex items-center gap-2">
-        {label === "Banned Users" ? (
-          <XCircle className="h-6 w-6 text-red-600" aria-label={label} />
-        ) : (
-          <Image src={icon} alt={label} width={24} height={24} />
-        )}
+        <Image src={icon} alt={label} width={24} height={24} />
         <h2 className="text-2xl font-bold">{number}</h2>
       </div>
 
@@ -377,17 +660,101 @@ const UserCardSkeleton: React.FC = () => {
   );
 };
 
-const UserCard: React.FC<{ user: User; onEdit: () => void; isViewOnly?: boolean }> = ({
-  user,
-  onEdit,
-  isViewOnly = false,
-}) => {
+// Dense row for the search-first (?search=) view — small height, full width.
+// Clicking a row opens that recipient's filtered view in /reports?search=.
+const SearchResultRow: React.FC<{ user: User }> = ({ user }) => {
+  const router = useRouter();
+  const [imgError, setImgError] = useState(false);
+  const showImage = user.picture && !imgError;
+  const initial = user.firstName?.trim().charAt(0).toUpperCase() || "?";
+  const fullName = `${user.firstName ?? ""} ${user.secondName ?? ""}`.trim();
+  const cardStatusText =
+    user.arcCardStatus === "Active"
+      ? "Active"
+      : user.arcCardStatus === "Unloaded"
+        ? "Assigned · Unloaded"
+        : user.arcCardStatus === "Expired"
+          ? "Expired"
+          : "None";
+
+  return (
+    <li
+      role="button"
+      tabIndex={0}
+      title={`View ${fullName || "recipient"} in reports`}
+      onClick={() =>
+        router.push(`/reports?userId=${encodeURIComponent(user.id)}`)
+      }
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          router.push(`/reports?userId=${encodeURIComponent(user.id)}`);
+        }
+      }}
+      className="grid cursor-pointer grid-cols-[minmax(0,3fr)_minmax(0,1fr)] items-center gap-x-3 px-3 py-1.5 text-sm hover:bg-cyan-50/40 sm:grid-cols-[minmax(0,3fr)_repeat(3,minmax(0,1fr))]"
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200">
+          {showImage ? (
+            <Image
+              src={user.picture as string}
+              alt=""
+              width={24}
+              height={24}
+              className="h-6 w-6 rounded-full object-cover"
+              onError={() => setImgError(true)}
+            />
+          ) : (
+            <span className="text-[10px] font-bold text-gray-600">
+              {initial}
+            </span>
+          )}
+        </div>
+        {user.banned && (
+          <Flag
+            className="h-3.5 w-3.5 shrink-0 text-red-500"
+            aria-label="Flagged user"
+          />
+        )}
+        <span className="truncate font-medium text-gray-900">
+          {user.firstName} {user.secondName}
+        </span>
+        {user.aliases?.length > 0 && (
+          <span className="hidden truncate text-xs text-gray-400 md:inline">
+            aka {user.aliases.join(", ")}
+          </span>
+        )}
+      </div>
+      <span className="hidden truncate text-gray-600 sm:block">
+        {user.dateOfBirth || "—"}
+      </span>
+      <span className="hidden truncate text-gray-600 sm:block">
+        {user.status === "Inactive" ? "Inactive" : "Active"}
+      </span>
+      <span
+        className={`truncate ${
+          user.arcCardStatus === "Expired" ? "text-red-500" : "text-gray-600"
+        }`}
+      >
+        {cardStatusText}
+      </span>
+    </li>
+  );
+};
+
+const UserCard: React.FC<{
+  user: User;
+  onEdit: () => void;
+  isViewOnly: boolean;
+}> = ({ user, onEdit, isViewOnly }) => {
+  const router = useRouter();
   const isBanned = user.banned;
   const isFlagged = user.flagged === true;
   const arcCardStatus = user.arcCardStatus;
   const [imgError, setImgError] = useState(false);
   const initial = user.firstName?.trim().charAt(0).toUpperCase() || "?";
   const showImage = user.picture && !imgError;
+  const openReports = () =>
+    router.push(`/reports?userId=${encodeURIComponent(user.id)}`);
   const userStatusText = isBanned
     ? "Banned User"
     : isFlagged
@@ -400,11 +767,20 @@ const UserCard: React.FC<{ user: User; onEdit: () => void; isViewOnly?: boolean 
       ? "Card Active"
       : arcCardStatus === "Unloaded"
         ? "Card Assigned but Unloaded"
-      : arcCardStatus === "Expired"
-        ? "Card Expired"
-        : "No Active Card";
+        : arcCardStatus === "Expired"
+          ? "Card Expired"
+          : "No Active Card";
   return (
-    <div className="bg-white rounded-lg shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)] px-4 py-2.5 sm:px-6 sm:py-4 w-full flex items-center justify-between">
+    <div
+      role="button"
+      tabIndex={0}
+      title={`View ${user.firstName} ${user.secondName} in reports`.trim()}
+      onClick={openReports}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") openReports();
+      }}
+      className="bg-white rounded-lg shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)] px-4 py-2.5 sm:px-6 sm:py-4 w-full flex items-center justify-between cursor-pointer transition-shadow hover:shadow-md"
+    >
       {/* Avatar */}
       <div className="w-9 h-9 sm:w-12 sm:h-12 shrink-0 bg-gray-200 rounded-full overflow-hidden flex items-center justify-center mr-3 sm:mr-4">
         {showImage ? (
@@ -426,10 +802,16 @@ const UserCard: React.FC<{ user: User; onEdit: () => void; isViewOnly?: boolean 
       <div className="flex-1 flex flex-col sm:flex-row sm:items-center min-w-0 gap-2">
         <div className="flex-1 min-w-0 flex items-center gap-2">
           {isFlagged && (
-            <Flag className="h-4 w-4 text-red-500 shrink-0" aria-label="Flagged recipient" />
+            <Flag
+              className="h-4 w-4 text-orange-500 shrink-0"
+              aria-label="Flagged recipient"
+            />
           )}
           {isBanned && (
-            <XCircle className="h-4 w-4 text-red-600 shrink-0" aria-label="Banned recipient" />
+            <XCircle
+              className="h-4 w-4 text-red-600 shrink-0"
+              aria-label="Banned recipient"
+            />
           )}
           <span className="min-w-0 text-base sm:text-xl font-bold text-gray-900 truncate">
             {user.firstName} {user.secondName}
@@ -441,7 +823,9 @@ const UserCard: React.FC<{ user: User; onEdit: () => void; isViewOnly?: boolean 
           </div>
           <div
             className={`min-w-0 sm:min-w-[130px] text-left sm:text-right text-xs sm:text-base font-medium ${
-              cardStatusText === "Card Expired" ? "text-red-500" : "text-gray-500"
+              cardStatusText === "Card Expired"
+                ? "text-red-500"
+                : "text-gray-500"
             }`}
           >
             {cardStatusText}
@@ -450,15 +834,12 @@ const UserCard: React.FC<{ user: User; onEdit: () => void; isViewOnly?: boolean 
       </div>
       <button
         type="button"
-        onClick={onEdit}
         disabled={isViewOnly}
-        title={isViewOnly ? "View-only mode: editing is disabled." : undefined}
-        className={`ml-3 shrink-0 rounded-md border border-gray-200 px-3 py-2 text-sm font-medium ${
-          isViewOnly
-            ? "cursor-not-allowed text-gray-400"
-            : "text-primary hover:bg-gray-50"
-        }`}
-        aria-label={`Edit ${user.firstName} ${user.secondName}`}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (!isViewOnly) onEdit();
+        }}
+        className="ml-3 shrink-0 rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-primary hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-400"
       >
         Edit
       </button>

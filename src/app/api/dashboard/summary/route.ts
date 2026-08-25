@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { getDashboardSummaryForViewer } from "@/app/services/dashboardService";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies();
     const sessionCookie = cookieStore.get("session")?.value;
@@ -16,9 +16,10 @@ export async function GET() {
     }
 
     const app = await initAdmin();
+    // Hot read path — revocation check skipped (SCALE-05).
     const decodedClaims = await app
       .auth()
-      .verifySessionCookie(sessionCookie, true);
+      .verifySessionCookie(sessionCookie);
 
     const isAdmin = decodedClaims.admin === true;
 
@@ -34,11 +35,20 @@ export async function GET() {
       }
     }
 
-    const summary = await getDashboardSummaryForViewer({
-      uid: decodedClaims.uid,
-      email: decodedClaims.email || "",
-      name: decodedClaims.name || "",
-    }, app.firestore());
+    const sp = request.nextUrl.searchParams;
+    const limitParam = Number.parseInt(sp.get("limit") ?? "", 10);
+    const summary = await getDashboardSummaryForViewer(
+      {
+        uid: decodedClaims.uid,
+        email: decodedClaims.email || "",
+        name: decodedClaims.name || "",
+      },
+      app.firestore(),
+      {
+        limit: Number.isFinite(limitParam) ? limitParam : undefined,
+        cursor: sp.get("cursor"),
+      },
+    );
     return NextResponse.json(summary);
   } catch (error) {
     console.error("Error fetching dashboard summary:", error);

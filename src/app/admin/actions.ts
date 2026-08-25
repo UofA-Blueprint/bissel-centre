@@ -105,6 +105,11 @@ export const checkAdmin = async (identificationNumber: string) => {
 };
 
 export const listUsers = async () => {
+  const session = await getAdminSession();
+  if (!session) {
+    throw new Error("Unauthorized: IT admin session required");
+  }
+
   const admin = await initAdmin();
   try {
     const listUsersResult = await admin.auth().listUsers();
@@ -718,15 +723,15 @@ export const getStaffBans = async (
 };
 
 export const setUserAsAdmin = async (email: string) => {
+  const session = await getAdminSession();
+  if (!session) {
+    throw new Error("Unauthorized: IT admin session required");
+  }
+
   const admin = await initAdmin();
   try {
-    // Find user by email
     const userRecord = await admin.auth().getUserByEmail(email);
-
-    // Set admin custom claim
     await admin.auth().setCustomUserClaims(userRecord.uid, { admin: true });
-
-    console.log(`User ${email} has been set as admin`);
     return true;
   } catch (error) {
     console.error("Error setting user as admin:", error);

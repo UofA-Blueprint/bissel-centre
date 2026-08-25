@@ -9,6 +9,8 @@ import {
   getMonthlyUnloadSchedule,
   updateMonthlyUnloadSchedule,
 } from "@/app/services/cardExpiryService";
+import { foldName } from "@/utils/nameSearch.mjs";
+import { loadSearchIndex } from "@/app/services/searchIndexService";
 
 const EDMONTON_TIMEZONE = "America/Edmonton";
 
@@ -61,7 +63,10 @@ function normalizeDateOnlyInput(value: unknown): string {
   return raw;
 }
 
-async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
+async function verifyStaffAccess(options?: {
+  allowAdmin?: boolean;
+  checkRevoked?: boolean;
+}) {
   const cookieStore = await cookies();
   const sessionCookie = cookieStore.get("session")?.value;
 
@@ -72,7 +77,10 @@ async function verifyStaffAccess(options?: { allowAdmin?: boolean }) {
   }
 
   const app = await initAdmin();
-  const decodedClaims = await app.auth().verifySessionCookie(sessionCookie, true);
+  // Writes verify with revocation; hot read paths may skip it (SCALE-05).
+  const decodedClaims = await app
+    .auth()
+    .verifySessionCookie(sessionCookie, options?.checkRevoked ?? true);
 
   const db = app.firestore();
 
@@ -120,8 +128,8 @@ async function fetchUserNamesByIds(
   const result = new Map<string, string>();
   if (ids.length === 0) return result;
 
-  // Firestore "in" query supports a small bounded list per query; chunk safely.
-  const idChunks = chunk(ids, 10);
+  // Firestore "in" queries accept up to 30 values; chunk accordingly.
+  const idChunks = chunk(ids, 30);
   await Promise.all(
     idChunks.map(async (idsPart) => {
       const snap = await db
@@ -143,155 +151,332 @@ async function fetchUserNamesByIds(
   return result;
 }
 
-// GET /api/cards - Fetch all cards
-export async function GET() {
+// ── Pagination helpers ───────────────────────────────────────────
+
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+const SEARCH_RESULT_CAP = 50;
+// Max rounds of query-then-filter-in-memory when BOTH status and department
+// filters are active. Bounds work per request; the resume cursor carries the
+// scan position across pages so hitting this cap never drops matches.
+const DEPT_SCAN_ROUNDS = 5;
+
+function encodeCursor(arcCardNumber: string, id: string): string {
+  return Buffer.from(JSON.stringify([arcCardNumber, id]), "utf8").toString(
+    "base64url",
+  );
+}
+
+function decodeCursor(raw: string | null): [string, string] | null {
+  if (!raw) return null;
   try {
-    const access = await verifyStaffAccess({ allowAdmin: true });
+    const parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+    if (
+      Array.isArray(parsed) &&
+      typeof parsed[0] === "string" &&
+      typeof parsed[1] === "string"
+    ) {
+      return [parsed[0], parsed[1]];
+    }
+  } catch {
+    /* malformed cursor — treat as first page */
+  }
+  return null;
+}
+
+// Enrich a PAGE of card docs: issues + holder names joined with bounded
+// `in` queries (never full scans).
+async function buildCardRows(
+  db: admin.firestore.Firestore,
+  cardDocs: admin.firestore.QueryDocumentSnapshot[],
+  isMigrated: boolean,
+): Promise<ArcCard[]> {
+  const cardIds = cardDocs.map((d) => d.id);
+
+  const issuesByCard = new Map<
+    string,
+    Array<{ userId: string; issueDate: string; issuedBy?: string }>
+  >();
+  await Promise.all(
+    chunk(cardIds, 30).map(async (part) => {
+      if (part.length === 0) return;
+      const snap = await db
+        .collection("issues")
+        .where("cardId", "in", part)
+        .select("cardId", "userId", "issueDate", "issuedBy")
+        .get();
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        const cardId = String(d.cardId ?? "");
+        if (!cardId) continue;
+        if (!issuesByCard.has(cardId)) issuesByCard.set(cardId, []);
+        issuesByCard.get(cardId)!.push({
+          userId: String(d.userId ?? ""),
+          issueDate: String(d.issueDate ?? ""),
+          issuedBy: typeof d.issuedBy === "string" ? d.issuedBy : undefined,
+        });
+      }
+    }),
+  );
+
+  const userIds = new Set<string>();
+  for (const doc of cardDocs) {
+    const data = doc.data();
+    const holderId = data.currentUserId || data.userId;
+    if (holderId && !data.passRecipient) userIds.add(holderId);
+  }
+  for (const issues of issuesByCard.values()) {
+    for (const issue of issues) if (issue.userId) userIds.add(issue.userId);
+  }
+  const userNames = await fetchUserNamesByIds(db, userIds);
+
+  return cardDocs.map((doc) => {
+    const data = doc.data();
+    const cardIssues = issuesByCard.get(doc.id) ?? [];
+
+    const issueDates = isMigrated
+      ? cardIssues
+          .map((i) => i.issueDate)
+          .filter(Boolean)
+          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())
+      : ((data.issueDates as string[] | undefined) ?? []);
+
+    const issuedByAny = Array.from(
+      new Set(
+        cardIssues
+          .map((i) => i.issuedBy)
+          .filter((v): v is string => typeof v === "string" && v.length > 0),
+      ),
+    );
+
+    const holderId = data.currentUserId || data.userId;
+    let passRecipient = (data.passRecipient as string | undefined) || "";
+    if (holderId && !passRecipient) {
+      passRecipient = userNames.get(holderId) || "";
+    }
+
+    return {
+      id: doc.id,
+      currentUserId: data.currentUserId || data.userId || null,
+      allocationDate: data.allocationDate || "",
+      status: data.status || "Unloaded",
+      department: data.department || "Emergency",
+      arcCardNumber: data.arcCardNumber || "",
+      securityCode: data.securityCode || "",
+      passRecipient,
+      issueDates,
+      issuedByAny,
+      notes: data.notes || "",
+      createdAt: data.createdAt,
+      updatedAt: data.updatedAt,
+    } as ArcCard;
+  });
+}
+
+// GET /api/cards — cursor-paginated card list.
+//
+// Query params: limit (≤200), cursor (opaque), statuses (csv),
+// departments (csv), q (card-number prefix OR recipient name via the
+// name-search index). Cost is O(page size), never O(collection).
+export async function GET(request: NextRequest) {
+  try {
+    const access = await verifyStaffAccess({
+      allowAdmin: true,
+      checkRevoked: false,
+    });
     if ("error" in access) {
       return access.error;
     }
     const { db } = access;
 
-    const [cardsSnapshot, migrationDoc] = await Promise.all([
-      db.collection("arc_cards").get(),
-      // Check if migration has been run by looking for issues collection
-      db.collection("_migrations").doc("issues_v1").get(),
-    ]);
+    const sp = request.nextUrl.searchParams;
+    const limitParam = Number.parseInt(sp.get("limit") ?? "", 10);
+    const pageSize = Number.isFinite(limitParam)
+      ? Math.min(MAX_PAGE_SIZE, Math.max(1, limitParam))
+      : DEFAULT_PAGE_SIZE;
+    const cursor = decodeCursor(sp.get("cursor"));
+    const statuses = (sp.get("statuses") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 10);
+    const departments = (sp.get("departments") ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 30);
+    const q = (sp.get("q") ?? "").trim();
+
+    const [migrationDoc, monthlyUnloadSchedule, totalAllAgg] =
+      await Promise.all([
+        db.collection("_migrations").doc("issues_v1").get(),
+        getMonthlyUnloadSchedule(db),
+        db.collection("arc_cards").count().get(),
+      ]);
     const isMigrated = migrationDoc.exists;
+    const totalAll = totalAllAgg.data().count;
 
-    const cards: ArcCard[] = [];
+    // ── Search mode: card-number prefix + recipient-name index ───
+    if (q) {
+      const found = new Map<string, admin.firestore.QueryDocumentSnapshot>();
 
-    if (isMigrated) {
-      // Post-migration: fetch issues to derive passRecipient and issueDates
-      const issuesSnapshot = await db.collection("issues").get();
-      
-      // Group issues by cardId
-      const issuesByCard = new Map<string, Array<{ userId: string; issueDate: string; returnedAt: unknown; issuedBy?: string }>>();
-      for (const issueDoc of issuesSnapshot.docs) {
-        const issue = issueDoc.data();
-        const cardId = issue.cardId;
-        if (!issuesByCard.has(cardId)) {
-          issuesByCard.set(cardId, []);
+      const qDigits = q.replace(/\D/g, "");
+      if (qDigits.length >= 3) {
+        const snap = await db
+          .collection("arc_cards")
+          .orderBy("arcCardNumber")
+          .startAt(qDigits)
+          // Append U+F8FF (a high private-use code point) so this is a PREFIX
+          // range, not an exact match: "123" must also find "1234567". Kept as
+          // a \uf8ff escape, not a literal invisible char, so it stays greppable.
+          .endAt(`${qDigits}\uf8ff`)
+          .limit(SEARCH_RESULT_CAP)
+          .get();
+        for (const doc of snap.docs) found.set(doc.id, doc);
+      }
+
+      const qFolded = foldName(q);
+      if (qFolded.length >= 2 && !/^\d+$/.test(qFolded)) {
+        const rows = await loadSearchIndex(db);
+        const matchIds = rows
+          .filter((r) => r.s.some((s) => s.startsWith(qFolded)))
+          .slice(0, 30)
+          .map((r) => r.id);
+        if (matchIds.length > 0) {
+          const snap = await db
+            .collection("arc_cards")
+            .where("currentUserId", "in", matchIds)
+            .get();
+          for (const doc of snap.docs) {
+            if (!found.has(doc.id)) found.set(doc.id, doc);
+          }
         }
-        issuesByCard.get(cardId)!.push({
-          userId: issue.userId,
-          issueDate: issue.issueDate,
-          returnedAt: issue.returnedAt,
-          issuedBy: issue.issuedBy,
-        });
       }
 
-      // Collect all userIds we need to fetch
-      const userIds = new Set<string>();
-      for (const doc of cardsSnapshot.docs) {
-        const data = doc.data();
-        if (data.currentUserId) userIds.add(data.currentUserId);
-      }
-      for (const issues of issuesByCard.values()) {
-        for (const issue of issues) {
-          if (issue.userId) userIds.add(issue.userId);
-        }
-      }
-
-      // Batch fetch users
-      const userNames = await fetchUserNamesByIds(db, userIds);
-
-      for (const doc of cardsSnapshot.docs) {
-        const data = doc.data();
-        const cardIssues = issuesByCard.get(doc.id) || [];
-
-        // Get issue dates sorted by date desc
-        const issueDates = cardIssues
-          .map(i => i.issueDate)
-          .sort((a, b) => new Date(b).getTime() - new Date(a).getTime());
-
-        const issuedByAny = Array.from(
-          new Set(
-            cardIssues
-              .map((i) => i.issuedBy)
-              .filter((v): v is string => typeof v === "string" && v.length > 0)
-          )
+      let docs = Array.from(found.values());
+      if (statuses.length) {
+        docs = docs.filter((d) =>
+          statuses.includes(String(d.data().status ?? "")),
         );
-
-        // Get passRecipient from currentUserId
-        const passRecipient = data.currentUserId
-          ? userNames.get(data.currentUserId) || ""
-          : "";
-
-        cards.push({
-          id: doc.id,
-          currentUserId: data.currentUserId || null,
-          allocationDate: data.allocationDate || "",
-          status: data.status || "Unloaded",
-          department: data.department || "Emergency",
-          arcCardNumber: data.arcCardNumber || "",
-          securityCode: data.securityCode || "",
-          passRecipient,
-          issueDates,
-          issuedByAny,
-          notes: data.notes || "",
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-        });
       }
-    } else {
-      // Pre-migration: use old schema for passRecipient/issueDates, but still
-      // pull the `issues` collection opportunistically so the `issuedByAny`
-      // filter used by the IT-admin "view as staff" dropdown works even when
-      // the migration marker was never written.
-      const issuesSnapshot = await db.collection("issues").get().catch(() => null);
-
-      const issuedByCard = new Map<string, Set<string>>();
-      if (issuesSnapshot) {
-        for (const issueDoc of issuesSnapshot.docs) {
-          const issue = issueDoc.data();
-          const cardId = issue.cardId as string | undefined;
-          const issuedBy = issue.issuedBy as string | undefined;
-          if (!cardId || !issuedBy) continue;
-          if (!issuedByCard.has(cardId)) issuedByCard.set(cardId, new Set());
-          issuedByCard.get(cardId)!.add(issuedBy);
-        }
+      if (departments.length) {
+        docs = docs.filter((d) =>
+          departments.includes(String(d.data().department ?? "")),
+        );
       }
+      docs.sort((a, b) =>
+        String(a.data().arcCardNumber ?? "").localeCompare(
+          String(b.data().arcCardNumber ?? ""),
+        ),
+      );
+      docs = docs.slice(0, SEARCH_RESULT_CAP);
 
-      const neededUserIds = new Set<string>();
-      for (const doc of cardsSnapshot.docs) {
-        const data = doc.data();
-        const holderId = data.currentUserId || data.userId;
-        if (holderId && !data.passRecipient) {
-          neededUserIds.add(holderId);
-        }
-      }
-      const userNames = await fetchUserNamesByIds(db, neededUserIds);
-
-      for (const doc of cardsSnapshot.docs) {
-        const data = doc.data();
-
-        let passRecipient = data.passRecipient || "";
-        const holderId = data.currentUserId || data.userId;
-        if (holderId && !passRecipient) {
-          passRecipient = userNames.get(holderId) || "";
-        }
-
-        cards.push({
-          id: doc.id,
-          currentUserId: data.currentUserId || data.userId || null,
-          allocationDate: data.allocationDate || "",
-          status: data.status || "Unloaded",
-          department: data.department || "Emergency",
-          arcCardNumber: data.arcCardNumber || "",
-          securityCode: data.securityCode || "",
-          passRecipient,
-          issueDates: data.issueDates || [],
-          issuedByAny: Array.from(issuedByCard.get(doc.id) ?? []),
-          notes: data.notes || "",
-          createdAt: data.createdAt,
-          updatedAt: data.updatedAt,
-        });
-      }
+      const cards = await buildCardRows(db, docs, isMigrated);
+      return NextResponse.json({
+        cards,
+        nextCursor: null,
+        total: cards.length,
+        totalAll,
+        monthlyUnloadSchedule,
+        searchMode: true,
+      });
     }
 
-    const monthlyUnloadSchedule = await getMonthlyUnloadSchedule(db);
-    return NextResponse.json({ cards, monthlyUnloadSchedule });
+    // ── List mode: cursor pagination with optional filters ───────
+    // Firestore allows only one `in` clause per query; with BOTH filter
+    // dimensions active, status goes into the query and department is
+    // applied in-memory inside a bounded page-fill loop.
+    const inMemoryDept = statuses.length > 0 && departments.length > 0;
+    const buildQuery = () => {
+      let ref: admin.firestore.Query = db.collection("arc_cards");
+      if (statuses.length) ref = ref.where("status", "in", statuses);
+      else if (departments.length)
+        ref = ref.where("department", "in", departments);
+      return ref;
+    };
+
+    let total: number | null = null;
+    if (!inMemoryDept) {
+      total =
+        statuses.length || departments.length
+          ? (await buildQuery().count().get()).data().count
+          : totalAll;
+    }
+
+    const matched: admin.firestore.QueryDocumentSnapshot[] = [];
+    let hasMore = false;
+    // Resume position for the next page. For the single-query path this is the
+    // last row returned; for the in-memory-department path it is the scan
+    // frontier (the last card examined), so a short page never truncates.
+    let nextCursorBasis: [string, string] | null = null;
+
+    if (!inMemoryDept) {
+      let qref = buildQuery()
+        .orderBy("arcCardNumber")
+        .orderBy(admin.firestore.FieldPath.documentId())
+        .limit(pageSize + 1);
+      if (cursor) qref = qref.startAfter(cursor[0], cursor[1]);
+      const snap = await qref.get();
+      hasMore = snap.size > pageSize;
+      matched.push(...snap.docs.slice(0, pageSize));
+      const lastMatched = matched[matched.length - 1];
+      if (hasMore && lastMatched) {
+        nextCursorBasis = [
+          String(lastMatched.data().arcCardNumber ?? ""),
+          lastMatched.id,
+        ];
+      }
+    } else {
+      // `status` drives the query; `department` is filtered in memory. Track a
+      // frontier that advances past EVERY card we look at (matched or not) so
+      // resuming after it re-examines nothing and skips nothing.
+      let scanFrom: [string, string] | null = cursor;
+      let frontier: [string, string] | null = null;
+      let exhausted = false;
+      const batchSize = Math.min(MAX_PAGE_SIZE, pageSize * 2);
+      for (
+        let round = 0;
+        round < DEPT_SCAN_ROUNDS && matched.length < pageSize && !exhausted;
+        round++
+      ) {
+        let qref = buildQuery()
+          .orderBy("arcCardNumber")
+          .orderBy(admin.firestore.FieldPath.documentId())
+          .limit(batchSize);
+        if (scanFrom) qref = qref.startAfter(scanFrom[0], scanFrom[1]);
+        const snap = await qref.get();
+        if (snap.empty) {
+          exhausted = true;
+          break;
+        }
+        for (const doc of snap.docs) {
+          frontier = [String(doc.data().arcCardNumber ?? ""), doc.id];
+          if (departments.includes(String(doc.data().department ?? ""))) {
+            matched.push(doc);
+            if (matched.length >= pageSize) break;
+          }
+        }
+        scanFrom = frontier;
+        if (snap.size < batchSize) exhausted = true;
+      }
+      // Unless the collection is fully scanned, more matches may lie beyond the
+      // frontier — including when this page came back short at the round cap.
+      hasMore = !exhausted;
+      if (hasMore) nextCursorBasis = frontier;
+    }
+
+    const cards = await buildCardRows(db, matched, isMigrated);
+    const nextCursor = nextCursorBasis
+      ? encodeCursor(nextCursorBasis[0], nextCursorBasis[1])
+      : null;
+
+    return NextResponse.json({
+      cards,
+      nextCursor,
+      total,
+      totalAll,
+      monthlyUnloadSchedule,
+    });
   } catch (error) {
     console.error("Error fetching cards:", error);
     return NextResponse.json(
@@ -301,7 +486,9 @@ export async function GET() {
   }
 }
 
-// POST /api/cards - Create new card(s)
+// POST /api/cards - Create new card(s): capped, batched, duplicate-guarded.
+const MAX_CARDS_PER_REQUEST = 200; // well under Firestore's 500-op batch cap
+
 export async function POST(request: NextRequest) {
   try {
     const access = await verifyStaffAccess();
@@ -315,10 +502,61 @@ export async function POST(request: NextRequest) {
       ? body.cards
       : [body];
 
-    // Check if migration has been run
-    const createdCards: ArcCard[] = [];
-    
+    if (cardsToCreate.length === 0) {
+      return NextResponse.json({ error: "No cards provided" }, { status: 400 });
+    }
+    if (cardsToCreate.length > MAX_CARDS_PER_REQUEST) {
+      return NextResponse.json(
+        { error: `At most ${MAX_CARDS_PER_REQUEST} cards per request` },
+        { status: 400 },
+      );
+    }
 
+    const numbers = cardsToCreate.map((c) =>
+      String(c.arcCardNumber ?? "").trim(),
+    );
+    if (numbers.some((n) => n.length === 0)) {
+      return NextResponse.json(
+        { error: "Every card needs a card number" },
+        { status: 400 },
+      );
+    }
+    const dupInRequest = Array.from(
+      new Set(numbers.filter((n, i) => numbers.indexOf(n) !== i)),
+    );
+    if (dupInRequest.length > 0) {
+      return NextResponse.json(
+        { error: `Duplicate card number(s) in request: ${dupInRequest.join(", ")}` },
+        { status: 409 },
+      );
+    }
+
+    // Duplicate guard against existing cards (bounded in-queries). A race
+    // between two simultaneous requests with the same number can still slip
+    // through this check-then-write; acceptable for a small staff team.
+    const existing: string[] = [];
+    await Promise.all(
+      chunk(numbers, 30).map(async (part) => {
+        const snap = await db
+          .collection("arc_cards")
+          .where("arcCardNumber", "in", part)
+          .select("arcCardNumber")
+          .get();
+        for (const doc of snap.docs) {
+          existing.push(String(doc.data().arcCardNumber ?? ""));
+        }
+      }),
+    );
+    if (existing.length > 0) {
+      return NextResponse.json(
+        { error: `Card number(s) already exist: ${Array.from(new Set(existing)).join(", ")}` },
+        { status: 409 },
+      );
+    }
+
+    // One atomic batch — no partial creations on failure.
+    const batch = db.batch();
+    const createdCards: ArcCard[] = [];
     for (const cardInput of cardsToCreate) {
       const status =
         cardInput.status && cardInput.status.trim() !== ""
@@ -330,18 +568,16 @@ export async function POST(request: NextRequest) {
         allocationDate: normalizeDateOnlyInput(cardInput.allocationDate),
         status,
         department: cardInput.department,
-        arcCardNumber: cardInput.arcCardNumber,
+        arcCardNumber: String(cardInput.arcCardNumber).trim(),
         securityCode: cardInput.securityCode,
         notes: cardInput.notes || "",
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
-      const docRef = await db.collection("arc_cards").add(newCard);
-      
-      // If migrated, card starts with no issues (they get added when issued to someone)
-      // The card is created in "Unloaded" state typically
-      
+      const docRef = db.collection("arc_cards").doc();
+      batch.set(docRef, newCard);
+
       createdCards.push({
         id: docRef.id,
         ...newCard,
@@ -351,6 +587,7 @@ export async function POST(request: NextRequest) {
         updatedAt: undefined,
       } as unknown as ArcCard);
     }
+    await batch.commit();
 
     return NextResponse.json({ cards: createdCards }, { status: 201 });
   } catch (error) {

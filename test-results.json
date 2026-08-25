@@ -1,0 +1,1371 @@
+{
+  "results": [
+    {
+      "collection": "users",
+      "role": "admin",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "admin",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "admin",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "admin",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "staff",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "staff",
+      "operation": "create",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "staff",
+      "operation": "update",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "staff",
+      "operation": "delete",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "deactivated",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "deactivated",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "deactivated",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "deactivated",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "unauth",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "unauth",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "unauth",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "users",
+      "role": "unauth",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "admin",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "admin",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "admin",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "admin",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "staff",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "staff",
+      "operation": "create",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "staff",
+      "operation": "update",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "staff",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "deactivated",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "deactivated",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "deactivated",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "deactivated",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "unauth",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "unauth",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "unauth",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "arc_cards",
+      "role": "unauth",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "admin",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "admin",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "admin",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "admin",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "staff",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "staff",
+      "operation": "create",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "staff",
+      "operation": "update",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "staff",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "deactivated",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "deactivated",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "deactivated",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "deactivated",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "unauth",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "unauth",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "unauth",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "issues",
+      "role": "unauth",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "admin",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "admin",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "admin",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "admin",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "staff",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "staff",
+      "operation": "create",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "staff",
+      "operation": "update",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "staff",
+      "operation": "delete",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "deactivated",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "deactivated",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "deactivated",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "deactivated",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "unauth",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "unauth",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "unauth",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "banned_users",
+      "role": "unauth",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "admin",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "admin",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "admin",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "admin",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "staff",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "staff",
+      "operation": "create",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "staff",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "staff",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "deactivated",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "deactivated",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "deactivated",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "deactivated",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "unauth",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "unauth",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "unauth",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "history",
+      "role": "unauth",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "admin",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "admin",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "admin",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "admin",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "staff",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "staff",
+      "operation": "create",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "staff",
+      "operation": "update",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "staff",
+      "operation": "delete",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "deactivated",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "deactivated",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "deactivated",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "deactivated",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "unauth",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "unauth",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "unauth",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "questions",
+      "role": "unauth",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "admin",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "admin",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "admin",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "admin",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "staff",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "staff",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "staff",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "staff",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "deactivated",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "deactivated",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "deactivated",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "deactivated",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "unauth",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "unauth",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "unauth",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admins",
+      "role": "unauth",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "admin",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "admin",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "admin",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "admin",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "staff",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "staff",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "staff",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "staff",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "deactivated",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "deactivated",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "deactivated",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "deactivated",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "unauth",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "unauth",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "unauth",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "it_admin",
+      "role": "unauth",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "admin",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "admin",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "admin",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "admin",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "staff",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "staff",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "staff",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "staff",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "deactivated",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "deactivated",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "deactivated",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "deactivated",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "unauth",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "unauth",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "unauth",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "app_settings",
+      "role": "unauth",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "admin",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "admin",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "admin",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "admin",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "staff",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "staff",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "staff",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "staff",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "deactivated",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "deactivated",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "deactivated",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "deactivated",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "unauth",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "unauth",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "unauth",
+      "operation": "update",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "_migrations",
+      "role": "unauth",
+      "operation": "delete",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "admin_staff",
+      "role": "staff (self)",
+      "operation": "read",
+      "expected": "allow",
+      "actual": "allow",
+      "status": "PASS"
+    },
+    {
+      "collection": "admin_staff",
+      "role": "staff (other)",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "some_random_collection",
+      "role": "admin",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "some_random_collection",
+      "role": "admin",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "some_random_collection",
+      "role": "staff",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "some_random_collection",
+      "role": "staff",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "some_random_collection",
+      "role": "deactivated",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "some_random_collection",
+      "role": "deactivated",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "some_random_collection",
+      "role": "unauth",
+      "operation": "read",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    },
+    {
+      "collection": "some_random_collection",
+      "role": "unauth",
+      "operation": "create",
+      "expected": "deny",
+      "actual": "deny",
+      "status": "PASS"
+    }
+  ],
+  "summary": {
+    "total": 170,
+    "passed": 170,
+    "failed": 0,
+    "errors": 0
+  },
+  "timestamp": "2026-08-24T15:15:18.689Z"
+}

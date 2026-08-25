@@ -10,16 +10,34 @@ import "react-circular-progressbar/dist/styles.css";
 import SearchIcon from "../icons/SearchIcon";
 import CameraIcon from "../icons/CameraIcon";
 
-export type PhotoUploadData = { imageUrl: string };
+export type PhotoUploadData = { imageUrl: string; thumbnail?: string };
+// Soft limit: files above this show a warning with a "Force upload" override
+// (the image is then heavily compressed client-side; the server still
+// enforces its own 1 MB stored-size and mimetype checks regardless).
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+// Hard ceiling: decoding larger files into a canvas can freeze or crash
+// low-memory devices, so there is no override past this point.
+const ABSOLUTE_MAX_UPLOAD_BYTES = 15 * 1024 * 1024;
+const ACCEPTED_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/avif",
+  "image/gif",
+];
+const ACCEPTED_TYPES_LABEL = "JPEG, PNG, WebP, AVIF or GIF";
 const MAX_BASE64_FIELD_BYTES = 1_000_000;
+// List views render 36-48px avatars; a 96px JPEG keeps the user doc small
+// while the full-res base64 lives in the user_photos collection.
+const THUMBNAIL_MAX_DIMENSION = 96;
+const THUMBNAIL_QUALITY = 0.75;
 type Props = {
   onSubmit: (data: PhotoUploadData) => void;
   onError?: (msg: string | null) => void;
   initialData?: Partial<PhotoUploadData>;
 };
 
-
+// --- WebcamCapture component remains exactly the same ---
 const WebcamCapture = ({
   onCapture,
   onCancel,
@@ -34,20 +52,17 @@ const WebcamCapture = ({
   const stopCamera = () => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
+    if (videoRef.current) videoRef.current.srcObject = null;
   };
 
   useEffect(() => {
     let cancelled = false;
     const startCamera = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+        });
         if (cancelled) {
-          // Effect was already torn down (e.g. Strict Mode's double-invoke in
-          // dev) before getUserMedia resolved - stop this stream immediately,
-          // otherwise nothing else ever references it to turn the camera off.
           stream.getTracks().forEach((track) => track.stop());
           return;
         }
@@ -127,78 +142,69 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
     const [view, setView] = useState<"initial" | "preview" | "webcam">(
       initialData.imageUrl ? "preview" : "initial",
     );
+    const [imageFile, setImageFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(
       initialData.imageUrl ?? null,
     );
-    // Short-lived blob URL shown while a freshly picked/captured photo is
-    // being compressed. Never read by getData()/collect() - only the final
-    // `previewUrl` (base64) is - so navigating away mid-compression can't
-    // save an unusable blob: URL into form state.
-    const [rawPreviewUrl, setRawPreviewUrl] = useState<string | null>(null);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [isUploading, setIsUploading] = useState(false);
+    const [oversizeFile, setOversizeFile] = useState<File | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Clean up the raw blob preview on unmount
+    // Clean up blob URLs when component unmounts or when previewUrl changes
     useEffect(() => {
       return () => {
-        if (rawPreviewUrl) {
-          URL.revokeObjectURL(rawPreviewUrl);
+        if (previewUrl && previewUrl.startsWith("blob:")) {
+          URL.revokeObjectURL(previewUrl);
         }
       };
-    }, [rawPreviewUrl]);
+    }, [previewUrl]);
 
-    const processSelectedFile = (file: File) => {
-      const hadExistingPhoto = previewUrl !== null;
-
-      setRawPreviewUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return URL.createObjectURL(file);
-      });
+    const acceptFile = (file: File) => {
+      // Revoke the previous blob URL before creating a new one
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setOversizeFile(null);
+      setImageFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
       setView("preview");
-      setIsUploading(true);
-      setUploadProgress(0);
-
-      const progressInterval = setInterval(() => {
-        setUploadProgress((prev) => Math.min(prev + 10, 90));
-      }, 150);
-
-      compressToBase64WithinLimit(file, MAX_BASE64_FIELD_BYTES)
-        .then((base64String) => {
-          setPreviewUrl(base64String);
-          setUploadProgress(100);
-        })
-        .catch((error) => {
-          console.error("Error processing image:", error);
-          onError?.("Failed to process image");
-          if (!hadExistingPhoto) {
-            setView("initial");
-          }
-        })
-        .finally(() => {
-          clearInterval(progressInterval);
-          setIsUploading(false);
-          setRawPreviewUrl((prev) => {
-            if (prev) URL.revokeObjectURL(prev);
-            return null;
-          });
-        });
+      onError?.(null);
     };
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
+      // Allow re-selecting the same file after a cancel.
       event.target.value = "";
       if (!file) return;
-      if (file.size > MAX_UPLOAD_BYTES) {
-        onError?.("File is too large. Please select an image under 2MB.");
+
+      if (!ACCEPTED_TYPES.includes(file.type)) {
+        onError?.(`Only ${ACCEPTED_TYPES_LABEL} images are supported.`);
         return;
       }
-      onError?.(null);
-      processSelectedFile(file);
+      if (file.size > ABSOLUTE_MAX_UPLOAD_BYTES) {
+        onError?.(
+          `File is ${(file.size / (1024 * 1024)).toFixed(1)} MB — the maximum is 15 MB.`,
+        );
+        return;
+      }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        // Soft limit: hold the file and offer an explicit force-upload.
+        setOversizeFile(file);
+        onError?.(null);
+        return;
+      }
+      acceptFile(file);
     };
 
     const handleWebcamCapture = (file: File) => {
-      processSelectedFile(file);
+      // Revoke the previous blob URL before creating a new one
+      if (previewUrl && previewUrl.startsWith("blob:")) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      setImageFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+      setView("preview");
     };
 
     const dataUrlByteLength = (dataUrl: string): number => {
@@ -240,7 +246,9 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
         const height = Math.max(1, Math.round(image.height * scale));
         canvas.width = width;
         canvas.height = height;
-        context.clearRect(0, 0, width, height);
+        // JPEG has no alpha — flatten transparent PNGs onto white, not black.
+        context.fillStyle = "#ffffff";
+        context.fillRect(0, 0, width, height);
         context.drawImage(image, 0, 0, width, height);
 
         const candidate = canvas.toDataURL("image/jpeg", quality);
@@ -260,9 +268,29 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
       );
     };
 
+    const makeThumbnail = async (file: File): Promise<string> => {
+      const image = await loadImageFromFile(file);
+      const canvas = document.createElement("canvas");
+      const context = canvas.getContext("2d");
+      if (!context) {
+        throw new Error("Failed to prepare thumbnail.");
+      }
+      const scale = Math.min(
+        1,
+        THUMBNAIL_MAX_DIMENSION / Math.max(image.width, image.height),
+      );
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      // JPEG has no alpha — flatten transparent PNGs onto white, not black.
+      context.fillStyle = "#ffffff";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      return canvas.toDataURL("image/jpeg", THUMBNAIL_QUALITY);
+    };
+
     const collect = (): PhotoUploadData | null => {
       if (previewUrl) {
-        return { imageUrl: previewUrl };
+        return { imageUrl: previewUrl, thumbnail: initialData.thumbnail };
       }
       return null;
     };
@@ -274,14 +302,45 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
       return null;
     };
 
-    const handleUpload = () => {
+    // MODIFIED: Convert to base64 instead of simulating upload
+    const handleUpload = async () => {
       const validationError = validate();
       if (validationError) {
         onError?.(validationError);
         return;
       }
-      if (previewUrl) {
-        onSubmit({ imageUrl: previewUrl });
+
+      if (imageFile) {
+        setIsUploading(true);
+        setUploadProgress(0);
+
+        try {
+          // Animate progress while converting
+          const progressInterval = setInterval(() => {
+            setUploadProgress((prev) => Math.min(prev + 10, 90));
+          }, 150);
+
+          // Convert to base64 and compress to stay within Firestore field size.
+          const base64String = await compressToBase64WithinLimit(
+            imageFile,
+            MAX_BASE64_FIELD_BYTES,
+          );
+          const thumbnail = await makeThumbnail(imageFile);
+
+          clearInterval(progressInterval);
+          setUploadProgress(100);
+          setIsUploading(false);
+
+          // Submit the base64 string
+          onSubmit({ imageUrl: base64String, thumbnail });
+        } catch (error) {
+          console.error("Error converting image:", error);
+          onError?.("Failed to process image");
+          setIsUploading(false);
+        }
+      } else if (previewUrl) {
+        // If a photo exists from initialData but wasn't changed, just proceed.
+        onSubmit({ imageUrl: previewUrl, thumbnail: initialData.thumbnail });
       }
     };
 
@@ -297,12 +356,43 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
           Upload a photo of the recipient
         </h1>
         <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center min-h-[400px]">
+          {oversizeFile && (
+            <div className="mb-6 w-full max-w-md rounded-lg border border-amber-300 bg-amber-50 p-4 text-center space-y-3">
+              <p className="text-sm font-semibold text-amber-800">
+                This photo is {(oversizeFile.size / (1024 * 1024)).toFixed(1)}{" "}
+                MB — over the 2 MB recommended limit.
+              </p>
+              <p className="text-xs text-amber-700">
+                You can still upload it; it will be heavily compressed to fit,
+                which may reduce photo quality.
+              </p>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => acceptFile(oversizeFile)}
+                  className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700"
+                >
+                  Force Upload
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOversizeFile(null);
+                    fileInputRef.current?.click();
+                  }}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  Choose Another
+                </button>
+              </div>
+            </div>
+          )}
 
           {view === "initial" && (
             <div className="text-center space-y-4">
               <p className="font-semibold">Browse a file or use webcam</p>
               <p className="text-sm text-gray-500">
-                PNG and JPEG formats, up to 2 MB
+                {ACCEPTED_TYPES_LABEL} · up to 2 MB recommended
               </p>
               <div className="w-32 h-32 bg-gray-200 rounded-full mx-auto my-4"></div>
               <div className="flex items-center space-x-4">
@@ -343,7 +433,7 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
                 )}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={rawPreviewUrl ?? previewUrl ?? ""}
+                  src={previewUrl!}
                   alt="Recipient Preview"
                   className={`w-full h-full object-cover rounded-full ${
                     isUploading ? "opacity-30" : ""
@@ -362,6 +452,11 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
                   <button
                     type="button"
                     onClick={() => {
+                      // Revoke blob URL before removing
+                      if (previewUrl && previewUrl.startsWith("blob:")) {
+                        URL.revokeObjectURL(previewUrl);
+                      }
+                      setImageFile(null);
                       setPreviewUrl(null);
                       setView("initial");
                     }}
@@ -385,7 +480,7 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
             ref={fileInputRef}
             type="file"
             className="hidden"
-            accept="image/png, image/jpeg"
+            accept={ACCEPTED_TYPES.join(", ")}
             onChange={handleFileChange}
           />
         </div>

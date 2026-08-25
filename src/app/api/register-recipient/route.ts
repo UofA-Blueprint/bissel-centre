@@ -1,16 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { initAdmin } from "@/app/services/firebaseAdmin";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { encryptPhone } from "@/utils/phoneEncryption";
 import admin from "firebase-admin";
+import { upsertSearchIndexEntry } from "@/app/services/searchIndexService";
 import { getStaffAccess } from "@/app/api/_lib/staffAccess";
+import { processRecipientPhoto } from "@/app/services/recipientPhotoService";
 
-const MAX_PICTURE_FIELD_BYTES = 1_000_000; // Firestore field value must stay < ~1,048,487 bytes.
 const EDMONTON_TIMEZONE = "America/Edmonton";
-
-function getUtf8ByteSize(value: string): number {
-  return Buffer.byteLength(value, "utf8");
-}
 
 function formatEdmontonDate(date: Date): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -35,8 +31,6 @@ export async function POST(request: NextRequest) {
         { status: access.status },
       );
     }
-
-    const adminApp = access.app;
     const createdByUid = access.uid;
 
     const body = await request.json();
@@ -62,6 +56,7 @@ export async function POST(request: NextRequest) {
       };
       photoUpload?: {
         imageUrl?: string;
+        thumbnail?: string;
       };
     };
 
@@ -80,18 +75,19 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
-    const pictureBytes = getUtf8ByteSize(photoUpload.imageUrl);
-    if (pictureBytes > MAX_PICTURE_FIELD_BYTES) {
+    let processedPhoto;
+    try {
+      processedPhoto = await processRecipientPhoto(photoUpload.imageUrl);
+    } catch (error) {
       return NextResponse.json(
         {
           error:
-            "Recipient photo is too large. Please upload a smaller image.",
+            error instanceof Error ? error.message : "Invalid recipient photo.",
         },
         { status: 400 },
       );
     }
 
-    // Validate required personal details fields
     const requiredFields = ["firstName", "lastName", "email"] as const;
     for (const field of requiredFields) {
       if (!personalDetails[field]) {
@@ -102,7 +98,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const db = getFirestore();
+    const db = getFirestore(access.app);
     const arcCardDigits = String(additionalInfo?.arcCardDigits || "")
       .replace(/\D/g, "")
       .trim();
@@ -115,7 +111,9 @@ export async function POST(request: NextRequest) {
       // Required schema fields
       firstName: personalDetails.firstName,
       secondName: personalDetails.lastName,
-      picture: photoUpload.imageUrl, // Base64 encoded image
+      // Full-res base64 lives in user_photos/{uid}; the user doc only carries
+      // the small thumbnail so list queries stay bounded.
+      photoThumb: processedPhoto.photoThumb,
       genderIdentity: personalDetails.gender || null,
       aliases: personalDetails.alias ? [personalDetails.alias] : [],
       dateOfBirth: personalDetails.dob || null,
@@ -140,43 +138,52 @@ export async function POST(request: NextRequest) {
     };
 
     const userRef = db.collection("users").doc();
-    // const batch = db.batch();
-    // batch.set(userRef, userData);
+    const photoRef = db.collection("user_photos").doc(userRef.id);
+    const photoData = {
+      // Canonical re-encode of the validated bytes — never the client's raw
+      // string, so lenient-decoder quirks (mid-stream padding etc.) can't be
+      // stored. Served via /api/users/[id]/photo.
+      picture: processedPhoto.picture,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
 
-    if (!arcCardDigits){
-      await userRef.set(userData)
-    }else{
+    if (!arcCardDigits) {
+      const batch = db.batch();
+      batch.set(userRef, userData);
+      batch.set(photoRef, photoData);
+      upsertSearchIndexEntry(batch, db, userRef.id, userData);
+      await batch.commit();
+    } else {
       try {
-        await db.runTransaction(async(tx) => {
+        await db.runTransaction(async (tx) => {
           const cardQuery = db
-          .collection("arc_cards")
-          .where("arcCardNumber", "==", arcCardDigits)
-          .limit(1);
+            .collection("arc_cards")
+            .where("arcCardNumber", "==", arcCardDigits)
+            .limit(1);
 
           const cardSnapshot = await tx.get(cardQuery);
 
-          if (cardSnapshot.empty){
-            throw new Error("Selected ARC Card does not exist")
+          if (cardSnapshot.empty) {
+            throw new Error("Selected ARC Card does not exist");
           }
 
           const cardDoc = cardSnapshot.docs[0];
           const cardData = cardDoc.data() as {
             currentUserId?: string | null;
-            status?: string
-          }
+            status?: string;
+          };
 
           // Rule 1: card must not already be assigned
-          if (cardData.currentUserId){
-            throw new Error("Selected ARC Card is already assigned")
+          if (cardData.currentUserId) {
+            throw new Error("Selected ARC Card is already assigned");
           }
 
-          if (cardData.status !== "Unattributed"){
+          if (cardData.status !== "Unattributed") {
             throw new Error(
-              "Selected ARC Card must be Unattributed before assignment"
-            )
+              "Selected ARC Card must be Unattributed before assignment",
+            );
           }
 
-  
           const issueTimestamp = Timestamp.now();
           const issueDate = issueTimestamp.toDate();
           const issueDateString = formatEdmontonDate(issueDate);
@@ -201,14 +208,18 @@ export async function POST(request: NextRequest) {
             ...userData,
             arcCardNumber: arcCardDigits,
             passesIssued: [cardDoc.id],
-          })
+          });
+
+          tx.set(photoRef, photoData);
+
+          upsertSearchIndexEntry(tx, db, userRef.id, userData);
 
           // Rule 3: once assigned, card becomes Active
-          tx.update(cardDoc.ref,{
+          tx.update(cardDoc.ref, {
             currentUserId: userRef.id,
             status: "Active",
             updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          })
+          });
 
           tx.set(issueRef, {
             cardId: cardDoc.id,
@@ -221,9 +232,11 @@ export async function POST(request: NextRequest) {
           });
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : "Failed to assign ARC card";
+        const message =
+          err instanceof Error ? err.message : "Failed to assign ARC card";
         return NextResponse.json({ error: message }, { status: 400 });
-      }}
+      }
+    }
 
     return NextResponse.json(
       {

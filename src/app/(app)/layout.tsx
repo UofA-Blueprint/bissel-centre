@@ -18,9 +18,13 @@ export default async function AppLayout({
   let isAdmin = false;
   try {
     const admin = await initAdmin();
+    // Hot render path (every navigation): skip the revocation round-trip and
+    // read display info from the session claims instead of a getUser() call —
+    // one network call instead of three. Session cookies expire in ≤5 days
+    // and write endpoints still verify with revocation (SCALE-05).
     const decodedClaims = await admin
       .auth()
-      .verifySessionCookie(sessionCookie, true);
+      .verifySessionCookie(sessionCookie);
     isAdmin = decodedClaims.admin === true;
     if (!isAdmin) {
       const staffDoc = await admin
@@ -32,11 +36,10 @@ export default async function AppLayout({
         redirect("/login");
       }
     }
-    const userRecord = await admin.auth().getUser(decodedClaims.uid);
     user = {
-      name: userRecord.displayName || "",
-      email: userRecord.email || "",
-      photoURL: userRecord.photoURL || "",
+      name: (decodedClaims.name as string | undefined) || "",
+      email: decodedClaims.email || "",
+      photoURL: (decodedClaims.picture as string | undefined) || "",
     };
   } catch {
     redirect("/login");

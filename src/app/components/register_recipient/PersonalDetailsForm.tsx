@@ -46,8 +46,12 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
     });
 
     const validate = (data: RecipientFormData): string | null => {
-      // Validate required fields
-      if (!data.firstName || !data.lastName || !data.postalCode || !data.email) {
+      if (
+        !data.firstName ||
+        !data.lastName ||
+        !data.postalCode ||
+        !data.email
+      ) {
         return "First name, last name, email, and postal code are required.";
       }
 
@@ -94,14 +98,14 @@ const RegisterRecipientForm = forwardRef<{ submit: () => void }, Props>(
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <label className="flex flex-col">
             <span className="text-sm">
-              First name <span className="text-red-500">*</span>
+              Name <span className="text-red-500">*</span>
             </span>
             <input
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
               type="text"
               name="firstName"
-              placeholder="Recipient's first name"
+              placeholder="Recipient's name"
               className="mt-1 text-sm font-normal border rounded-xl px-3 py-3 focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </label>
