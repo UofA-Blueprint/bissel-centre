@@ -759,15 +759,27 @@ export default function ReportsPage() {
     }
 
     if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(
-        (u) =>
-          u.firstName.toLowerCase().includes(q) ||
-          u.lastName.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q) ||
-          u.phoneNumber.toLowerCase().includes(q) ||
-          `${u.firstName} ${u.lastName}`.toLowerCase().includes(q)
-      );
+      const raw = searchQuery.trim();
+      // Mirror the fetch effect's split. Email/phone queries (which contain @
+      // or a digit) are never sent to the server, so this is the ONLY place
+      // they are filtered — keep the raw substring match over all fields.
+      const isEmailOrPhone = raw.includes("@") || /\d/.test(raw);
+      if (isEmailOrPhone) {
+        const q = raw.toLowerCase();
+        result = result.filter(
+          (u) =>
+            u.firstName.toLowerCase().includes(q) ||
+            u.lastName.toLowerCase().includes(q) ||
+            u.email.toLowerCase().includes(q) ||
+            u.phoneNumber.toLowerCase().includes(q) ||
+            `${u.firstName} ${u.lastName}`.toLowerCase().includes(q)
+        );
+      }
+      // Name-ish queries were already matched server-side through the folded /
+      // alias / phonetic index. Re-filtering here with a raw includes() silently
+      // dropped diacritic (Renée), apostrophe (O'Brien), hyphen (Jo-Ann),
+      // spacing (Jo Ann vs Jo-Ann), and ALIAS matches the server correctly
+      // returned — so trust the server result and do not re-filter by name.
     }
 
     if (flagFilter === "flagged") {
