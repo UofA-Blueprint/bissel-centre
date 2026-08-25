@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
-import { cookies } from "next/headers";
 import { encryptPhone } from "@/utils/phoneEncryption";
 import admin from "firebase-admin";
+import { getStaffAccess } from "@/app/api/_lib/staffAccess";
 
 const MAX_PICTURE_FIELD_BYTES = 1_000_000; // Firestore field value must stay < ~1,048,487 bytes.
 const EDMONTON_TIMEZONE = "America/Edmonton";
@@ -28,45 +28,16 @@ function formatEdmontonDate(date: Date): string {
 
 export async function POST(request: NextRequest) {
   try {
-    // Verify user session
-    const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get("session")?.value;
-
-    if (!sessionCookie) {
+    const access = await getStaffAccess();
+    if ("error" in access) {
       return NextResponse.json(
-        { error: "Unauthorized - No session found" },
-        { status: 401 },
+        { error: access.error },
+        { status: access.status },
       );
     }
 
-    const adminApp = await initAdmin();
-    const decodedClaims = await adminApp
-      .auth()
-      .verifySessionCookie(sessionCookie, true);
-
-    // IT admins are in read-only "view as" mode on staff pages; they cannot
-    // create recipients even by bypassing the UI.
-    if (decodedClaims.admin === true) {
-      return NextResponse.json(
-        { error: "Forbidden - Staff access only" },
-        { status: 403 },
-      );
-    }
-
-    const staffDoc = await adminApp
-      .firestore()
-      .collection("administrative_staff")
-      .doc(decodedClaims.uid)
-      .get();
-
-    if (!staffDoc.exists || staffDoc.data()?.isDeleted === true) {
-      return NextResponse.json(
-        { error: "Forbidden - Staff access only" },
-        { status: 403 },
-      );
-    }
-
-    const createdByUid = decodedClaims.uid;
+    const adminApp = access.app;
+    const createdByUid = access.uid;
 
     const body = await request.json();
     const { personalDetails, additionalInfo, photoUpload } = body as {
@@ -152,7 +123,9 @@ export async function POST(request: NextRequest) {
       postalCode: personalDetails.postalCode || null,
       passesIssued: [],
       banned: false,
+      flagged: false,
       banReason: null,
+      flagReason: null,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       createdBy: createdByUid,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),

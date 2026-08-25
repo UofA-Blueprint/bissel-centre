@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Fuse from "fuse.js";
-import { Flag } from "lucide-react";
+import { Flag, XCircle } from "lucide-react";
 import RegisterRecipientModal from "@/app/components/register_recipient/RegisterRecipientModal";
 import SearchBar from "@/app/components/SearchBar";
 import StaffOnlyNotice from "@/app/components/StaffOnlyNotice";
@@ -35,6 +35,8 @@ interface User {
   postalCode: string;
   passesIssued: string[];
   banned: boolean;
+  flagged?: boolean;
+  flagReason?: string;
   banReason?: string;
   notes?: string;
   status?: "Active" | "Inactive"; // Account status (different from banned)
@@ -72,11 +74,13 @@ export default function DashboardPage() {
       label: "Expired Cards",
     },
     { icon: "/flag.svg", number: 0, label: "Flagged Users" },
+    { icon: "/flag.svg", number: 0, label: "Banned Users" },
   ]);
   const [users, setUsers] = useState<User[]>([]);
   const [searchResults, setSearchResults] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [forbidden, setForbidden] = useState(false);
   const [refreshNonce, setRefreshNonce] = useState(0);
@@ -194,7 +198,7 @@ export default function DashboardPage() {
         )}
 
         {/* Stats Section */}
-        <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-4 sm:gap-4 sm:overflow-visible mb-4 sm:mb-6 max-w-7xl mx-auto w-full lg:shrink-0">
+        <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:grid sm:grid-cols-5 sm:gap-4 sm:overflow-visible mb-4 sm:mb-6 max-w-7xl mx-auto w-full lg:shrink-0">
           {stats.map((stat, index) => (
             <StatCard
               key={index}
@@ -219,6 +223,7 @@ export default function DashboardPage() {
             }`}
             onClick={() => {
               if (isViewOnly) return;
+              setEditingUserId(null);
               setIsModalOpen(true);
             }}
             disabled={isViewOnly}
@@ -272,7 +277,16 @@ export default function DashboardPage() {
             <>
               <div className="flex flex-wrap gap-2 sm:gap-4 justify-center">
                 {searchResults.map((user) => (
-                  <UserCard key={user.id} user={user} />
+                  <UserCard
+                    key={user.id}
+                    user={user}
+                    isViewOnly={isViewOnly}
+                    onEdit={() => {
+                      if (isViewOnly) return;
+                      setEditingUserId(user.id);
+                      setIsModalOpen(true);
+                    }}
+                  />
                 ))}
               </div>
 
@@ -293,7 +307,12 @@ export default function DashboardPage() {
       </div>
       <RegisterRecipientModal
         open={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+        mode={editingUserId ? "edit" : "create"}
+        recipientId={editingUserId ?? undefined}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingUserId(null);
+        }}
         onSuccess={() => {
           setIsLoading(true);
           setRefreshNonce((prev) => prev + 1);
@@ -327,7 +346,11 @@ const StatCard: React.FC<StatCardComponentProps> = ({
     >
       {/* Icon + Number */}
       <div className="flex items-center gap-2">
-        <Image src={icon} alt={label} width={24} height={24} />
+        {label === "Banned Users" ? (
+          <XCircle className="h-6 w-6 text-red-600" aria-label={label} />
+        ) : (
+          <Image src={icon} alt={label} width={24} height={24} />
+        )}
         <h2 className="text-2xl font-bold">{number}</h2>
       </div>
 
@@ -354,13 +377,24 @@ const UserCardSkeleton: React.FC = () => {
   );
 };
 
-const UserCard: React.FC<{ user: User }> = ({ user }) => {
+const UserCard: React.FC<{ user: User; onEdit: () => void; isViewOnly?: boolean }> = ({
+  user,
+  onEdit,
+  isViewOnly = false,
+}) => {
   const isBanned = user.banned;
+  const isFlagged = user.flagged === true;
   const arcCardStatus = user.arcCardStatus;
   const [imgError, setImgError] = useState(false);
   const initial = user.firstName?.trim().charAt(0).toUpperCase() || "?";
   const showImage = user.picture && !imgError;
-  const userStatusText = user.status === "Inactive" ? "Inactive User" : "Active User";
+  const userStatusText = isBanned
+    ? "Banned User"
+    : isFlagged
+      ? "Flagged and Active User"
+      : user.status === "Inactive"
+        ? "Inactive User"
+        : "Active User";
   const cardStatusText =
     arcCardStatus === "Active"
       ? "Card Active"
@@ -391,7 +425,12 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
       {/* Name and Info Row */}
       <div className="flex-1 flex flex-col sm:flex-row sm:items-center min-w-0 gap-2">
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          {isBanned && <Flag className="h-4 w-4 text-red-500 shrink-0" aria-label="Flagged user" />}
+          {isFlagged && (
+            <Flag className="h-4 w-4 text-red-500 shrink-0" aria-label="Flagged recipient" />
+          )}
+          {isBanned && (
+            <XCircle className="h-4 w-4 text-red-600 shrink-0" aria-label="Banned recipient" />
+          )}
           <span className="min-w-0 text-base sm:text-xl font-bold text-gray-900 truncate">
             {user.firstName} {user.secondName}
           </span>
@@ -409,6 +448,20 @@ const UserCard: React.FC<{ user: User }> = ({ user }) => {
           </div>
         </div>
       </div>
+      <button
+        type="button"
+        onClick={onEdit}
+        disabled={isViewOnly}
+        title={isViewOnly ? "View-only mode: editing is disabled." : undefined}
+        className={`ml-3 shrink-0 rounded-md border border-gray-200 px-3 py-2 text-sm font-medium ${
+          isViewOnly
+            ? "cursor-not-allowed text-gray-400"
+            : "text-primary hover:bg-gray-50"
+        }`}
+        aria-label={`Edit ${user.firstName} ${user.secondName}`}
+      >
+        Edit
+      </button>
     </div>
   );
 };

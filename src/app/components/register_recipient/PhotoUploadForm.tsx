@@ -19,7 +19,7 @@ type Props = {
   initialData?: Partial<PhotoUploadData>;
 };
 
-// --- WebcamCapture component remains exactly the same ---
+
 const WebcamCapture = ({
   onCapture,
   onCancel,
@@ -29,23 +29,43 @@ const WebcamCapture = ({
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const stopCamera = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
 
   useEffect(() => {
-    let stream: MediaStream | null = null;
+    let cancelled = false;
     const startCamera = async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        if (cancelled) {
+          // Effect was already torn down (e.g. Strict Mode's double-invoke in
+          // dev) before getUserMedia resolved - stop this stream immediately,
+          // otherwise nothing else ever references it to turn the camera off.
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
         }
       } catch (err) {
-        console.error("Error accessing webcam:", err);
-        onCancel();
+        if (!cancelled) {
+          console.error("Error accessing webcam:", err);
+          onCancel();
+        }
       }
     };
     startCamera();
     return () => {
-      stream?.getTracks().forEach((track) => track.stop());
+      cancelled = true;
+      stopCamera();
     };
   }, [onCancel]);
 
@@ -63,6 +83,7 @@ const WebcamCapture = ({
         const file = new File([blob], `webcam-${Date.now()}.jpg`, {
           type: "image/jpeg",
         });
+        stopCamera();
         onCapture(file);
       }
     }, "image/jpeg");
@@ -80,7 +101,10 @@ const WebcamCapture = ({
       <div className="flex space-x-4">
         <button
           type="button"
-          onClick={onCancel}
+          onClick={() => {
+            stopCamera();
+            onCancel();
+          }}
           className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg"
         >
           Cancel
@@ -103,49 +127,78 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
     const [view, setView] = useState<"initial" | "preview" | "webcam">(
       initialData.imageUrl ? "preview" : "initial",
     );
-    const [imageFile, setImageFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(
       initialData.imageUrl ?? null,
     );
+    // Short-lived blob URL shown while a freshly picked/captured photo is
+    // being compressed. Never read by getData()/collect() - only the final
+    // `previewUrl` (base64) is - so navigating away mid-compression can't
+    // save an unusable blob: URL into form state.
+    const [rawPreviewUrl, setRawPreviewUrl] = useState<string | null>(null);
     const [uploadProgress, setUploadProgress] = useState(0);
     const [isUploading, setIsUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Clean up blob URLs when component unmounts or when previewUrl changes
+    // Clean up the raw blob preview on unmount
     useEffect(() => {
       return () => {
-        if (previewUrl && previewUrl.startsWith("blob:")) {
-          URL.revokeObjectURL(previewUrl);
+        if (rawPreviewUrl) {
+          URL.revokeObjectURL(rawPreviewUrl);
         }
       };
-    }, [previewUrl]);
+    }, [rawPreviewUrl]);
+
+    const processSelectedFile = (file: File) => {
+      const hadExistingPhoto = previewUrl !== null;
+
+      setRawPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(file);
+      });
+      setView("preview");
+      setIsUploading(true);
+      setUploadProgress(0);
+
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => Math.min(prev + 10, 90));
+      }, 150);
+
+      compressToBase64WithinLimit(file, MAX_BASE64_FIELD_BYTES)
+        .then((base64String) => {
+          setPreviewUrl(base64String);
+          setUploadProgress(100);
+        })
+        .catch((error) => {
+          console.error("Error processing image:", error);
+          onError?.("Failed to process image");
+          if (!hadExistingPhoto) {
+            setView("initial");
+          }
+        })
+        .finally(() => {
+          clearInterval(progressInterval);
+          setIsUploading(false);
+          setRawPreviewUrl((prev) => {
+            if (prev) URL.revokeObjectURL(prev);
+            return null;
+          });
+        });
+    };
 
     const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
-      if (file) {
-        if (file.size > MAX_UPLOAD_BYTES) {
-          onError?.("File is too large. Please select an image under 2MB.");
-          return;
-        }
-        // Revoke the previous blob URL before creating a new one
-        if (previewUrl && previewUrl.startsWith("blob:")) {
-          URL.revokeObjectURL(previewUrl);
-        }
-        setImageFile(file);
-        setPreviewUrl(URL.createObjectURL(file));
-        setView("preview");
-        onError?.(null);
+      event.target.value = "";
+      if (!file) return;
+      if (file.size > MAX_UPLOAD_BYTES) {
+        onError?.("File is too large. Please select an image under 2MB.");
+        return;
       }
+      onError?.(null);
+      processSelectedFile(file);
     };
 
     const handleWebcamCapture = (file: File) => {
-      // Revoke the previous blob URL before creating a new one
-      if (previewUrl && previewUrl.startsWith("blob:")) {
-        URL.revokeObjectURL(previewUrl);
-      }
-      setImageFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-      setView("preview");
+      processSelectedFile(file);
     };
 
     const dataUrlByteLength = (dataUrl: string): number => {
@@ -221,43 +274,13 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
       return null;
     };
 
-    // MODIFIED: Convert to base64 instead of simulating upload
-    const handleUpload = async () => {
+    const handleUpload = () => {
       const validationError = validate();
       if (validationError) {
         onError?.(validationError);
         return;
       }
-
-      if (imageFile) {
-        setIsUploading(true);
-        setUploadProgress(0);
-
-        try {
-          // Animate progress while converting
-          const progressInterval = setInterval(() => {
-            setUploadProgress((prev) => Math.min(prev + 10, 90));
-          }, 150);
-
-          // Convert to base64 and compress to stay within Firestore field size.
-          const base64String = await compressToBase64WithinLimit(
-            imageFile,
-            MAX_BASE64_FIELD_BYTES,
-          );
-
-          clearInterval(progressInterval);
-          setUploadProgress(100);
-          setIsUploading(false);
-
-          // Submit the base64 string
-          onSubmit({ imageUrl: base64String });
-        } catch (error) {
-          console.error("Error converting image:", error);
-          onError?.("Failed to process image");
-          setIsUploading(false);
-        }
-      } else if (previewUrl) {
-        // If a photo exists from initialData but wasn't changed, just proceed.
+      if (previewUrl) {
         onSubmit({ imageUrl: previewUrl });
       }
     };
@@ -274,7 +297,6 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
           Upload a photo of the recipient
         </h1>
         <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 flex flex-col items-center justify-center min-h-[400px]">
-          {/* --- The entire JSX remains exactly the same --- */}
 
           {view === "initial" && (
             <div className="text-center space-y-4">
@@ -321,7 +343,7 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
                 )}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={previewUrl!}
+                  src={rawPreviewUrl ?? previewUrl ?? ""}
                   alt="Recipient Preview"
                   className={`w-full h-full object-cover rounded-full ${
                     isUploading ? "opacity-30" : ""
@@ -340,11 +362,6 @@ const PhotoUploadForm = forwardRef<{ submit: () => void }, Props>(
                   <button
                     type="button"
                     onClick={() => {
-                      // Revoke blob URL before removing
-                      if (previewUrl && previewUrl.startsWith("blob:")) {
-                        URL.revokeObjectURL(previewUrl);
-                      }
-                      setImageFile(null);
                       setPreviewUrl(null);
                       setView("initial");
                     }}

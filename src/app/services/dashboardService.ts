@@ -20,6 +20,8 @@ export interface DashboardUser {
   postalCode: string;
   passesIssued: string[];
   banned: boolean;
+  flagged?: boolean;
+  flagReason?: string;
   banReason?: string;
   notes?: string;
   status?: "Active" | "Inactive";
@@ -103,6 +105,9 @@ export async function getDashboardSummaryForViewer(viewer: {
       "picture",
       "aliases",
       "banned",
+      "flagged",
+      "flagReason",
+      "banReason",
       "status",
       "email",
       "createdAt",
@@ -203,6 +208,7 @@ export async function getDashboardSummaryForViewer(viewer: {
   const availableCards = totalCardsAgg.data().count;
   const activeCards = activeCardsAgg.data().count;
   const expiredCards = expiredCardsAgg.data().count;
+  const flaggedUsersCount = users.filter((user) => user.flagged === true).length;
 
   const stats: DashboardStat[] = [
     { icon: "/card.svg", number: availableCards, label: "Available Cards" },
@@ -210,8 +216,13 @@ export async function getDashboardSummaryForViewer(viewer: {
     { icon: "/caution.svg", number: expiredCards, label: "Expired Cards" },
     {
       icon: "/flag.svg",
-      number: bannedUsersAgg.data().count,
+      number: flaggedUsersCount,
       label: "Flagged Users",
+    },
+    {
+      icon: "/flag.svg",
+      number: bannedUsersAgg.data().count,
+      label: "Banned Users",
     },
   ];
 
