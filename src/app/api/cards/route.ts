@@ -326,7 +326,10 @@ export async function GET(request: NextRequest) {
           .collection("arc_cards")
           .orderBy("arcCardNumber")
           .startAt(qDigits)
-          .endAt(`${qDigits}`)
+          // Append U+F8FF (a high private-use code point) so this is a PREFIX
+          // range, not an exact match: "123" must also find "1234567". Kept as
+          // a \uf8ff escape, not a literal invisible char, so it stays greppable.
+          .endAt(`${qDigits}\uf8ff`)
           .limit(SEARCH_RESULT_CAP)
           .get();
         for (const doc of snap.docs) found.set(doc.id, doc);

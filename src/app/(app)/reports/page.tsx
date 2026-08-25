@@ -44,6 +44,33 @@ import type * as XLSXNS from "xlsx";
 type XLSXModule = typeof import("xlsx");
 const EDMONTON_TIMEZONE = "America/Edmonton";
 
+// Constructing an Intl.DateTimeFormat is one of the most expensive ICU
+// operations; these functions run once per row (and per card/activity entry)
+// inside filteredData, which recomputes on every keystroke. Build each
+// formatter once at module load and reuse it, instead of thousands of
+// constructions per recompute — the difference is a multi-hundred-ms freeze
+// per keystroke on a low-end PC when a date filter is active.
+const DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  timeZone: EDMONTON_TIMEZONE,
+});
+const DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: EDMONTON_TIMEZONE,
+});
+const DAY_KEY_FORMAT = new Intl.DateTimeFormat("en-CA", {
+  timeZone: EDMONTON_TIMEZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
 // --- API ---
 
 // Server-side layered filtering: the filter params travel to the API, which
@@ -128,12 +155,7 @@ function formatDate(dateStr: string): string {
   try {
     const parsed = parseFlexibleDate(dateStr);
     if (!parsed) return dateStr;
-    return new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      timeZone: EDMONTON_TIMEZONE,
-    }).format(parsed);
+    return DATE_FORMAT.format(parsed);
   } catch {
     return dateStr;
   }
@@ -144,14 +166,7 @@ function formatDateTime(dateStr: string): string {
   try {
     const parsed = parseFlexibleDate(dateStr);
     if (!parsed) return dateStr;
-    return new Intl.DateTimeFormat("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: EDMONTON_TIMEZONE,
-    }).format(parsed);
+    return DATE_TIME_FORMAT.format(parsed);
   } catch {
     return dateStr;
   }
@@ -208,12 +223,7 @@ function parseFlexibleDate(dateStr: string): Date | null {
 }
 
 function toEdmontonDayKey(value: Date): number {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: EDMONTON_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(value);
+  const parts = DAY_KEY_FORMAT.formatToParts(value);
   const year = parts.find((part) => part.type === "year")?.value;
   const month = parts.find((part) => part.type === "month")?.value;
   const day = parts.find((part) => part.type === "day")?.value;
