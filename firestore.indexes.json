@@ -12,9 +12,9 @@
       "collectionGroup": "arc_cards",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "arcCardNumber", "order": "ASCENDING" },
         { "fieldPath": "currentUserId", "order": "ASCENDING" },
-        { "fieldPath": "status", "order": "ASCENDING" }
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "arcCardNumber", "order": "ASCENDING" }
       ]
     },
     {
