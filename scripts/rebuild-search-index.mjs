@@ -25,7 +25,7 @@ console.log("Rebuilding name-search index...\n");
 
 const snap = await db
   .collection("users")
-  .select("firstName", "secondName", "aliases")
+  .select("firstName", "secondName", "aliases", "postalCode")
   .get();
 
 const shards = Array.from({ length: SEARCH_INDEX_SHARDS }, () => ({}));
