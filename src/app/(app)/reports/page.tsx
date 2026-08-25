@@ -56,6 +56,18 @@ type ReportFetchResult = {
   truncated: string[];
 };
 
+// Bounded client-side cache for fetched report datasets, keyed by the exact
+// server filter params. Email/phone searches (which the server can't filter,
+// so the params don't change) previously re-walked the whole collection on
+// every keystroke; a cache hit reuses the dataset instead. The cache is capped
+// by total cached rows so it never becomes a memory burden on a weak PC — a
+// result larger than the whole budget is simply not cached (fetch still
+// works), and older entries are evicted to keep the running sum under the cap.
+// Entries also expire so a repeated view doesn't serve indefinitely-stale data.
+const REPORT_MEMO_MAX_ROWS = 5000;
+const REPORT_MEMO_TTL_MS = 60_000;
+type ReportMemoEntry = { at: number; rows: number; data: ReportFetchResult };
+
 async function fetchReportData(
   filterParams: URLSearchParams,
   signal?: AbortSignal,
@@ -569,57 +581,104 @@ export default function ReportsPage() {
   // below re-applies the same predicates as a refinement — it also covers
   // the two filters the server cannot express: allocation-date ranges (the
   // stored strings mix formats) and email/phone substring search.
+  const reportMemo = useRef<Map<string, ReportMemoEntry>>(new Map());
+  const reportMemoRows = useRef(0);
+
   useEffect(() => {
+    const applyReportData = (reportData: ReportFetchResult) => {
+      setData(reportData.users);
+      setAllCards(reportData.cards);
+      setTruncatedLayers(reportData.truncated);
+      setError(null);
+      setLoading(false);
+      setRefreshing(false);
+    };
+
+    const storeReportMemo = (key: string, reportData: ReportFetchResult) => {
+      const rows = reportData.users.length + reportData.cards.length;
+      const existing = reportMemo.current.get(key);
+      if (existing) {
+        reportMemo.current.delete(key);
+        reportMemoRows.current -= existing.rows;
+      }
+      // A single result bigger than the whole budget is never cached — fall
+      // back to fetching it fresh rather than let the cache dominate RAM.
+      if (rows > REPORT_MEMO_MAX_ROWS) return;
+      // Evict oldest entries (Map preserves insertion order) until this fits.
+      while (
+        reportMemoRows.current + rows > REPORT_MEMO_MAX_ROWS &&
+        reportMemo.current.size > 0
+      ) {
+        const oldestKey = reportMemo.current.keys().next().value as
+          | string
+          | undefined;
+        if (oldestKey === undefined) break;
+        const evicted = reportMemo.current.get(oldestKey);
+        reportMemo.current.delete(oldestKey);
+        if (evicted) reportMemoRows.current -= evicted.rows;
+      }
+      reportMemo.current.set(key, { at: Date.now(), rows, data: reportData });
+      reportMemoRows.current += rows;
+    };
+
+    const params = new URLSearchParams();
+    const q = searchQuery.trim();
+    // Name-ish queries resolve through the server name index; queries
+    // with @ or digits (email/phone) stay client-side.
+    if (q && !q.includes("@") && !/\d/.test(q)) params.set("search", q);
+    if (flagFilter !== "all") params.set("flag", flagFilter);
+    if (statusFilter.length) params.set("statuses", statusFilter.join(","));
+    if (currentCardFilter !== "all") {
+      params.set("currentCard", currentCardFilter);
+    }
+    if (cardStatusFilter.length) {
+      params.set("cardStatuses", cardStatusFilter.join(","));
+    }
+    if (cardDepartmentFilter.length) {
+      params.set("cardDepartments", cardDepartmentFilter.join(","));
+    }
+    if (activityEventFilter.length) {
+      params.set("events", activityEventFilter.join(","));
+    }
+    if (dateFrom || dateTo) {
+      const paramPairs: Partial<Record<typeof dateField, [string, string]>> = {
+        registered: ["createdFrom", "createdTo"],
+        card_issue: ["issuedFrom", "issuedTo"],
+        activity: ["activityFrom", "activityTo"],
+        flagged: ["flaggedFrom", "flaggedTo"],
+        // card_allocation intentionally absent: mixed date formats in
+        // the stored strings make a server range unsafe — client-side.
+      };
+      const pair = paramPairs[dateField];
+      if (pair) {
+        if (dateFrom) params.set(pair[0], dateFrom);
+        if (dateTo) params.set(pair[1], dateTo);
+      }
+    }
+    if (modifiedByFilter) params.set("modifiedBy", modifiedByFilter);
+    if (bannedByFilter) params.set("bannedBy", bannedByFilter);
+    if (issuedByFilter) params.set("issuedBy", issuedByFilter);
+    if (userIdFilter) params.set("userId", userIdFilter);
+
+    // Identical params (e.g. successive keystrokes of a phone number, which
+    // never reach the server) reuse the cached dataset — no network walk, no
+    // spinner. The client-side filteredData memo still refines it locally.
+    const key = params.toString();
+    const cached = reportMemo.current.get(key);
+    if (cached && Date.now() - cached.at < REPORT_MEMO_TTL_MS) {
+      applyReportData(cached.data);
+      return;
+    }
+
     const controller = new AbortController();
+    // Brief debounce so a burst of keystrokes collapses into one fetch; kept
+    // short enough to stay imperceptible for a deliberate filter change.
     const timeoutId = window.setTimeout(async () => {
       try {
         setRefreshing(true);
-        const params = new URLSearchParams();
-        const q = searchQuery.trim();
-        // Name-ish queries resolve through the server name index; queries
-        // with @ or digits (email/phone) stay client-side.
-        if (q && !q.includes("@") && !/\d/.test(q)) params.set("search", q);
-        if (flagFilter !== "all") params.set("flag", flagFilter);
-        if (statusFilter.length) params.set("statuses", statusFilter.join(","));
-        if (currentCardFilter !== "all") {
-          params.set("currentCard", currentCardFilter);
-        }
-        if (cardStatusFilter.length) {
-          params.set("cardStatuses", cardStatusFilter.join(","));
-        }
-        if (cardDepartmentFilter.length) {
-          params.set("cardDepartments", cardDepartmentFilter.join(","));
-        }
-        if (activityEventFilter.length) {
-          params.set("events", activityEventFilter.join(","));
-        }
-        if (dateFrom || dateTo) {
-          const paramPairs: Partial<Record<typeof dateField, [string, string]>> = {
-            registered: ["createdFrom", "createdTo"],
-            card_issue: ["issuedFrom", "issuedTo"],
-            activity: ["activityFrom", "activityTo"],
-            flagged: ["flaggedFrom", "flaggedTo"],
-            // card_allocation intentionally absent: mixed date formats in
-            // the stored strings make a server range unsafe — client-side.
-          };
-          const pair = paramPairs[dateField];
-          if (pair) {
-            if (dateFrom) params.set(pair[0], dateFrom);
-            if (dateTo) params.set(pair[1], dateTo);
-          }
-        }
-        if (modifiedByFilter) params.set("modifiedBy", modifiedByFilter);
-        if (bannedByFilter) params.set("bannedBy", bannedByFilter);
-        if (issuedByFilter) params.set("issuedBy", issuedByFilter);
-        if (userIdFilter) params.set("userId", userIdFilter);
-
         const reportData = await fetchReportData(params, controller.signal);
-        setData(reportData.users);
-        setAllCards(reportData.cards);
-        setTruncatedLayers(reportData.truncated);
-        setError(null);
-        setLoading(false);
-        setRefreshing(false);
+        storeReportMemo(key, reportData);
+        applyReportData(reportData);
       } catch (err) {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(
