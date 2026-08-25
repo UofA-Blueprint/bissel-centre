@@ -20,9 +20,10 @@ import {
   CreditCard,
   Download,
   Filter,
+  Flag,
   History,
   Search,
-  ShieldAlert,
+  XCircle,
   X,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
@@ -211,22 +212,64 @@ function SortableHeader({
   );
 }
 
-function FlagBadge({ banned, bannedAt }: { banned: boolean; bannedAt: string | null }) {
-  if (!banned) return <span className="text-gray-500 text-xs font-semibold">No</span>;
+function AccountStateBadge({
+  flagged,
+  banned,
+  bannedAt,
+}: {
+  flagged: boolean;
+  banned: boolean;
+  bannedAt: string | null;
+}) {
+  if (banned) {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-red-200 border border-red-300 px-2.5 py-0.5 text-xs font-bold text-red-800">
+        <XCircle className="h-3 w-3" />
+        Banned
+        {bannedAt && (
+          <span className="font-semibold text-red-700 ml-0.5">
+            ({formatDate(bannedAt)})
+          </span>
+        )}
+      </span>
+    );
+  }
+
+  if (!flagged) return <span className="text-gray-500 text-xs font-semibold">No</span>;
+
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-red-200 border border-red-300 px-2.5 py-0.5 text-xs font-bold text-red-800">
-      <ShieldAlert className="h-3 w-3" />
+    <span className="inline-flex items-center gap-1 rounded-full bg-orange-200 border border-orange-300 px-2.5 py-0.5 text-xs font-bold text-orange-800">
+      <Flag className="h-3 w-3" />
       Flagged
-      {bannedAt && (
-        <span className="font-semibold text-red-700 ml-0.5">
-          ({formatDate(bannedAt)})
-        </span>
-      )}
     </span>
   );
 }
 
-function StatusChip({ status }: { status: string }) {
+function StatusChip({
+  status,
+  flagged,
+  banned,
+}: {
+  status: string;
+  flagged: boolean;
+  banned: boolean;
+}) {
+  if (banned) {
+    return (
+      <span className="inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-bold min-w-[70px] text-center bg-red-200 text-red-900 border-red-300">
+        Banned
+      </span>
+    );
+  }
+
+  if (flagged) {
+    return (
+      <span className="inline-flex items-center justify-center rounded-full border px-3 py-1 text-xs font-bold min-w-[70px] text-center bg-orange-200 text-orange-900 border-orange-300">
+        Flagged
+      </span>
+    );
+  }
+
   const styles: Record<string, string> = {
     Active: "bg-emerald-200 text-emerald-900 border-emerald-300",
     Inactive: "bg-gray-300 text-gray-800 border-gray-400",
@@ -382,9 +425,15 @@ function ExpandedRowContent({ row }: { row: Row<UserReportRow> }) {
               <span className="font-medium text-gray-800">{user.notes}</span>
             </div>
           )}
-          {user.banned && user.banReason && (
+          {user.flagged && user.flagReason && (
             <div>
               <span className="text-gray-500">Flag Reason:</span>{" "}
+              <span className="font-medium text-orange-700">{user.flagReason}</span>
+            </div>
+          )}
+          {user.banned && user.banReason && (
+            <div>
+              <span className="text-gray-500">Ban Reason:</span>{" "}
               <span className="font-medium text-red-700">{user.banReason}</span>
             </div>
           )}
@@ -443,7 +492,9 @@ export default function ReportsPage() {
   // Search / filter
   const [searchQuery, setSearchQuery] = useState("");
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
-  const [flagFilter, setFlagFilter] = useState<"all" | "flagged" | "not_flagged">("all");
+  const [flagFilter, setFlagFilter] = useState<
+    "all" | "flagged" | "banned" | "not_flagged"
+  >("all");
   const [statusFilter, setStatusFilter] = useState<("Active" | "Inactive")[]>([]);
   const [currentCardFilter, setCurrentCardFilter] = useState<"all" | "has_current" | "no_current">("all");
   const [cardStatusFilter, setCardStatusFilter] = useState<string[]>([]);
@@ -520,9 +571,11 @@ export default function ReportsPage() {
     }
 
     if (flagFilter === "flagged") {
+      result = result.filter((u) => u.flagged);
+    } else if (flagFilter === "banned") {
       result = result.filter((u) => u.banned);
     } else if (flagFilter === "not_flagged") {
-      result = result.filter((u) => !u.banned);
+      result = result.filter((u) => !u.flagged && !u.banned);
     }
 
     if (statusFilter.length > 0) {
@@ -694,9 +747,11 @@ export default function ReportsPage() {
       Email: u.email || "",
       Phone: u.phoneNumber || "",
       Status: u.status,
-      Flagged: u.banned ? "Yes" : "No",
+      Flagged: u.flagged ? "Yes" : "No",
+      Banned: u.banned ? "Yes" : "No",
       "Flagged Date": u.bannedAt ? formatDate(u.bannedAt) : "",
-      "Flag Reason": u.banReason || "",
+      "Flag Reason": u.flagReason || "",
+      "Ban Reason": u.banReason || "",
       Gender: u.genderIdentity || "",
       "Date of Birth": u.dateOfBirth || "",
       Address: u.address || "",
@@ -1008,7 +1063,13 @@ export default function ReportsPage() {
         header: () => (
           <span className="text-xs font-bold text-gray-900">Status</span>
         ),
-        cell: ({ getValue }) => <StatusChip status={getValue<string>()} />,
+        cell: ({ row, getValue }) => (
+          <StatusChip
+            status={getValue<string>()}
+            flagged={row.original.flagged}
+            banned={row.original.banned}
+          />
+        ),
       },
       {
         id: "currentArcCard",
@@ -1038,17 +1099,26 @@ export default function ReportsPage() {
         accessorKey: "banned",
         header: ({ column }) => (
           <SortableHeader
-            label="Flagged"
+            label="Account Flags"
             sorted={column.getIsSorted()}
             onClick={column.getToggleSortingHandler()}
           />
         ),
         cell: ({ row }) => (
-          <FlagBadge banned={row.original.banned} bannedAt={row.original.bannedAt} />
+          <AccountStateBadge
+            flagged={row.original.flagged}
+            banned={row.original.banned}
+            bannedAt={row.original.bannedAt}
+          />
         ),
         sortingFn: (rowA, rowB) => {
-          const a = rowA.original.banned ? 1 : 0;
-          const b = rowB.original.banned ? 1 : 0;
+          const rank = (row: UserReportRow) => {
+            if (row.banned) return 2;
+            if (row.flagged) return 1;
+            return 0;
+          };
+          const a = rank(rowA.original);
+          const b = rank(rowB.original);
           return a - b;
         },
       },
@@ -1131,7 +1201,8 @@ export default function ReportsPage() {
 
   // Summary stats
   const totalUsers = filteredData.length;
-  const flaggedCount = filteredData.filter((u) => u.banned).length;
+  const flaggedCount = filteredData.filter((u) => u.flagged).length;
+  const bannedCount = filteredData.filter((u) => u.banned).length;
   const totalCards = filteredData.reduce((s, u) => s + u.totalCardsIssued, 0);
 
   if (loading) {
@@ -1323,13 +1394,13 @@ export default function ReportsPage() {
                       Flagged Status
                     </h4>
                     <div className="flex flex-wrap gap-2">
-                      {(["all", "flagged", "not_flagged"] as const).map((opt) => (
+                      {(["all", "flagged", "banned", "not_flagged"] as const).map((opt) => (
                         <button
                           key={opt}
                           onClick={() => setFlagFilter(opt)}
                           className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                             flagFilter === opt
-                              ? opt === "flagged"
+                              ? opt === "flagged" || opt === "banned"
                                 ? "bg-red-100 text-red-700 ring-2 ring-offset-1 ring-cyan-500"
                                 : "bg-cyan-100 text-cyan-700 ring-2 ring-offset-1 ring-cyan-500"
                               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
@@ -1339,6 +1410,8 @@ export default function ReportsPage() {
                             ? "All"
                             : opt === "flagged"
                               ? "Flagged"
+                              : opt === "banned"
+                                ? "Banned"
                               : "Not Flagged"}
                         </button>
                       ))}
@@ -1522,11 +1595,20 @@ export default function ReportsPage() {
         </div>
         <div className="flex-1 min-w-[180px] rounded-lg border border-red-200 bg-white px-4 py-3 flex items-center gap-3">
           <div className="h-10 w-10 rounded-full bg-red-200 flex items-center justify-center">
-            <ShieldAlert className="h-4.5 w-4.5 text-red-700" />
+            <Flag className="h-4.5 w-4.5 text-red-700" />
           </div>
           <div>
             <p className="text-xs font-medium text-gray-600">Flagged Users</p>
             <p className="text-sm font-bold text-gray-900">{flaggedCount}</p>
+          </div>
+        </div>
+        <div className="flex-1 min-w-[180px] rounded-lg border border-rose-200 bg-white px-4 py-3 flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full bg-rose-200 flex items-center justify-center">
+            <XCircle className="h-4.5 w-4.5 text-rose-700" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-600">Banned Users</p>
+            <p className="text-sm font-bold text-gray-900">{bannedCount}</p>
           </div>
         </div>
         <div className="flex-1 min-w-[180px] rounded-lg border border-blue-200 bg-white px-4 py-3 flex items-center gap-3">

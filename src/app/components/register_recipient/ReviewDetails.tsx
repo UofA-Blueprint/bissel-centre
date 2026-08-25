@@ -17,6 +17,7 @@ type Props = {
   goToPersonal: () => void;
   goToAdditionalInfo: () => void;
   goToPhotoUpload: () => void;
+  showArcCard?: boolean;
 };
 
 // A small helper component to keep the main JSX clean and consistent
@@ -42,6 +43,7 @@ const ReviewDetails: React.FC<Props> = ({
   goToPersonal,
   goToAdditionalInfo,
   goToPhotoUpload,
+  showArcCard = true,
 }) => {
   const { personalDetails, additionalInfo, photoUpload } = formData;
 
@@ -139,10 +141,12 @@ const ReviewDetails: React.FC<Props> = ({
             label="Most common housing option last month"
             value={additionalInfo?.housingOption}
           />
-          <DetailItem
-            label="ARC Card Number"
-            value={additionalInfo?.arcCardDigits}
-          />
+          {showArcCard && (
+            <DetailItem
+              label="ARC Card Number"
+              value={additionalInfo?.arcCardDigits}
+            />
+          )}
           <DetailItem label="Other/Notes" value={additionalInfo?.notes} />
         </div>
       </div>

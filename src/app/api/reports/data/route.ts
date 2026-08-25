@@ -302,6 +302,8 @@ export async function GET() {
         email: d.email || "",
         phoneNumber: d.phoneNumber || d.phone || "",
         status: d.status || (d.banned ? "Inactive" : "Active"),
+        flagged: d.flagged === true,
+        flagReason: d.flagReason || "",
         banned: d.banned || false,
         banReason: bannedInfo?.reason || d.banReason || "",
         bannedAt: bannedInfo?.bannedAt || null,
