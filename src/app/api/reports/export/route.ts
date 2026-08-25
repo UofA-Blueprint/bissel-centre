@@ -4,6 +4,7 @@ import { FieldPath } from "firebase-admin/firestore";
 import { cookies } from "next/headers";
 import * as XLSX from "xlsx";
 import type { ExportRequest, ExportRow } from "@/app/(app)/reports/types";
+import { sanitizeCell } from "@/utils/spreadsheet";
 
 // Full-collection export; give it room until pagination lands (P2).
 export const maxDuration = 120;
@@ -242,14 +243,14 @@ export async function POST(request: NextRequest) {
 
     // Build xlsx rows
     const rows: ExportRow[] = filtered.map((c) => ({
-      "Allocation Date": c.allocationDate,
-      Status: c.status,
-      Department: c.department,
-      "ARC Card Number": c.arcCardNumber,
-      "Security Code": c.securityCode,
-      "Pass Recipient": c.passRecipient,
-      "Issue Dates": c.issueDates.join(", "),
-      Notes: c.notes,
+      "Allocation Date": sanitizeCell(c.allocationDate),
+      Status: sanitizeCell(c.status),
+      Department: sanitizeCell(c.department),
+      "ARC Card Number": sanitizeCell(c.arcCardNumber),
+      "Security Code": sanitizeCell(c.securityCode),
+      "Pass Recipient": sanitizeCell(c.passRecipient),
+      "Issue Dates": sanitizeCell(c.issueDates.join(", ")),
+      Notes: sanitizeCell(c.notes),
     }));
 
     const workbook = XLSX.utils.book_new();

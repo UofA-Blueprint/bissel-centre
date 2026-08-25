@@ -321,6 +321,48 @@ async function testStaffCrossRead() {
   }
 }
 
+// ── Attribution-binding (anti-forgery) tests ─────────────────────
+// Regression guard for the audit-log / attribution-forgery finding. The
+// create rules for issues, banned_users, and history must bind the actor
+// field (issuedBy / bannedBy / modifiedBy) to request.auth.uid, so an
+// authenticated staffer cannot fabricate a record that names a COLLEAGUE as
+// the actor (the admin per-staff dashboards count exactly these fields).
+//
+// Why the original matrix missed this: every create fixture self-attributes —
+// sampleIssue.issuedBy / sampleBan.bannedBy / sampleHistory.modifiedBy are all
+// "staff-uid-001", the same uid as the staff test context. So "can staff
+// create?" passed while a spoofed actor was never exercised.
+async function testAttributionCreate(collectionName, data, expectedAllow, label) {
+  try {
+    const ctx = getFirestore("staff");
+    const ref = doc(
+      ctx.firestore(),
+      collectionName,
+      `spoof-${label}-${Date.now()}`,
+    );
+    if (expectedAllow) {
+      await assertSucceeds(setDoc(ref, data));
+      record(collectionName, `staff (${label})`, "create", "allow", "allow", true);
+    } else {
+      await assertFails(setDoc(ref, data));
+      record(collectionName, `staff (${label})`, "create", "deny", "deny", true);
+    }
+  } catch (e) {
+    if (e.message?.includes("Expected request to")) {
+      record(
+        collectionName,
+        `staff (${label})`,
+        "create",
+        expectedAllow ? "allow" : "deny",
+        expectedAllow ? "deny" : "allow",
+        false,
+      );
+    } else {
+      recordError(collectionName, `staff (${label})`, "create", e);
+    }
+  }
+}
+
 // ── Main test execution ──────────────────────────────────────────
 
 async function main() {
@@ -515,6 +557,73 @@ async function main() {
     await testReadDoc("some_random_collection", "doc1", role, false);
     await testCreateDoc("some_random_collection", role, { foo: "bar" }, false);
   }
+
+  // ────────────────────────────────────────────────────────────────
+  // ATTRIBUTION BINDING: issues / banned_users / history (anti-forgery)
+  // ────────────────────────────────────────────────────────────────
+  console.log("Testing: attribution binding (anti-forgery)...");
+  const SELF = "staff-uid-001"; // the staff test context uid
+  const OTHER = "staff-uid-002"; // a colleague — must never be forgeable
+
+  // issues.issuedBy
+  await testAttributionCreate(
+    "issues",
+    { cardId: "card-001", userId: "user-001", issuedBy: SELF, returnedAt: null },
+    true,
+    "issuedBy=self",
+  );
+  await testAttributionCreate(
+    "issues",
+    { cardId: "card-001", userId: "user-001", issuedBy: OTHER, returnedAt: null },
+    false,
+    "issuedBy=colleague",
+  );
+  await testAttributionCreate(
+    "issues",
+    { cardId: "card-001", userId: "user-001", returnedAt: null },
+    false,
+    "issuedBy=missing",
+  );
+
+  // banned_users.bannedBy
+  await testAttributionCreate(
+    "banned_users",
+    { userId: "user-001", banReason: "Test", bannedBy: SELF },
+    true,
+    "bannedBy=self",
+  );
+  await testAttributionCreate(
+    "banned_users",
+    { userId: "user-001", banReason: "Test", bannedBy: OTHER },
+    false,
+    "bannedBy=colleague",
+  );
+  await testAttributionCreate(
+    "banned_users",
+    { userId: "user-001", banReason: "Test" },
+    false,
+    "bannedBy=missing",
+  );
+
+  // history.modifiedBy (backdated/forged audit entry)
+  await testAttributionCreate(
+    "history",
+    { userId: "user-001", event: "Ban", modifiedBy: SELF },
+    true,
+    "modifiedBy=self",
+  );
+  await testAttributionCreate(
+    "history",
+    { userId: "user-001", event: "Ban", modifiedBy: OTHER },
+    false,
+    "modifiedBy=colleague",
+  );
+  await testAttributionCreate(
+    "history",
+    { userId: "user-001", event: "Ban" },
+    false,
+    "modifiedBy=missing",
+  );
 
   // ────────────────────────────────────────────────────────────────
   // Output results

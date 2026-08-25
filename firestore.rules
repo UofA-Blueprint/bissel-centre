@@ -52,27 +52,37 @@ service cloud.firestore {
 
     // ── Collection: issues (card issuance events) ────────────────────
     // Staff can create and update issues. Admins get read-only.
+    // A client create must attribute issuedBy to the caller — a staffer
+    // cannot fabricate an issuance record in a colleague's name.
     match /issues/{issueId} {
       allow read:   if isStaffOrAdmin();
-      allow create: if isActiveStaff();
+      allow create: if isActiveStaff()
+        && request.resource.data.issuedBy == request.auth.uid;
       allow update: if isActiveStaff();
       allow delete: if false;
     }
 
     // ── Collection: banned_users ─────────────────────────────────────
     // Staff can ban/unban. Admins get read-only.
+    // A client create must attribute bannedBy to the caller — a staffer
+    // cannot forge a ban in a colleague's name.
     match /banned_users/{banId} {
       allow read:   if isStaffOrAdmin();
-      allow create: if isActiveStaff();
+      allow create: if isActiveStaff()
+        && request.resource.data.bannedBy == request.auth.uid;
       allow update: if isActiveStaff();
       allow delete: if isActiveStaff();
     }
 
     // ── Collection: history (audit log) ──────────────────────────────
     // Append-only: staff can read and create, never update or delete.
+    // A client create must attribute modifiedBy to the caller — append-only
+    // stops edits/deletes but not a forged, backdated entry naming a
+    // colleague as the actor, which the admin per-staff summaries count.
     match /history/{entryId} {
       allow read:   if isStaffOrAdmin();
-      allow create: if isActiveStaff();
+      allow create: if isActiveStaff()
+        && request.resource.data.modifiedBy == request.auth.uid;
       allow update: if false;
       allow delete: if false;
     }
