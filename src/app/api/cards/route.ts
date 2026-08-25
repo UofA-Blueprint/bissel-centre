@@ -156,6 +156,10 @@ async function fetchUserNamesByIds(
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 const SEARCH_RESULT_CAP = 50;
+// Max rounds of query-then-filter-in-memory when BOTH status and department
+// filters are active. Bounds work per request; the resume cursor carries the
+// scan position across pages so hitting this cap never drops matches.
+const DEPT_SCAN_ROUNDS = 5;
 
 function encodeCursor(arcCardNumber: string, id: string): string {
   return Buffer.from(JSON.stringify([arcCardNumber, id]), "utf8").toString(
@@ -398,6 +402,10 @@ export async function GET(request: NextRequest) {
 
     const matched: admin.firestore.QueryDocumentSnapshot[] = [];
     let hasMore = false;
+    // Resume position for the next page. For the single-query path this is the
+    // last row returned; for the in-memory-department path it is the scan
+    // frontier (the last card examined), so a short page never truncates.
+    let nextCursorBasis: [string, string] | null = null;
 
     if (!inMemoryDept) {
       let qref = buildQuery()
@@ -408,48 +416,56 @@ export async function GET(request: NextRequest) {
       const snap = await qref.get();
       hasMore = snap.size > pageSize;
       matched.push(...snap.docs.slice(0, pageSize));
+      const lastMatched = matched[matched.length - 1];
+      if (hasMore && lastMatched) {
+        nextCursorBasis = [
+          String(lastMatched.data().arcCardNumber ?? ""),
+          lastMatched.id,
+        ];
+      }
     } else {
-      let after: [string, string] | null = cursor;
+      // `status` drives the query; `department` is filtered in memory. Track a
+      // frontier that advances past EVERY card we look at (matched or not) so
+      // resuming after it re-examines nothing and skips nothing.
+      let scanFrom: [string, string] | null = cursor;
+      let frontier: [string, string] | null = null;
       let exhausted = false;
       const batchSize = Math.min(MAX_PAGE_SIZE, pageSize * 2);
       for (
         let round = 0;
-        round < 5 && matched.length < pageSize && !exhausted;
+        round < DEPT_SCAN_ROUNDS && matched.length < pageSize && !exhausted;
         round++
       ) {
         let qref = buildQuery()
           .orderBy("arcCardNumber")
           .orderBy(admin.firestore.FieldPath.documentId())
           .limit(batchSize);
-        if (after) qref = qref.startAfter(after[0], after[1]);
+        if (scanFrom) qref = qref.startAfter(scanFrom[0], scanFrom[1]);
         const snap = await qref.get();
         if (snap.empty) {
           exhausted = true;
           break;
         }
         for (const doc of snap.docs) {
-          if (matched.length >= pageSize) break;
-          if (!departments.includes(String(doc.data().department ?? ""))) {
-            continue;
+          frontier = [String(doc.data().arcCardNumber ?? ""), doc.id];
+          if (departments.includes(String(doc.data().department ?? ""))) {
+            matched.push(doc);
+            if (matched.length >= pageSize) break;
           }
-          matched.push(doc);
         }
-        const last = snap.docs[snap.docs.length - 1];
-        after = [String(last.data().arcCardNumber ?? ""), last.id];
+        scanFrom = frontier;
         if (snap.size < batchSize) exhausted = true;
       }
-      hasMore = matched.length >= pageSize;
+      // Unless the collection is fully scanned, more matches may lie beyond the
+      // frontier — including when this page came back short at the round cap.
+      hasMore = !exhausted;
+      if (hasMore) nextCursorBasis = frontier;
     }
 
     const cards = await buildCardRows(db, matched, isMigrated);
-    const lastMatched = matched[matched.length - 1];
-    const nextCursor =
-      hasMore && lastMatched
-        ? encodeCursor(
-            String(lastMatched.data().arcCardNumber ?? ""),
-            lastMatched.id,
-          )
-        : null;
+    const nextCursor = nextCursorBasis
+      ? encodeCursor(nextCursorBasis[0], nextCursorBasis[1])
+      : null;
 
     return NextResponse.json({
       cards,
