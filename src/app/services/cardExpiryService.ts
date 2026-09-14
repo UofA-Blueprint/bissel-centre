@@ -39,6 +39,12 @@ function getEdmontonNowParts() {
   };
 }
 
+// Day 0 of the following month is the last day of this one. `month` is 1-based,
+// matching getEdmontonNowParts().
+function daysInEdmontonMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
 function parseTime24(value: string): { hour: number; minute: number } | null {
   const match = String(value || "").match(/^([01]\d|2[0-3]):([0-5]\d)$/);
   if (!match) return null;
@@ -205,15 +211,23 @@ async function runMonthlyUnload(
   const now = getEdmontonNowParts();
   const monthKey = `${String(now.year).padStart(4, "0")}-${String(now.month).padStart(2, "0")}`;
   const scheduleTime = parseTime24(schedule.time24) ?? { hour: 0, minute: 0 };
-  const isScheduledDay = now.day === schedule.dayOfMonth;
+  // Clamp to the final day of short months, otherwise a 29th–31st schedule
+  // never matches in February and that month silently skips.
+  const targetDay = Math.min(
+    schedule.dayOfMonth,
+    daysInEdmontonMonth(now.year, now.month),
+  );
   const hasReachedTime =
     now.hour > scheduleTime.hour ||
     (now.hour === scheduleTime.hour && now.minute >= scheduleTime.minute);
+  // "On or after" rather than "exactly on": the sweep must still happen if the
+  // cron fires once a day (Vercel Hobby allows no more than that) or if an
+  // outage swallowed the scheduled window. lastRunMonthKey keeps it to once a
+  // month regardless of how many invocations find it due.
+  const isDue =
+    now.day > targetDay || (now.day === targetDay && hasReachedTime);
   const wouldRunNow =
-    schedule.enabled &&
-    isScheduledDay &&
-    hasReachedTime &&
-    schedule.lastRunMonthKey !== monthKey;
+    schedule.enabled && isDue && schedule.lastRunMonthKey !== monthKey;
 
   // Dry run: report what a live run would do — a single aggregate, zero
   // doc reads, zero writes, no lock claimed.

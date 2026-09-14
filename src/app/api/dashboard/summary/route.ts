@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
       {
         limit: Number.isFinite(limitParam) ? limitParam : undefined,
         cursor: sp.get("cursor"),
+        createdBy: sp.get("createdBy"),
       },
     );
     return NextResponse.json(summary);

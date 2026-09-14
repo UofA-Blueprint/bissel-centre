@@ -125,13 +125,14 @@ export async function getDashboardSummaryForViewer(
     name: string;
   },
   db: Firestore,
-  page?: { limit?: number; cursor?: string | null },
+  page?: { limit?: number; cursor?: string | null; createdBy?: string | null },
 ): Promise<DashboardSummary> {
   const pageSize = Math.min(
     MAX_PAGE_SIZE,
     Math.max(1, page?.limit ?? DEFAULT_PAGE_SIZE),
   );
   const cursor = decodeUsersCursor(page?.cursor ?? null);
+  const createdBy = page?.createdBy?.trim() || null;
 
   let usersQuery = db
     .collection("users")
@@ -158,7 +159,14 @@ export async function getDashboardSummaryForViewer(
     // composite index; desc/desc rides the automatic single-field index.
     .orderBy(FieldPath.documentId(), "desc")
     .limit(pageSize + 1);
+  // "Recipients by <staff>" must narrow the query itself: filtering a single
+  // page client-side would hide matches that live on later pages.
+  if (createdBy) usersQuery = usersQuery.where("createdBy", "==", createdBy);
   if (cursor) usersQuery = usersQuery.startAfter(cursor[0], cursor[1]);
+
+  const totalUsersQuery = createdBy
+    ? db.collection("users").where("createdBy", "==", createdBy)
+    : db.collection("users");
 
   const [
     usersSnapshot,
@@ -170,7 +178,7 @@ export async function getDashboardSummaryForViewer(
     bannedUsersAgg,
   ] = await Promise.all([
     usersQuery.get(),
-    db.collection("users").count().get(),
+    totalUsersQuery.count().get(),
     db.collection("arc_cards").count().get(),
     db.collection("arc_cards").where("status", "==", "Active").count().get(),
     db.collection("arc_cards").where("status", "==", "Expired").count().get(),

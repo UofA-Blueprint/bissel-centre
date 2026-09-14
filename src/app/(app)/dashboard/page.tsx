@@ -120,8 +120,11 @@ export default function DashboardPage() {
     const fetchData = async () => {
       const cachedSummary = dashboardSummaryCache;
       const now = Date.now();
+      // The cache holds the unfiltered summary only; a staff-filtered view must
+      // never be served from it (or written into it).
       const hasWarmCache =
         refreshNonce === 0 &&
+        !createdByFilter &&
         cachedSummary !== null &&
         now - cachedSummary.timestampMs < DASHBOARD_CACHE_TTL_MS;
 
@@ -138,8 +141,12 @@ export default function DashboardPage() {
       try {
         setForbidden(false);
 
+        const summaryParams = new URLSearchParams({
+          limit: String(USERS_PAGE_SIZE),
+        });
+        if (createdByFilter) summaryParams.set("createdBy", createdByFilter);
         const dashboardResponse = await fetch(
-          `/api/dashboard/summary?limit=${USERS_PAGE_SIZE}`,
+          `/api/dashboard/summary?${summaryParams.toString()}`,
           { cache: "no-store" },
         );
 
@@ -165,10 +172,12 @@ export default function DashboardPage() {
         setUsers(summary.users);
         setNextUsersCursor(summary.nextCursor ?? null);
         setTotalUsers(summary.total ?? summary.users.length);
-        dashboardSummaryCache = {
-          data: summary,
-          timestampMs: Date.now(),
-        };
+        if (!createdByFilter) {
+          dashboardSummaryCache = {
+            data: summary,
+            timestampMs: Date.now(),
+          };
+        }
       } catch (error) {
         if (cancelled) return;
         console.error("Error fetching dashboard data:", error);
@@ -183,7 +192,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, refreshNonce]);
+  }, [router, refreshNonce, createdByFilter]);
 
   // Server-side search: debounced call to /api/users/search (folding +
   // fuzzy + phonetic over names AND aliases), then map the returned ids
@@ -264,8 +273,13 @@ export default function DashboardPage() {
     if (!nextUsersCursor || isLoadingMore) return;
     setIsLoadingMore(true);
     try {
+      const pageParams = new URLSearchParams({
+        limit: String(USERS_PAGE_SIZE),
+        cursor: nextUsersCursor,
+      });
+      if (createdByFilter) pageParams.set("createdBy", createdByFilter);
       const res = await fetch(
-        `/api/dashboard/summary?limit=${USERS_PAGE_SIZE}&cursor=${encodeURIComponent(nextUsersCursor)}`,
+        `/api/dashboard/summary?${pageParams.toString()}`,
         { cache: "no-store" },
       );
       if (!res.ok) return;
@@ -464,8 +478,10 @@ export default function DashboardPage() {
             <StaffSelector queryParam="createdBy" label="Recipients by" />
             {createdByFilter && (
               <span className="text-xs text-gray-500">
-                {searchResults.length} recipient
-                {searchResults.length === 1 ? "" : "s"} match this filter
+                {/* Server-side filtered total — searchResults only holds the
+                    pages loaded so far and would undercount. */}
+                {totalUsers} recipient
+                {totalUsers === 1 ? "" : "s"} match this filter
               </span>
             )}
           </div>
@@ -633,7 +649,11 @@ const StatCard: React.FC<StatCardComponentProps> = ({
     >
       {/* Icon + Number */}
       <div className="flex items-center gap-2">
-        <Image src={icon} alt={label} width={24} height={24} />
+        {label === "Banned Users" ? (
+          <XCircle className="h-6 w-6 text-red-600" aria-hidden />
+        ) : (
+          <Image src={icon} alt={label} width={24} height={24} />
+        )}
         <h2 className="text-2xl font-bold">{number}</h2>
       </div>
 
@@ -839,6 +859,8 @@ const UserCard: React.FC<{
           event.stopPropagation();
           if (!isViewOnly) onEdit();
         }}
+        title={isViewOnly ? "View-only mode: editing is disabled." : undefined}
+        aria-label={`Edit ${user.firstName} ${user.secondName}`.trim()}
         className="ml-3 shrink-0 rounded-md border border-gray-200 px-3 py-2 text-sm font-medium text-primary hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-400"
       >
         Edit

@@ -50,6 +50,19 @@ jobs:
       - name: Run Unit Tests
         run: npm run test
 
+      # Step 5b: Firestore security rules, exercised against the emulator.
+      # Marked non-blocking until we have a green baseline in CI — once it
+      # passes, delete continue-on-error so a rules regression fails the build.
+      - name: Setup Java (required by the Firestore emulator)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Run Firestore Rules Tests
+        continue-on-error: true
+        run: npm run test:rules
+
       # Step 6: Build the Next.js App (this also verifies build success)
       - name: Build Next.js App
         run: npm run build
@@ -81,7 +94,8 @@ jobs:
           vercel-token: ${{ secrets.VERCEL_TOKEN }} # Vercel API token
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }} # Vercel organization ID
           vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }} # Vercel project ID
-          vercel-args: >
-            --prod ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
+          # --prod must come ONLY from this conditional. A literal --prod here
+          # would send staging builds to the production domain.
+          vercel-args: ${{ github.ref == 'refs/heads/main' && '--prod' || '' }}
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}

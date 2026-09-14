@@ -41,9 +41,25 @@ import type {
 // module in dynamically from the export handlers so it stays out of the
 // initial bundle.
 import type * as XLSXNS from "xlsx";
+import { sanitizeCell } from "@/utils/spreadsheet";
 
 type XLSXModule = typeof import("xlsx");
 const EDMONTON_TIMEZONE = "America/Edmonton";
+
+// This workbook is built in the browser, so the server export route's
+// sanitizer never sees these rows — escape every text cell here instead.
+// Numbers are left untouched so the sheet keeps its numeric columns.
+function sanitizeRows<T extends Record<string, string | number>>(
+  rows: T[],
+): T[] {
+  return rows.map((row) => {
+    const safe: Record<string, string | number> = { ...row };
+    for (const [key, value] of Object.entries(safe)) {
+      if (typeof value === "string") safe[key] = sanitizeCell(value);
+    }
+    return safe as T;
+  });
+}
 
 // Constructing an Intl.DateTimeFormat is one of the most expensive ICU
 // operations; these functions run once per row (and per card/activity entry)
@@ -1081,8 +1097,9 @@ export default function ReportsPage() {
       Notes: u.notes || "",
       Registered: u.createdAt ? formatDate(u.createdAt) : "",
     }));
-    const ws = XLSX.utils.json_to_sheet(userRows);
-    autoFitColumns(ws, userRows);
+    const safeRows = sanitizeRows(userRows);
+    const ws = XLSX.utils.json_to_sheet(safeRows);
+    autoFitColumns(ws, safeRows);
     XLSX.utils.book_append_sheet(wb, ws, "Users");
   };
 
@@ -1141,8 +1158,9 @@ export default function ReportsPage() {
       { Field: "Date From", Value: dateFrom || "None" },
       { Field: "Date To", Value: dateTo || "None" },
     ];
-    const ws = XLSX.utils.json_to_sheet(rows);
-    autoFitColumns(ws, rows);
+    const safeRows = sanitizeRows(rows);
+    const ws = XLSX.utils.json_to_sheet(safeRows);
+    autoFitColumns(ws, safeRows);
     XLSX.utils.book_append_sheet(wb, ws, "Export Info");
   };
 
@@ -1216,10 +1234,11 @@ export default function ReportsPage() {
         "Updated At": c.updatedAt || "",
       }),
     );
+    const safeCardRows = sanitizeRows(cardRows);
     const ws = XLSX.utils.json_to_sheet(
-      cardRows.length > 0 ? cardRows : [{ Info: "No cards found." }],
+      safeCardRows.length > 0 ? safeCardRows : [{ Info: "No cards found." }],
     );
-    if (cardRows.length > 0) autoFitColumns(ws, cardRows);
+    if (safeCardRows.length > 0) autoFitColumns(ws, safeCardRows);
     XLSX.utils.book_append_sheet(wb, ws, "Card History");
   };
 
@@ -1238,12 +1257,13 @@ export default function ReportsPage() {
         });
       }
     }
+    const safeActivityRows = sanitizeRows(activityRows);
     const ws = XLSX.utils.json_to_sheet(
-      activityRows.length > 0
-        ? activityRows
+      safeActivityRows.length > 0
+        ? safeActivityRows
         : [{ Info: "No activity history for the current filter" }],
     );
-    if (activityRows.length > 0) autoFitColumns(ws, activityRows);
+    if (safeActivityRows.length > 0) autoFitColumns(ws, safeActivityRows);
     XLSX.utils.book_append_sheet(wb, ws, "Activity Log");
   };
 
