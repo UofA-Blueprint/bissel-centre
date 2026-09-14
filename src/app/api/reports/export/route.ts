@@ -1,10 +1,47 @@
-"use server";
-
 import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
+import { FieldPath } from "firebase-admin/firestore";
 import { cookies } from "next/headers";
 import * as XLSX from "xlsx";
 import type { ExportRequest, ExportRow } from "@/app/(app)/reports/types";
+import { sanitizeCell } from "@/utils/spreadsheet";
+
+// Full-collection export; give it room until pagination lands (P2).
+export const maxDuration = 120;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+// Batch name lookup — replaces the former one-await-per-user N+1 that made
+// exports scale with the number of holders (minutes at scale).
+async function fetchUserNames(
+  db: FirebaseFirestore.Firestore,
+  userIds: Iterable<string>,
+): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  const ids = Array.from(new Set(Array.from(userIds).filter(Boolean)));
+  await Promise.all(
+    chunk(ids, 30).map(async (part) => {
+      if (part.length === 0) return;
+      const snap = await db
+        .collection("users")
+        .where(FieldPath.documentId(), "in", part)
+        .select("firstName", "secondName")
+        .get();
+      for (const doc of snap.docs) {
+        const d = doc.data();
+        names.set(
+          doc.id,
+          `${d?.firstName || ""} ${d?.secondName || ""}`.trim(),
+        );
+      }
+    }),
+  );
+  return names;
+}
 
 async function verifyStaffAccess() {
   const cookieStore = await cookies();
@@ -137,21 +174,7 @@ export async function POST(request: NextRequest) {
         for (const i of issues) if (i.userId) userIds.add(i.userId);
       }
 
-      const userNames = new Map<string, string>();
-      for (const uid of userIds) {
-        try {
-          const u = await db.collection("users").doc(uid).get();
-          if (u.exists) {
-            const ud = u.data();
-            userNames.set(
-              uid,
-              `${ud?.firstName || ""} ${ud?.secondName || ""}`.trim()
-            );
-          }
-        } catch {
-          /* user not found */
-        }
-      }
+      const userNames = await fetchUserNames(db, userIds);
 
       for (const doc of cardsSnapshot.docs) {
         const d = doc.data();
@@ -174,19 +197,17 @@ export async function POST(request: NextRequest) {
         });
       }
     } else {
+      const legacyHolderIds = cardsSnapshot.docs
+        .map((doc) => doc.data())
+        .filter((d) => d.userId && !d.passRecipient)
+        .map((d) => String(d.userId));
+      const legacyNames = await fetchUserNames(db, legacyHolderIds);
+
       for (const doc of cardsSnapshot.docs) {
         const d = doc.data();
         let passRecipient = d.passRecipient || "";
         if (d.userId && !passRecipient) {
-          try {
-            const u = await db.collection("users").doc(d.userId).get();
-            if (u.exists) {
-              const ud = u.data();
-              passRecipient = `${ud?.firstName || ""} ${ud?.secondName || ""}`.trim();
-            }
-          } catch {
-            /* user not found */
-          }
+          passRecipient = legacyNames.get(String(d.userId)) || "";
         }
         allCards.push({
           allocationDate: d.allocationDate || "",
@@ -222,14 +243,14 @@ export async function POST(request: NextRequest) {
 
     // Build xlsx rows
     const rows: ExportRow[] = filtered.map((c) => ({
-      "Allocation Date": c.allocationDate,
-      Status: c.status,
-      Department: c.department,
-      "ARC Card Number": c.arcCardNumber,
-      "Security Code": c.securityCode,
-      "Pass Recipient": c.passRecipient,
-      "Issue Dates": c.issueDates.join(", "),
-      Notes: c.notes,
+      "Allocation Date": sanitizeCell(c.allocationDate),
+      Status: sanitizeCell(c.status),
+      Department: sanitizeCell(c.department),
+      "ARC Card Number": sanitizeCell(c.arcCardNumber),
+      "Security Code": sanitizeCell(c.securityCode),
+      "Pass Recipient": sanitizeCell(c.passRecipient),
+      "Issue Dates": sanitizeCell(c.issueDates.join(", ")),
+      Notes: sanitizeCell(c.notes),
     }));
 
     const workbook = XLSX.utils.book_new();

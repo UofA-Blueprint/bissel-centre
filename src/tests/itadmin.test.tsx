@@ -2,64 +2,56 @@ import React from "react";
 import { render, fireEvent, screen } from "@testing-library/react";
 import Home from "../app/page";
 
-// Create a push mock which will be used in our mock of useRouter
-const pushMock = jest.fn();
-
-// Mock next/navigation to provide our own useRouter with the push mock
+// Home renders navigation as next/link anchors, which need the app router
+// context mocked out to render under jsdom.
 jest.mock("next/navigation", () => ({
   useRouter: () => ({
-    push: pushMock,
+    push: jest.fn(),
   }),
 }));
 
 describe("Home component", () => {
-  beforeEach(() => {
-    pushMock.mockClear();
-  });
+  const switchToAdmin = () => {
+    fireEvent.click(screen.getByRole("button", { name: /Switch to Admin/i }));
+  };
+
   test("toggles to admin view when admin toggle is clicked", () => {
     render(React.createElement(Home));
-    const adminToggle = screen.getByRole("button", {
-      name: /Switch to Admin/i,
-    });
-    fireEvent.click(adminToggle);
+    switchToAdmin();
     expect(screen.getByText("Welcome Admin!")).toBeInTheDocument();
   });
 
-  test("navigates to /register when Register button is clicked as non-admin", () => {
+  test("links to /register as non-admin", () => {
     render(React.createElement(Home));
-    const registerButton = screen.getByRole("button", { name: /Register/i });
-    fireEvent.click(registerButton);
-    expect(pushMock).toHaveBeenCalledWith("/register");
+    expect(screen.getByRole("link", { name: /Register/i })).toHaveAttribute(
+      "href",
+      "/register"
+    );
   });
 
-  test("navigates to /login when Login button is clicked as non-admin", () => {
+  test("links to /login as non-admin", () => {
     render(React.createElement(Home));
-    const loginButton = screen.getByRole("button", { name: /Login/i });
-    fireEvent.click(loginButton);
-    expect(pushMock).toHaveBeenCalledWith("/login");
+    expect(screen.getByRole("link", { name: /Login/i })).toHaveAttribute(
+      "href",
+      "/login"
+    );
   });
 
-  test("navigates to /admin/register when Register button is clicked as admin", () => {
+  test("links to /admin/register as admin", () => {
     render(React.createElement(Home));
-    // Toggle admin state using updated button text
-    const adminToggle = screen.getByRole("button", {
-      name: /Switch to Admin/i,
-    });
-    fireEvent.click(adminToggle);
-    const registerButton = screen.getByRole("button", { name: /Register/i });
-    fireEvent.click(registerButton);
-    expect(pushMock).toHaveBeenCalledWith("/admin/register");
+    switchToAdmin();
+    expect(screen.getByRole("link", { name: /Register/i })).toHaveAttribute(
+      "href",
+      "/admin/register"
+    );
   });
 
-  test("navigates to /admin/login when Login button is clicked as admin", () => {
+  test("links to /admin/login as admin", () => {
     render(React.createElement(Home));
-    // Toggle admin state using updated button text
-    const adminToggle = screen.getByRole("button", {
-      name: /Switch to Admin/i,
-    });
-    fireEvent.click(adminToggle);
-    const loginButton = screen.getByRole("button", { name: /Login/i });
-    fireEvent.click(loginButton);
-    expect(pushMock).toHaveBeenCalledWith("/admin/login");
+    switchToAdmin();
+    expect(screen.getByRole("link", { name: /Login/i })).toHaveAttribute(
+      "href",
+      "/admin/login"
+    );
   });
 });

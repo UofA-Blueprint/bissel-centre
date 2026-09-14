@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { FieldPath, FieldValue } from "firebase-admin/firestore";
 import { decryptPhone, encryptPhone } from "@/utils/phoneEncryption";
 import { getStaffAccess } from "@/app/api/_lib/staffAccess";
+import { processRecipientPhoto } from "@/app/services/recipientPhotoService";
+import {
+  deleteSearchIndexEntry,
+  upsertSearchIndexEntry,
+} from "@/app/services/searchIndexService";
 
 type ProfileDetails = {
   firstName?: unknown;
@@ -36,7 +41,6 @@ const EDITABLE_FIELDS = [
   "phone",
   "address",
   "postalCode",
-  "picture",
   "journey",
   "mostCommonReason",
   "secondMostCommonReason",
@@ -70,7 +74,9 @@ function parseDateOnlyAtNoonUtc(value: string): string | null {
   if (!raw) return null;
   const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (iso) {
-    return new Date(`${iso[1]}-${iso[2]}-${iso[3]}T12:00:00.000Z`).toISOString();
+    return new Date(
+      `${iso[1]}-${iso[2]}-${iso[3]}T12:00:00.000Z`,
+    ).toISOString();
   }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
@@ -107,7 +113,6 @@ function getProfileUpdate(body: {
     phone: encryptPhone(text(personal.phone) || null),
     address: text(personal.address) || null,
     postalCode: text(personal.postalCode).toUpperCase(),
-    picture: text(body.photoUpload?.imageUrl),
     journey: text(additional.journey) || null,
     mostCommonReason: text(additional.mostCommonReason) || null,
     secondMostCommonReason: text(additional.secondMostCommonReason) || null,
@@ -115,16 +120,21 @@ function getProfileUpdate(body: {
     notes: text(additional.notes) || null,
   };
 
-  if (!updates.firstName || !updates.secondName || !updates.email || !updates.postalCode) {
-    return { error: "First name, last name, email, and postal code are required." };
+  if (
+    !updates.firstName ||
+    !updates.secondName ||
+    !updates.email ||
+    !updates.postalCode
+  ) {
+    return {
+      error: "First name, last name, email, and postal code are required.",
+    };
   }
 
-  if (!/^[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d$/.test(updates.postalCode as string)) {
+  if (
+    !/^[A-Za-z]\d[A-Za-z]\s?\d[A-Za-z]\d$/.test(updates.postalCode as string)
+  ) {
     return { error: "Invalid postal code format." };
-  }
-
-  if (!updates.picture) {
-    return { error: "Recipient photo is required." };
   }
 
   return { updates };
@@ -136,15 +146,25 @@ export async function GET(
 ) {
   const access = await getStaffAccess();
   if ("error" in access) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
   }
 
   const { id } = await params;
-  const [snapshot, historySnap, currentCardSnap] = await Promise.all([
-    access.db.collection("users").doc(id).get(),
-    access.db.collection("history").where("userId", "==", id).get(),
-    access.db.collection("arc_cards").where("currentUserId", "==", id).limit(1).get(),
-  ]);
+  const [snapshot, photoSnap, historySnap, currentCardSnap] = await Promise.all(
+    [
+      access.db.collection("users").doc(id).get(),
+      access.db.collection("user_photos").doc(id).get(),
+      access.db.collection("history").where("userId", "==", id).get(),
+      access.db
+        .collection("arc_cards")
+        .where("currentUserId", "==", id)
+        .limit(1)
+        .get(),
+    ],
+  );
   if (!snapshot.exists) {
     return NextResponse.json({ error: "Recipient not found" }, { status: 404 });
   }
@@ -209,7 +229,7 @@ export async function GET(
     personalDetails: {
       firstName: data.firstName ?? "",
       lastName: data.secondName ?? "",
-      alias: Array.isArray(data.aliases) ? data.aliases[0] ?? "" : "",
+      alias: Array.isArray(data.aliases) ? (data.aliases[0] ?? "") : "",
       gender: data.genderIdentity ?? "",
       phone: decryptPhone(data.phone ?? data.phoneNumber ?? null) ?? "",
       email: data.email ?? "",
@@ -224,7 +244,19 @@ export async function GET(
       housingOption: data.housingOption ?? "",
       notes: data.notes ?? "",
     },
-    photoUpload: { imageUrl: data.picture ?? "" },
+    photoUpload: {
+      imageUrl:
+        photoSnap.exists || data.picture
+          ? `/api/users/${encodeURIComponent(id)}/photo?v=${encodeURIComponent(
+              String(
+                photoSnap.data()?.updatedAt?.toMillis?.() ??
+                  data.updatedAt?.toMillis?.() ??
+                  "legacy",
+              ),
+            )}`
+          : "",
+      thumbnail: data.photoThumb ?? "",
+    },
     accountState: {
       banned: data.banned === true,
       flagged: data.flagged === true,
@@ -258,7 +290,10 @@ export async function PATCH(
 ) {
   const access = await getStaffAccess();
   if ("error" in access) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
   }
 
   const { id } = await params;
@@ -285,19 +320,51 @@ export async function PATCH(
     return NextResponse.json({ error: result.error }, { status: 400 });
   }
 
+  const submittedPhoto = text(body.photoUpload?.imageUrl);
+  let processedPhoto: Awaited<ReturnType<typeof processRecipientPhoto>> | null =
+    null;
+  if (submittedPhoto.startsWith("data:")) {
+    try {
+      processedPhoto = await processRecipientPhoto(submittedPhoto);
+    } catch (error) {
+      return NextResponse.json(
+        {
+          error:
+            error instanceof Error ? error.message : "Invalid recipient photo.",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   const previous = existing.data() ?? {};
-  const changedFields = EDITABLE_FIELDS.filter((field) => {
-    const before = field === "phone"
-      ? previous.phone ?? previous.phoneNumber ?? null
-      : previous[field];
-    return JSON.stringify(before ?? null) !== JSON.stringify(result.updates[field] ?? null);
+  const changedFields: string[] = EDITABLE_FIELDS.filter((field) => {
+    const before =
+      field === "phone"
+        ? (previous.phone ?? previous.phoneNumber ?? null)
+        : previous[field];
+    return (
+      JSON.stringify(before ?? null) !==
+      JSON.stringify(result.updates[field] ?? null)
+    );
   });
+  if (processedPhoto) changedFields.push("picture");
+  const recipientUpdates = {
+    ...result.updates,
+    ...(processedPhoto
+      ? { photoThumb: processedPhoto.photoThumb, picture: FieldValue.delete() }
+      : {}),
+  };
+  const searchData = { ...previous, ...result.updates };
 
   const shouldProcessArcCardChange = Object.prototype.hasOwnProperty.call(
     body,
     "arcCard",
   );
-  const requestedArcCardDigits = text(body.arcCard?.arcCardDigits).replace(/\D/g, "");
+  const requestedArcCardDigits = text(body.arcCard?.arcCardDigits).replace(
+    /\D/g,
+    "",
+  );
   const nowServerTimestamp = FieldValue.serverTimestamp();
   const nowDate = new Date();
   const cardActionNotes: string[] = [];
@@ -305,9 +372,16 @@ export async function PATCH(
   if (!shouldProcessArcCardChange) {
     const batch = access.db.batch();
     batch.update(recipientRef, {
-      ...result.updates,
+      ...recipientUpdates,
       updatedAt: nowServerTimestamp,
     });
+    if (processedPhoto) {
+      batch.set(access.db.collection("user_photos").doc(id), {
+        picture: processedPhoto.picture,
+        updatedAt: nowServerTimestamp,
+      });
+    }
+    upsertSearchIndexEntry(batch, access.db, id, searchData);
     batch.create(access.db.collection("history").doc(), {
       date: nowServerTimestamp,
       userId: id,
@@ -325,7 +399,9 @@ export async function PATCH(
       .where("currentUserId", "==", id)
       .limit(1);
     const currentCardResult = await tx.get(currentCardQuery);
-    const currentCardDoc = currentCardResult.empty ? null : currentCardResult.docs[0];
+    const currentCardDoc = currentCardResult.empty
+      ? null
+      : currentCardResult.docs[0];
 
     let targetCardDoc: FirebaseFirestore.QueryDocumentSnapshot | null = null;
     if (shouldProcessArcCardChange && requestedArcCardDigits) {
@@ -372,9 +448,16 @@ export async function PATCH(
     }
 
     tx.update(recipientRef, {
-      ...result.updates,
+      ...recipientUpdates,
       updatedAt: nowServerTimestamp,
     });
+    if (processedPhoto) {
+      tx.set(access.db.collection("user_photos").doc(id), {
+        picture: processedPhoto.picture,
+        updatedAt: nowServerTimestamp,
+      });
+    }
+    upsertSearchIndexEntry(tx, access.db, id, searchData);
 
     if (hasCardChange && currentCardDoc) {
       tx.update(currentCardDoc.ref, {
@@ -459,7 +542,10 @@ export async function POST(
 ) {
   const access = await getStaffAccess();
   if ("error" in access) {
-    return NextResponse.json({ error: access.error }, { status: access.status });
+    return NextResponse.json(
+      { error: access.error },
+      { status: access.status },
+    );
   }
 
   const { id } = await params;
@@ -644,6 +730,8 @@ export async function POST(
   for (const bannedDoc of bannedSnap.docs) {
     batch.delete(bannedDoc.ref);
   }
+  batch.delete(access.db.collection("user_photos").doc(id));
+  deleteSearchIndexEntry(batch, access.db, id);
   batch.delete(recipientRef);
   await batch.commit();
 

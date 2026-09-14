@@ -162,6 +162,13 @@ export default function NewAllocationPage() {
       setError("Please add at least one card before submitting");
       return;
     }
+    // Match the server's per-request cap so large allocations fail fast here.
+    if (rows.length > 200) {
+      setError(
+        `Too many cards in one allocation (${rows.length}). Submit at most 200 at a time.`,
+      );
+      return;
+    }
 
     // Validate that all rows have required fields
     const invalidRows = rows.filter(
@@ -194,7 +201,9 @@ export default function NewAllocationPage() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to create cards");
+        // Surface the server's message (e.g. duplicate card numbers).
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error || "Failed to create cards");
       }
 
       // Navigate back to cards list

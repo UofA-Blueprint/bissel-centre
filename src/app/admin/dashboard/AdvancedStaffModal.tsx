@@ -61,14 +61,19 @@ const SECTIONS: Array<{
     { id: "bans", label: "Banned users", icon: ShieldAlert },
 ];
 
-// URL query param each section maps to on its "Open in another view" link.
+// URL each section maps to on its "Open in another view" / "View all" links.
+// Every target carries the staff filter in the URL so landing there needs no
+// typing — recipients opens the dashboard's search-first table directly.
 const SECTION_LINKS: Record<Section, ((uid: string) => string) | null> = {
     overview: null,
-    recipients: (uid) => `/dashboard?createdBy=${encodeURIComponent(uid)}`,
-    cards: () => `/cards`,
+    recipients: (uid) => `/dashboard?search=&createdBy=${encodeURIComponent(uid)}`,
+    cards: (uid) => `/reports?issuedBy=${encodeURIComponent(uid)}`,
     audit: (uid) => `/reports?modifiedBy=${encodeURIComponent(uid)}`,
     bans: (uid) => `/reports?bannedBy=${encodeURIComponent(uid)}`,
 };
+
+// Keep in sync with MODAL_LIST_LIMIT in admin/actions.ts.
+const DRILLDOWN_LIMIT = 100;
 
 function formatDate(iso: string | null): string {
     if (!iso) return "—";
@@ -289,6 +294,7 @@ function TablePaneShell({
     loading,
     error,
     empty,
+    capped = false,
     children,
 }: {
     title: string;
@@ -297,6 +303,8 @@ function TablePaneShell({
     loading: boolean;
     error: string | null;
     empty: boolean;
+    /** True when the list hit the server's first-N cap. */
+    capped?: boolean;
     children: React.ReactNode;
 }) {
     return (
@@ -336,9 +344,27 @@ function TablePaneShell({
                     </div>
                 </div>
             ) : (
-                <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
-                    {children}
-                </div>
+                <>
+                    <div className="overflow-x-auto rounded-xl border border-gray-100 bg-white shadow-sm">
+                        {children}
+                    </div>
+                    {capped && (
+                        <div className="mt-2 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                            <span>
+                                Showing the first {DRILLDOWN_LIMIT} records
+                                only.
+                            </span>
+                            {linkHref && (
+                                <Link
+                                    href={linkHref}
+                                    className="shrink-0 font-medium text-amber-900 underline hover:no-underline"
+                                >
+                                    View all →
+                                </Link>
+                            )}
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );
@@ -437,6 +463,7 @@ function RecipientsPane({
             loading={rows === null && !error}
             error={error}
             empty={rows !== null && rows.length === 0}
+            capped={rows !== null && rows.length >= DRILLDOWN_LIMIT}
         >
             {rows && (
                 <TinyTable
@@ -512,6 +539,7 @@ function CardsPane({
             loading={rows === null && !error}
             error={error}
             empty={rows !== null && rows.length === 0}
+            capped={rows !== null && rows.length >= DRILLDOWN_LIMIT}
         >
             {rows && (
                 <TinyTable
@@ -591,6 +619,7 @@ function AuditPane({
             loading={rows === null && !error}
             error={error}
             empty={rows !== null && rows.length === 0}
+            capped={rows !== null && rows.length >= DRILLDOWN_LIMIT}
         >
             {rows && (
                 <TinyTable
@@ -661,6 +690,7 @@ function BansPane({
             loading={rows === null && !error}
             error={error}
             empty={rows !== null && rows.length === 0}
+            capped={rows !== null && rows.length >= DRILLDOWN_LIMIT}
         >
             {rows && (
                 <TinyTable
