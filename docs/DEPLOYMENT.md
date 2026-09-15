@@ -135,25 +135,31 @@ environment variable is the first thing to check.
 
 ---
 
-## Required Vercel project setting: Fluid Compute
+## Function time limits (the 60-second rule)
 
-**This must be on, and it is not stored in this repository.** Open the Vercel
-project → Settings → Functions → enable **Fluid Compute** → Save → redeploy.
+**No route may declare a `maxDuration` above 60.** On Vercel's Hobby plan that
+is a hard ceiling, and breaching it **fails the entire deployment** — not just
+the request — with "Serverless Functions must have a maxDuration between 1 and
+60 for plan hobby". Nothing else deploys until it is fixed.
 
-Two routes ask for more than 60 seconds to finish: the cron sweep
-(`maxDuration = 300`) and the reports export (`maxDuration = 120`). Vercel's
-older serverless model caps Hobby functions at 60 seconds and **fails the whole
-deployment** with "Serverless Functions must have a maxDuration between 1 and 60
-for plan hobby" rather than merely warning. Fluid Compute raises the Hobby
-ceiling to 300 seconds, which is where those numbers come from.
+Three routes declare a limit, and all three sit at the ceiling:
 
-Fluid Compute is on by default for Vercel projects created after April 2025, so
-a project set up from scratch today will already satisfy this. It is called out
-here because this project predates that default, and because a setting that
-lives only in a dashboard is invisible to anyone reading the code.
+| Route | `maxDuration` |
+| --- | --- |
+| `api/cron/expire-cards` | 60 |
+| `api/reports/data` | 60 |
+| `api/reports/export` | 60 |
 
-If a future maintainer ever needs to turn it off, both `maxDuration` values must
-drop to 60 in the same change, or deployment breaks.
+Everything else uses the platform default, well below the limit.
+
+Vercel's newer Fluid Compute model raises the Hobby ceiling to 300 seconds, and
+enabling it is a dashboard toggle (Settings → Functions). We deliberately do not
+depend on it. Values above 60 were tried and the deployment still failed, and a
+limit that lives only in a dashboard is invisible to anyone reading the code —
+exactly the kind of hidden requirement that breaks a handover. Staying under 60
+means the repository alone is enough to deploy successfully.
+
+This constraint is the reason the monthly sweep is written to resume; see below.
 
 ---
 

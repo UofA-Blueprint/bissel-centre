@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { initAdmin } from "@/app/services/firebaseAdmin";
 import { expireOverdueArcCards } from "@/app/services/cardExpiryService";
 
-// The sweep is bounded per batch but a 10k-card month is ~25 sequential
-// commits — give it headroom well past the default timeout.
-export const maxDuration = 300;
+// 60 is the hard ceiling on Vercel's Hobby plan without fluid compute, and
+// exceeding it fails the deployment rather than the request. The sweep stops
+// itself at 45s and saves a cursor, so a month too large for one invocation
+// resumes on the next daily run instead of being cut off.
+export const maxDuration = 60;
 
 export async function GET(request: NextRequest) {
   try {

@@ -6,8 +6,10 @@ import * as XLSX from "xlsx";
 import type { ExportRequest, ExportRow } from "@/app/(app)/reports/types";
 import { sanitizeCell } from "@/utils/spreadsheet";
 
-// Full-collection export; give it room until pagination lands (P2).
-export const maxDuration = 120;
+// Capped at the Hobby-plan ceiling of 60; anything higher fails the build.
+// Nothing in the UI calls this route today — the Reports page builds its
+// workbook in the browser — so the shorter budget costs nothing in practice.
+export const maxDuration = 60;
 
 function chunk<T>(arr: T[], size: number): T[][] {
   const out: T[][] = [];
