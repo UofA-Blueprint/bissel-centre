@@ -135,6 +135,28 @@ environment variable is the first thing to check.
 
 ---
 
+## Required Vercel project setting: Fluid Compute
+
+**This must be on, and it is not stored in this repository.** Open the Vercel
+project → Settings → Functions → enable **Fluid Compute** → Save → redeploy.
+
+Two routes ask for more than 60 seconds to finish: the cron sweep
+(`maxDuration = 300`) and the reports export (`maxDuration = 120`). Vercel's
+older serverless model caps Hobby functions at 60 seconds and **fails the whole
+deployment** with "Serverless Functions must have a maxDuration between 1 and 60
+for plan hobby" rather than merely warning. Fluid Compute raises the Hobby
+ceiling to 300 seconds, which is where those numbers come from.
+
+Fluid Compute is on by default for Vercel projects created after April 2025, so
+a project set up from scratch today will already satisfy this. It is called out
+here because this project predates that default, and because a setting that
+lives only in a dashboard is invisible to anyone reading the code.
+
+If a future maintainer ever needs to turn it off, both `maxDuration` values must
+drop to 60 in the same change, or deployment breaks.
+
+---
+
 ## The monthly card unload cron job
 
 `vercel.json` schedules `/api/cron/expire-cards` to run **once a day** at
@@ -156,6 +178,16 @@ day match, so a once-a-day cron that happened to run before the configured time
 would skip the month entirely, and any schedule set to the 29th–31st never fired
 in February. The "already ran this month" marker keeps it to a single run no
 matter how many invocations find it due.
+
+**An interrupted sweep resumes instead of skipping cards.** The sweep unloads
+cards in batches, walking them in document-id order, and stops after 45 seconds
+of work. If it stops early it saves its position, and the next day's invocation
+continues from there rather than starting over. Starting over would be the
+dangerous option: staff may have reactivated a card in the intervening hours,
+and a restart would unload it again. A run that crashes before writing anything
+releases its claim on the month so the next invocation can retry cleanly. In
+practice, with a few thousand cards the sweep finishes in one run — this is
+insurance, not the normal path.
 
 - The route requires an `Authorization: Bearer <CRON_SECRET>` header in
   production and returns 401 without it. Vercel sends this automatically when

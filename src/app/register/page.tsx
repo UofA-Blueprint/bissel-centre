@@ -180,7 +180,7 @@ const AdminRegistration: React.FC = () => {
 
             <div className="px-6 py-5 space-y-4">
               <div className="rounded-xl border border-cyan-100 bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
-                A password reset email should now be in{" "}
+                A password reset email should now be to{" "}
                 <span className="font-semibold">{registeredEmail}</span>. Ask
                 the registered user to open the email and set a new password to
                 complete onboarding. If they can&apos;t find the email, ask them to check spam

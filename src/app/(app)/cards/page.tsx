@@ -726,9 +726,54 @@ const saveMonthlyUnloadSchedule = async () => {
       <BackNavigation href="/dashboard" label="Back to Staff Dashboard" />
       {/* --- Title --- */}
       <h1 className="text-2xl font-bold text-gray-900">ARC Card Master List</h1>
-      <p className="text-xs text-gray-400">
-        Statuses: <strong>Active</strong> assigned &amp; usable · <strong>Unloaded</strong> not loaded · <strong>Unattributed</strong> unassigned · <strong>Expired</strong> no longer valid · <strong>Cancelled</strong> retired.
-      </p>
+      <div className="rounded-xl border border-cyan-100 bg-white px-4 py-4 shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)]">
+        <p className="text-sm font-semibold text-gray-900">
+          ARC Card Status Guide
+        </p>
+        <p className="mt-1 text-xs text-gray-600">
+          Quick flow: cards begin as <strong>Unloaded</strong>. Move to{" "}
+          <strong>Unattributed</strong> when ready to issue, then assign a
+          recipient to make the card <strong>Active</strong>.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-medium">
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">
+            Unloaded
+          </span>
+          <span className="text-gray-400">→</span>
+          <span className="rounded-full bg-cyan-100 px-2.5 py-1 text-cyan-700">
+            Unattributed
+          </span>
+          <span className="text-gray-400">→</span>
+          <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-emerald-700">
+            Active
+          </span>
+          <span className="text-gray-400">→</span>
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-700">
+            Expired
+          </span>
+          <span className="rounded-full bg-rose-100 px-2.5 py-1 text-rose-700">
+            Cancelled
+          </span>
+        </div>
+        <div className="mt-3 space-y-1 text-xs text-gray-500">
+          <p>
+            <strong>Unloaded:</strong> Card with no current load. Flips to this
+            status on designated day and time regardless of assigned user or not
+          </p>
+          <p>
+            <strong>Unattributed:</strong> Ready to be assigned.
+          </p>
+          <p>
+            <strong>Active:</strong> Assigned and in use.
+          </p>
+          <p>
+            <strong>Expired:</strong> No longer valid by date.
+          </p>
+          <p>
+            <strong>Cancelled:</strong> Retired from use.
+          </p>
+        </div>
+      </div>
 
       {/* Monthly unload lives behind a compact info box; click for details. */}
       <div className="rounded-lg bg-white shadow-[2px_4px_14.2px_0_rgba(0,0,0,0.05)]">

@@ -33,7 +33,10 @@ Tests" step. If it passed, delete the `continue-on-error: true` line in
 build. If it failed, the rules and the test have drifted apart and one of them
 needs updating — until then, nothing verifies your access controls.
 
-Running it locally needs Java installed (the emulator is a Java process).
+Running it locally needs **Java 21 or newer** installed (the emulator is a Java
+process, and current `firebase-tools` refuses to start on anything older). On
+macOS, `brew install --cask temurin` is the quickest route. CI installs Java 21
+itself, so this only affects running `npm run test:rules` on your own machine.
 
 ---
 
@@ -67,10 +70,13 @@ produces a successful deploy that throws at runtime.
 does not touch them, so a change to `firestore.indexes.json` that isn't manually
 deployed causes queries to fail only in production. See the runbook.
 
-**The Edmonton timezone string is duplicated in eight files** rather than living
-in one shared date helper. Nothing is broken today, but a ninth piece of date
-code written without it would silently format in the server's timezone. Worth
-extracting into `src/utils/` the next time date handling is touched.
+**The Edmonton timezone string is duplicated in nine files** rather than living
+in one shared date helper. This is not hypothetical harm: the reports date
+filters were written with a hardcoded `-06:00` offset instead, which is only
+Edmonton's offset during daylight saving and silently dropped records in the
+final hour of a range every winter. That has been fixed, but the next piece of
+date code written without the shared constant can repeat it. Worth extracting
+into `src/utils/` the next time date handling is touched.
 
 **Middleware does not list every protected route.** `STAFF_ONLY_ROUTES` in
 `middleware.ts` covers `/dashboard`, `/profile`, `/cards`, and `/reports` but not
@@ -92,12 +98,49 @@ member, the new name doesn't appear in that person's top navigation until they
 sign out and back in. Everywhere else reads live data, so this is only a
 cosmetic lag for the affected user.
 
-**The cron job runs hourly but acts monthly.** `/api/cron/expire-cards` is
-invoked every hour and exits immediately unless the configured monthly
-day-and-time has passed and the current month hasn't been processed. This is
-deliberate for resilience, but Vercel's cron log will therefore show many
-invocations that did nothing. Check the "last run" indicator on the Cards page
-to see the meaningful runs.
+**The cron job runs daily but acts monthly.** `/api/cron/expire-cards` is
+invoked once a day (the most Vercel's Hobby plan allows) and exits immediately
+unless the configured monthly day-and-time has passed and the current month
+hasn't been processed. This is deliberate for resilience, but Vercel's cron log
+will therefore show roughly thirty invocations a month that did nothing. Check
+the "last run" indicator on the Cards page to see the meaningful runs.
+
+A consequence of the daily cadence: the unload happens on the *first daily run
+at or after* the configured time, so it can land up to 24 hours late. Moving to
+a Vercel Pro plan would allow an hourly schedule and shrink that window.
+
+**The Reports "card issue date" filter ignores the issues-migration switch.**
+Card issue dates live in one of two places: the legacy `issueDates` array on each
+`arc_cards` document, or one document per handover in the `issues` collection.
+Which one is authoritative is decided by whether `_migrations/issues_v1` exists.
+Every display path checks that marker (`isMigrated` in
+`src/app/api/reports/data/route.ts`, `src/app/api/cards/route.ts` and
+`src/app/api/reports/export/route.ts`). The `issuedFrom`/`issuedTo` filter does
+not — it queries the `issues` collection unconditionally
+(`src/app/api/reports/data/route.ts`, the `idsFromSimpleLayer` call guarded by
+`if (f.issuedFrom || f.issuedTo)`).
+
+If `_migrations/issues_v1` is absent in a given environment, that filter narrows
+the result set against a collection the rest of the app is ignoring, so
+recipients are dropped silently — the page cannot recover rows the server has
+already excluded. Staging filtered these dates in the browser, where the problem
+could not arise; the server-side narrowing arrived with the reports performance
+work.
+
+**How to tell whether it is biting you:** check Firestore for
+`_migrations/issues_v1`. If it exists, the filter is correct as written — every
+code path that writes `issueDate` uses `formatEdmontonDate`, so the values are
+consistently `YYYY-MM-DD` and the string range compares correctly and
+inclusively. If it does not exist, filtering Reports by card issue date will
+under-report.
+
+**The fix**, should it be needed, is to make that filter branch on `isMigrated`
+the way the display code does, falling back to matching against the card
+documents' `issueDates` arrays. Note those legacy arrays can hold `M/D/YYYY`
+values, so a Firestore string range is unsafe against them — the client's
+`parseFlexibleDate` handles both shapes and is the model to follow. This is the
+same reason `card_allocation` is deliberately excluded from server-side date
+filtering.
 
 **Searching while a staff filter is applied only matches loaded recipients.** On
 the dashboard, when `?createdBy=` is set, search results are restricted to

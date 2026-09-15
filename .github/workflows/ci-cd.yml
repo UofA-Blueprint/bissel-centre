@@ -26,11 +26,11 @@ jobs:
     steps:
       # Step 1: Checkout the code from GitHub
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       # Step 2: Set up Node.js
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
 
@@ -53,11 +53,14 @@ jobs:
       # Step 5b: Firestore security rules, exercised against the emulator.
       # Marked non-blocking until we have a green baseline in CI — once it
       # passes, delete continue-on-error so a rules regression fails the build.
+      # firebase-tools refuses to start the emulator on anything below Java 21.
+      # Pinned to setup-java v5 on purpose: v6 is still flagged as not
+      # recommended for production workflows.
       - name: Setup Java (required by the Firestore emulator)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: "21"
 
       - name: Run Firestore Rules Tests
         continue-on-error: true
@@ -78,10 +81,10 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/staging'
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v7
         with:
           node-version: "20"
 
