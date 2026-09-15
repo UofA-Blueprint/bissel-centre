@@ -265,7 +265,7 @@ export default function LoginPage() {
               </label>
               <input
                 id="email"
-                name="email"
+                name="username"
                 type="email"
                 autoComplete="username"
                 autoCapitalize="none"

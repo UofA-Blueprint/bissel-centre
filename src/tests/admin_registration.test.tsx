@@ -93,7 +93,7 @@ describe("AdminRegistration Component", () => {
       }),
     });
     expect(
-      screen.getByText(/A password reset email should now be in/i),
+      screen.getByText(/A password reset email has now been sent to/i),
     ).toBeInTheDocument();
   });
 
