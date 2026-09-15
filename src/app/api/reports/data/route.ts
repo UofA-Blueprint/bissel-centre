@@ -117,16 +117,68 @@ const normalizeId = (value: unknown): string => {
   return "";
 };
 
-const parseDayStart = (value: string | null): Date | null => {
+const EDMONTON_TIMEZONE = "America/Edmonton";
+
+// How far Edmonton's wall clock sits from UTC at a given moment. Must be
+// measured per date, not assumed: Edmonton is UTC-7 in winter and UTC-6 on
+// daylight time, so a hardcoded offset silently shifts every range by an hour
+// for half the year and drops records near the boundary.
+function edmontonOffsetMs(instant: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: EDMONTON_TIMEZONE,
+    hour12: false,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(instant);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  const asUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour") % 24, // some runtimes render midnight as hour 24
+    get("minute"),
+    get("second"),
+  );
+  // Compare whole seconds on both sides: asUtc carries no milliseconds, so
+  // including them on the right would leak into the offset and push
+  // end-of-day boundaries a second past midnight.
+  return asUtc - (instant.getTime() - instant.getUTCMilliseconds());
+}
+
+// "YYYY-MM-DD" plus an Edmonton wall-clock time -> the matching UTC instant.
+function parseEdmontonDayBoundary(
+  value: string | null,
+  endOfDay: boolean,
+): Date | null {
   if (!value) return null;
-  const d = new Date(`${value}T00:00:00-06:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
-};
-const parseDayEnd = (value: string | null): Date | null => {
-  if (!value) return null;
-  const d = new Date(`${value}T23:59:59.999-06:00`);
-  return Number.isNaN(d.getTime()) ? null : d;
-};
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) return null;
+  const naive = Date.UTC(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3]),
+    endOfDay ? 23 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 59 : 0,
+    endOfDay ? 999 : 0,
+  );
+  // Two passes: the first estimate can land on the wrong side of a clock
+  // change, in which case its offset is the one from the adjacent period.
+  let instant = naive - edmontonOffsetMs(new Date(naive));
+  instant = naive - edmontonOffsetMs(new Date(instant));
+  const parsed = new Date(instant);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+const parseDayStart = (value: string | null): Date | null =>
+  parseEdmontonDayBoundary(value, false);
+const parseDayEnd = (value: string | null): Date | null =>
+  parseEdmontonDayBoundary(value, true);
 
 const CARD_FIELDS = [
   "arcCardNumber",

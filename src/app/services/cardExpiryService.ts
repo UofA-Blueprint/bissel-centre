@@ -14,6 +14,10 @@ export type MonthlyUnloadSchedule = {
   timezone: string;
   lastRunMonthKey?: string;
   lastRunAt?: string | null;
+  // Set only while a sweep is part-finished. sweepCursor is the id of the last
+  // arc_cards doc unloaded, so the next invocation picks up from there.
+  sweepMonthKey?: string;
+  sweepCursor?: string;
 };
 
 function getEdmontonNowParts() {
@@ -62,6 +66,8 @@ export function getDefaultMonthlyUnloadSchedule(): MonthlyUnloadSchedule {
     timezone: EDMONTON_TIMEZONE,
     lastRunMonthKey: undefined,
     lastRunAt: null,
+    sweepMonthKey: undefined,
+    sweepCursor: undefined,
   };
 }
 
@@ -88,6 +94,12 @@ export async function getMonthlyUnloadSchedule(
       typeof data?.lastRunMonthKey === "string" ? data.lastRunMonthKey : undefined,
     lastRunAt:
       typeof data?.lastRunAt === "string" ? data.lastRunAt : null,
+    sweepMonthKey:
+      typeof data?.sweepMonthKey === "string" ? data.sweepMonthKey : undefined,
+    sweepCursor:
+      typeof data?.sweepCursor === "string" && data.sweepCursor.length > 0
+        ? data.sweepCursor
+        : undefined,
   };
 }
 
@@ -137,13 +149,16 @@ export async function updateMonthlyUnloadSchedule(
 // already-Unloaded cards, so its cost tracks work to do, not collection size.
 const NON_UNLOADED_STATUSES = ["Active", "Unattributed", "Expired", "Cancelled"];
 const SWEEP_BATCH_SIZE = 400; // under Firestore's 500-op batch cap
-const MAX_SWEEP_ROUNDS = 50; // runaway guard (~20k cards)
+const MAX_SWEEP_ROUNDS = 50; // per-invocation cap (~20k cards)
+// Held well below the smallest function timeout this app can be deployed under
+// (60s on Vercel Hobby without fluid compute) so the cursor is always saved
+// before the platform kills the invocation.
+const SWEEP_TIME_BUDGET_MS = 45_000;
 
 /**
  * Claim this month's run transactionally BEFORE sweeping, so two overlapping
- * cron invocations can never double-process. Trade-off: if the sweep dies
- * mid-way the month stays claimed and remaining cards need a manual re-run
- * (clear lastRunMonthKey) — preferred over double-processing.
+ * cron invocations can never double-process. A sweep that doesn't finish keeps
+ * the claim and leaves a cursor behind instead; see sweepLoadedCards.
  */
 async function claimMonthlyRun(db: Firestore, monthKey: string): Promise<boolean> {
   const settingsRef = db
@@ -153,11 +168,14 @@ async function claimMonthlyRun(db: Firestore, monthKey: string): Promise<boolean
     const snap = await tx.get(settingsRef);
     const data = (snap.data() ?? {}) as Partial<MonthlyUnloadSchedule>;
     if (data.lastRunMonthKey === monthKey) return false;
+    // lastRunAt is deliberately not set here. Claiming isn't running: a run
+    // that fails before touching a single card releases the claim again, and
+    // staff would otherwise see a "Last run" time for a sweep that did nothing.
+    // recordSweepProgress stamps it once real work has been committed.
     tx.set(
       settingsRef,
       {
         lastRunMonthKey: monthKey,
-        lastRunAt: new Date().toISOString(),
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       },
       { merge: true },
@@ -167,33 +185,115 @@ async function claimMonthlyRun(db: Firestore, monthKey: string): Promise<boolean
 }
 
 /**
- * Unload every non-Unloaded card in bounded batches. Each committed batch
- * removes its docs from the filtered query, so re-querying until empty is
- * both the pagination and the progress tracking.
+ * Unload every non-Unloaded card in bounded batches, walking the collection in
+ * document-id order so an interrupted run can resume exactly where it stopped.
+ *
+ * Ordering by id rather than re-querying the filter from the top is what makes
+ * resuming safe: staff may reactivate a card in the hours between a partial run
+ * and its continuation, and those cards sit behind the cursor, so the resumed
+ * sweep leaves them alone instead of unloading them a second time.
  */
-async function sweepLoadedCards(db: Firestore): Promise<number> {
+async function sweepLoadedCards(
+  db: Firestore,
+  startAfterId?: string,
+): Promise<{
+  updated: number;
+  complete: boolean;
+  cursor: string | null;
+  error?: unknown;
+}> {
+  const deadline = Date.now() + SWEEP_TIME_BUDGET_MS;
+  const cards = db.collection("arc_cards");
   let updated = 0;
-  for (let round = 0; round < MAX_SWEEP_ROUNDS; round++) {
-    const snap = await db
-      .collection("arc_cards")
-      .where("status", "in", NON_UNLOADED_STATUSES)
-      .select() // refs only
-      .limit(SWEEP_BATCH_SIZE)
-      .get();
-    if (snap.empty) break;
+  let cursor: string | null = startAfterId ?? null;
+  let complete = false;
+  let error: unknown;
 
-    const batch = db.batch();
-    for (const doc of snap.docs) {
-      batch.update(doc.ref, {
-        status: "Unloaded",
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+  for (let round = 0; round < MAX_SWEEP_ROUNDS; round++) {
+    // Caught rather than thrown so the caller can still persist the cursor for
+    // the batches that did commit; the error is handed back and rethrown there.
+    try {
+      let query = cards
+        .where("status", "in", NON_UNLOADED_STATUSES)
+        .orderBy(admin.firestore.FieldPath.documentId())
+        .select() // refs only
+        .limit(SWEEP_BATCH_SIZE);
+      if (cursor) query = query.startAfter(cards.doc(cursor));
+
+      const snap = await query.get();
+      if (snap.empty) {
+        complete = true;
+        break;
+      }
+
+      const batch = db.batch();
+      for (const doc of snap.docs) {
+        batch.update(doc.ref, {
+          status: "Unloaded",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      updated += snap.size;
+      cursor = snap.docs[snap.docs.length - 1].id;
+
+      if (snap.size < SWEEP_BATCH_SIZE) {
+        complete = true;
+        break;
+      }
+    } catch (err) {
+      error = err;
+      break;
     }
-    await batch.commit();
-    updated += snap.size;
-    if (snap.size < SWEEP_BATCH_SIZE) break;
+    if (Date.now() >= deadline) break;
   }
-  return updated;
+
+  return { updated, complete, cursor, error };
+}
+
+// Hands the month back after a run that wrote nothing, so the next invocation
+// retries instead of the month staying claimed with cards still loaded.
+async function releaseMonthlyClaim(
+  db: Firestore,
+  monthKey: string,
+): Promise<void> {
+  const settingsRef = db
+    .collection(MONTHLY_UNLOAD_SETTINGS_COLLECTION)
+    .doc(MONTHLY_UNLOAD_SETTINGS_DOC);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(settingsRef);
+    const data = (snap.data() ?? {}) as Partial<MonthlyUnloadSchedule>;
+    if (data.lastRunMonthKey !== monthKey) return;
+    tx.set(
+      settingsRef,
+      {
+        lastRunMonthKey: null,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+  });
+}
+
+// Nulls rather than undefined: Firestore rejects undefined values outright.
+async function recordSweepProgress(
+  db: Firestore,
+  monthKey: string,
+  cursor: string | null,
+  complete: boolean,
+): Promise<void> {
+  await db
+    .collection(MONTHLY_UNLOAD_SETTINGS_COLLECTION)
+    .doc(MONTHLY_UNLOAD_SETTINGS_DOC)
+    .set(
+      {
+        sweepMonthKey: complete ? null : monthKey,
+        sweepCursor: complete ? null : cursor,
+        lastRunAt: new Date().toISOString(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
 }
 
 async function runMonthlyUnload(
@@ -207,6 +307,8 @@ async function runMonthlyUnload(
   dryRun?: boolean;
   wouldRunNow?: boolean;
   reason?: string;
+  sweepComplete?: boolean;
+  resumed?: boolean;
 }> {
   const now = getEdmontonNowParts();
   const monthKey = `${String(now.year).padStart(4, "0")}-${String(now.month).padStart(2, "0")}`;
@@ -226,8 +328,14 @@ async function runMonthlyUnload(
   // month regardless of how many invocations find it due.
   const isDue =
     now.day > targetDay || (now.day === targetDay && hasReachedTime);
+  // A cursor left over from an earlier month is ignored: that month's window
+  // has passed, and this month's own run will sweep those cards anyway.
+  const hasUnfinishedSweep =
+    schedule.sweepMonthKey === monthKey && Boolean(schedule.sweepCursor);
   const wouldRunNow =
-    schedule.enabled && isDue && schedule.lastRunMonthKey !== monthKey;
+    schedule.enabled &&
+    (hasUnfinishedSweep ||
+      (isDue && schedule.lastRunMonthKey !== monthKey));
 
   // Dry run: report what a live run would do — a single aggregate, zero
   // doc reads, zero writes, no lock claimed.
@@ -250,18 +358,40 @@ async function runMonthlyUnload(
     return { ran: false, updatedCardCount: 0, monthKey };
   }
 
-  const claimed = await claimMonthlyRun(db, monthKey);
-  if (!claimed) {
-    return {
-      ran: false,
-      updatedCardCount: 0,
-      monthKey,
-      reason: "already ran (or a concurrent invocation claimed this month)",
-    };
+  // A resumed sweep is already covered by the claim made when it first started.
+  if (!hasUnfinishedSweep) {
+    const claimed = await claimMonthlyRun(db, monthKey);
+    if (!claimed) {
+      return {
+        ran: false,
+        updatedCardCount: 0,
+        monthKey,
+        reason: "already ran (or a concurrent invocation claimed this month)",
+      };
+    }
   }
 
-  const updatedCardCount = await sweepLoadedCards(db);
-  return { ran: true, updatedCardCount, monthKey };
+  const sweep = await sweepLoadedCards(
+    db,
+    hasUnfinishedSweep ? schedule.sweepCursor : undefined,
+  );
+  if (sweep.error && sweep.cursor === null) {
+    await releaseMonthlyClaim(db, monthKey);
+    throw sweep.error;
+  }
+  await recordSweepProgress(db, monthKey, sweep.cursor, sweep.complete);
+  if (sweep.error) throw sweep.error;
+
+  return {
+    ran: true,
+    updatedCardCount: sweep.updated,
+    monthKey,
+    sweepComplete: sweep.complete,
+    resumed: hasUnfinishedSweep,
+    ...(sweep.complete
+      ? {}
+      : { reason: "sweep hit its time budget; the next run resumes from the saved cursor" }),
+  };
 }
 
 export async function expireOverdueArcCards(
@@ -278,6 +408,9 @@ export async function expireOverdueArcCards(
     ran: result.ran,
     ranForMonthKey: result.monthKey,
     updatedCardCount: result.updatedCardCount,
+    ...(result.ran
+      ? { sweepComplete: result.sweepComplete, resumed: result.resumed }
+      : {}),
     ...(result.dryRun
       ? { dryRun: true, wouldRunNow: result.wouldRunNow }
       : {}),

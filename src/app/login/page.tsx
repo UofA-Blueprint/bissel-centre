@@ -21,6 +21,35 @@ export default function LoginPage() {
   const [forgotStatus, setForgotStatus] = useState<string | null>(null);
   const [forgotLoading, setForgotLoading] = useState(false);
   const router = useRouter();
+
+  async function updateSavedBrowserCredential(
+    normalizedEmail: string,
+    plainPassword: string,
+  ) {
+    if (typeof window === "undefined" || !rememberMe) return;
+    if (!("credentials" in navigator)) return;
+    const passwordCredentialCtor = (
+      window as Window & {
+        PasswordCredential?: new (data: {
+          id: string;
+          password: string;
+          name?: string;
+        }) => Credential;
+      }
+    ).PasswordCredential;
+    if (!passwordCredentialCtor) return;
+
+    try {
+      const credential = new passwordCredentialCtor({
+        id: normalizedEmail,
+        password: plainPassword,
+        name: normalizedEmail,
+      });
+      await navigator.credentials.store(credential);
+    } catch {
+      // Ignore unsupported/browser-blocked credential writes.
+    }
+  }
   useEffect(() => {
     // Check if email is remembered in localStorage
     const rememberedEmail = localStorage.getItem("rememberedEmail");
@@ -80,6 +109,9 @@ export default function LoginPage() {
       } else {
         localStorage.removeItem("rememberedEmail");
       }
+
+      // Let the browser update its saved password entry after a successful login.
+      await updateSavedBrowserCredential(normalizedEmail, password);
 
       // Redirect to home dashboard after successful login
       router.push("/dashboard");
@@ -233,7 +265,7 @@ export default function LoginPage() {
               </label>
               <input
                 id="email"
-                name="username"
+                name="email"
                 type="email"
                 autoComplete="username"
                 autoCapitalize="none"
